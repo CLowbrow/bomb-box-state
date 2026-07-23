@@ -60,6 +60,8 @@ A square can have an object on it. The list of objects is:
 - Ramps
   - A box or exploding barrel will try to slide down a ramp if able, but won't if there is something blocking them from moving off the ramp. 
   - Sliding down a ramp does not explode barrels
+- Technically two things can be in the same square if they are on top of each other. Player on a box, barrel on a box, box on a box, etc. Player never on bottom or game over. 
+  - This stack can grow indefinitely. 
 
 ## How the player interacts with the world
 
