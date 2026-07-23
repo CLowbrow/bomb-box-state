@@ -12,6 +12,26 @@ These instructions apply to the entire repository.
 - Keep `docs/architecture.md` and `docs/development.md` accurate when a change
   affects architecture, portability, build, or verification guidance.
 
+## Implementation tracking
+
+- Read `docs/implementation-status.md` before beginning implementation work to
+  understand current coverage, known limitations, verification results, and the
+  recommended next task.
+- Keep `docs/implementation-status.md` accurate in the same change whenever
+  implementation work changes feature coverage, public APIs, verification
+  status, known limitations, or the recommended next task.
+- Treat the status document as non-normative project tracking. Gameplay and
+  state-transition decisions belong in `README.md`; do not use a status note to
+  resolve or override an ambiguity in the specification.
+- Use the status definitions documented in `docs/implementation-status.md`.
+  Do not mark a phase `implemented` until its scoped behavior tests pass.
+- Record the applicable verification commands and results. If a required or
+  relevant suite cannot be run or complete, record the reason rather than
+  implying full verification.
+- Keep changing implementation status out of `AGENTS.md`, architecture docs,
+  and development instructions unless it materially affects their stable
+  guidance. Link to the status document instead of duplicating it.
+
 ## Tests are part of every feature
 
 - Every feature addition or behavior change must include automated tests in the

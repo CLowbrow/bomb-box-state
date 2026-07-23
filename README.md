@@ -730,6 +730,10 @@ must not be rejected merely because a serialized door state disagrees with it.
 
 ## Suggested implementation order
 
+Current coverage, verification results, known limitations, and the recommended
+next task are tracked in the non-normative
+[implementation status](docs/implementation-status.md).
+
 1. World schema, entity IDs, fixtures, stacks, validation, and replaceable
    level lifetime.
 2. Resolved-state history, undo-only rewind, and history reset on level load.
@@ -747,9 +751,11 @@ the next phase.
 
 ## Project scaffold
 
-The implementation scaffold uses dependency-free C++20 with CMake, CTest, native and WebAssembly
-presets, a primitive C ABI, and a future Unreal plugin wrapper. The engine is intentionally a stub.
+The implementation uses dependency-free C++20 with CMake, CTest, native and WebAssembly presets, a
+primitive C ABI, and a future Unreal plugin wrapper. See the
+[implementation status](docs/implementation-status.md) for current feature coverage.
 
 - [Development setup](docs/development.md)
 - [Architecture and portability constraints](docs/architecture.md)
+- [Implementation status](docs/implementation-status.md)
 - [Unreal integration scaffold](integrations/unreal/README.md)

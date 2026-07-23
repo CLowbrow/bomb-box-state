@@ -20,10 +20,8 @@ ctest --preset native-sanitized
 
 Build artifacts stay under `out/` and are ignored by Git.
 
-The phase-one loader performs structural validation and canonical storage only. It intentionally
-accepts unsupported initial entities because initialization stabilization depends on the later
-falling, ramp, fixture, and explosion phases. Until those phases land, `loaded_level()` is a loaded
-definition snapshot rather than a claim that gameplay initialization has resolved.
+See the [implementation status](implementation-status.md) for current feature coverage, verification
+results, and known toolchain limitations.
 
 ## WebAssembly build
 
