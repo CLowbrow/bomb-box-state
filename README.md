@@ -6,9 +6,9 @@ submits one cardinal movement command and receives the complete, tick-by-tick
 result of that command, including every fall, slide, explosion, door change,
 and terminal event caused by it.
 
-This document is intended to become the normative behavior specification for
-the engine. Rules marked **open design question** must be settled before the
-affected behavior is implemented.
+This document is the normative behavior specification for the engine. Any
+future unresolved behavior must be called out explicitly rather than left for
+an implementation to decide implicitly.
 
 ## Normative language
 
@@ -19,12 +19,19 @@ requirements. Examples illustrate the requirements but do not replace them.
 
 ### Coordinates and directions
 
-The world is a grid of cells. Player input is exactly one of the four cardinal
+By default, the world is a finite rectangular grid with a cell at every
+in-bounds coordinate. Player input is exactly one of the four cardinal
 directions: north, east, south, or west. Diagonal movement and diagonal blast
 effects do not exist.
 
-The level format must eventually define its coordinate origin, axis directions,
-board bounds, and behavior outside the board. See [Open design questions](#open-design-questions).
+The edge of the rectangle is a solid world boundary. Players, boxes, barrels,
+stacks, falls, slides, and blast pushes cannot enter a coordinate outside it.
+There are no void or abyss cells in the initial rules. A future version may add
+explicit void cells and rules for falling out of the world; implementations
+should avoid making that extension unnecessarily difficult.
+
+The level format must define its coordinate origin, axis directions, width, and
+height.
 
 ### Cells, fixtures, and entities
 
@@ -32,8 +39,8 @@ The engine distinguishes three kinds of world data:
 
 - A **cell** supplies geometry: a coordinate and either a flat surface or a
   ramp.
-- A **fixture** is attached to a cell: a switch, door, or exit. Fixtures are
-  not members of entity stacks.
+- A **fixture** is attached to a cell: a switch, door, or exit teleporter.
+  Fixtures are not members of entity stacks.
 - An **entity** occupies physical space: the player, a box, or an explosive
   barrel. Every entity must have a stable unique ID.
 
@@ -54,8 +61,9 @@ open door without treating the fixture as part of the entity stack.
   above it. If an involuntary effect would place or drop something onto the
   player, the level is lost.
 - An entity is **unstacked** only when it is the sole entity in its cell.
-  Switches, exits, and open doors do not affect whether an entity is unstacked
-  because they are fixtures, not entities.
+  Switches and open doors do not affect whether an entity is unstacked because
+  they are fixtures, not entities. Teleporter occupancy matters only for the
+  player and immediately ends the level.
 
 For example, a barrel starting on a flat cell of elevation `3` has bottom
 height `3`. If it moves into a cell of elevation `1` containing one box, the
@@ -79,7 +87,7 @@ box supplies a landing surface at height `2`. The barrel therefore falls by
 ### Input gating
 
 - The engine accepts at most one player command at a time.
-- A command starts a **turn**.
+- An accepted command starts a **turn**. A rejected command does not.
 - After applying the player's action, the engine must resolve the complete
   causal chain to a stable state before accepting another command.
 - While falls, slides, explosions, chain reactions, or other derived actions
@@ -92,11 +100,11 @@ box supplies a landing surface at height `2`. The barrel therefore falls by
 
 - The player may move only one cell in a cardinal direction per command.
 - The player cannot climb a ledge.
-- The player cannot walk or fall down a ledge.
+- The player cannot voluntarily walk down a ledge.
 - The player changes elevation only by traversing a ramp.
 - The player may walk onto the top of a box when that box's top is at the same
   height as the player's current supporting surface.
-- A closed door and an ineligible exit cell block walking.
+- A closed door and an ineligible teleporter cell block walking.
 
 ### Player pushing
 
@@ -125,7 +133,7 @@ player-push rules permit only one.
 ## Falling
 
 - Boxes and barrels may move or be pushed off ledges of any positive height.
-- The player cannot voluntarily or safely fall.
+- The player cannot voluntarily fall.
 - An unsupported entity or stack falls to the highest legal support surface in
   its current cell.
 - A falling stack retains its bottom-to-top order and falls as one unit.
@@ -134,9 +142,53 @@ player-push rules permit only one.
 - A box survives a fall of any distance.
 - A barrel that falls any positive distance becomes armed and must explode
   after its forced movement has finished.
+- An involuntary player fall of less than `1.0` is survivable.
+- If the player ever falls `1.0` or more in a single fall, the level is lost.
+- If a barrel directly supporting the player explodes, the level is lost
+  immediately. The player does not first fall into the space left by the
+  barrel.
 - If a falling entity or stack would land on the player, the level is lost.
 - A fall event should record the complete start height, end height, and fall
   distance rather than emitting one tick per unit of height.
+
+### Falling-column resolution
+
+Falling changes only vertical height; it never changes an entity's grid
+coordinate. Gravity is resolved independently for each cell column.
+
+- Entities and separated groups in one column retain their pre-tick
+  bottom-to-top order.
+- The engine compacts every unsupported group downward onto the cell's support
+  surface and onto the groups below it.
+- Landing positions are calculated bottom-up. The lowest unsupported group
+  lands first logically, and each higher group lands on the final position of
+  the group below it.
+- All of those calculated falls may occur in the same tick because they come
+  from one pre-tick column and have one deterministic final arrangement.
+- Fall distance and barrel arming are calculated separately for every falling
+  entity or group.
+- In a ramp cell, unsupported groups compact onto the ramp surface before the
+  resulting whole stack is eligible to slide in a later derived tick.
+- Falling groups in different cells cannot collide because falling has no
+  horizontal component.
+- If horizontal blast movements or ramp slides would send two groups into
+  overlapping destination space, that conflict is resolved before falling.
+  The conflicting horizontal movements fail, so gravity never receives two
+  columns competing for the same landing volume.
+
+For example:
+
+```text
+before                 after one falling tick
+z=4  Box A             z=1  Box A
+z=3  empty             z=0  Box B
+z=2  Box B                  floor
+z=1  empty
+z=0  floor
+```
+
+Box B falls to the floor and Box A lands on Box B. Their order cannot reverse,
+and no arbitrary entity or event-queue ordering is needed.
 
 ## Ramps
 
@@ -190,7 +242,7 @@ to match one of its endpoints.
 - If the bottom entity of a ramp stack disappears, the remaining upper stack
   falls onto the ramp surface before it can try to slide.
 
-Switches, doors, and exits cannot be placed on ramp cells.
+Switches, doors, and teleporters cannot be placed on ramp cells.
 
 ## Explosive barrels
 
@@ -217,26 +269,53 @@ before it explodes. In particular:
 
 - An explosion affects its source cell and the four cardinally adjacent cells.
 - It never affects a diagonally adjacent cell.
-- Cell elevation matters. In an adjacent cell, a target is affected only when
-  its occupied vertical interval overlaps the exploding barrel's interval.
-- Merely touching at a top/bottom boundary across two different cells does not
-  count as overlap.
-- The half-height of a ramp may allow a ramp occupant to overlap vertically
-  with an occupant at either ramp endpoint.
-- Doors, switches, exits, and cell geometry are not damaged or moved by a
+- Cell elevation matters. Across two flat cells, the blast acts at the
+  exploding barrel's bottom height and can select only the entity whose bottom
+  height is the same. Merely touching at a top/bottom boundary does not count.
+- For blast targeting, a ramp occupant is considered connected to the low
+  endpoint at height `X` and the high endpoint at height `X + 1`. A blast may
+  cross either oriented ramp edge at that endpoint's height. Perpendicular ramp
+  edges do not carry a blast between levels.
+- Doors, switches, teleporters, and cell geometry are not damaged or moved by a
   blast.
 - The exploding barrel is removed from the world as part of its explosion.
 
 ### Adjacent-cell effects
 
-- An affected box is pushed at most one cell directly away from the exploding
-  barrel, if the movement is legal. It is not destroyed.
-- An affected barrel is pushed by the same rule and becomes armed whether or
-  not its movement succeeds.
+- In an adjacent stack, the blast selects only the entity at the blast height.
+  Entities above and below it are not directly pushed by that blast.
+- If the selected entity is a box or barrel and its movement is legal, it is
+  popped horizontally out of the stack and moved at most one cell directly
+  away from the exploding barrel. A box is not destroyed.
+- A pop destination is legal only if it is inside the board, its fixtures allow
+  the selected entity to enter, it contains no entity volume at the selected
+  entity's arrival height, and its support surface is not higher than that
+  arrival height. A lower support surface causes a subsequent fall.
+- The portion of the original stack below the popped entity stays in place.
+- Every entity above the popped entity becomes unsupported and falls together
+  during the following derived tick. It does not move horizontally with the
+  popped entity.
+- The popped entity may itself fall or enter a ramp after moving into its
+  destination. It completes that forced movement normally.
+- If the pop movement is blocked or canceled, the selected entity remains in
+  the stack and the entities above it do not fall.
+- A selected barrel becomes armed whether or not its pop movement succeeds.
 - An affected player causes a loss condition.
 
-How a blast acts on a target that is part of a stack is not yet fully specified;
-see [Open design questions](#open-design-questions).
+A blast pop is not a player push. It may remove an entity from the middle of a
+stack even though the player may push only unstacked entities.
+
+For example, suppose a barrel exploding at height `1` is west of this stack:
+
+```text
+height 2:  Box B
+height 1:  Box A  <- selected by the blast
+height 0:  Box L
+```
+
+If the cell east of the stack is a legal destination, Box A pops east. Box L
+stays at height `0`, and Box B falls to height `1` during the following derived
+tick. If Box B were the player, that `1.0` fall would cause a loss.
 
 ### Same-cell vertical effects
 
@@ -253,7 +332,8 @@ different from adjacent-cell blast pushes:
 - A barrel above the source becomes unsupported when the source disappears,
   falls with the stack above it during the following derived tick, and then
   explodes after settling.
-- A directly touching player causes a loss condition.
+- A directly touching player causes a loss condition. In particular, a player
+  standing on the exploding barrel loses immediately.
 - A box in the source cell receives no horizontal impulse because there is no
   unique away direction. A box above the source may nevertheless fall when the
   source disappears.
@@ -266,6 +346,9 @@ All explosions in the same explosion wave inspect the same pre-wave state.
   movement.
 - If an entity receives impulses from two or more different directions, all of
   its horizontal blast movement is canceled.
+- Direction conflicts are determined before checking whether any one of the
+  candidate destinations is blocked. No direction gets priority merely because
+  another direction would have failed.
 - Counts do not matter. For example, two eastward impulses and one westward
   impulse still conflict and result in no movement.
 - A barrel hit by any blast becomes armed even when its movement is canceled.
@@ -273,6 +356,22 @@ All explosions in the same explosion wave inspect the same pre-wave state.
   conflicting movements fail.
 - Barrels already exploding in the current wave cannot be moved by that wave.
 - Entity ID or collection iteration order must never decide a physics result.
+
+For example, suppose one barrel is north of a box and another is east of it:
+
+```text
+             north barrel
+                  |
+                  | south impulse
+                  v
+                [box] <--- west impulse --- east barrel
+```
+
+If both barrels explode in the same wave, the box receives one south impulse
+and one west impulse. Because those directions differ, both impulses are
+consumed and the box remains in place. Neither explosion is "first," and the
+box does not retain either impulse for a later tick. If the target were another
+barrel, it would remain in place, become armed, and explode after settling.
 
 ## Switches and doors
 
@@ -284,13 +383,19 @@ All explosions in the same explosion wave inspect the same pre-wave state.
 - A switch is pressed when an entity is resting directly on the switch's floor
   surface. An entity higher in the stack does not itself press the switch.
 - A box, barrel, or player may press a switch.
-- All switches of a color use AND behavior: that color is active only while
-  every switch of that color is pressed.
+- All switches of a color use AND behavior: that color is active only when at
+  least one switch of that color exists and every switch of that color is
+  pressed.
 - All doors of an active color are open.
+- A switch color with no corresponding doors is legal and simply controls
+  nothing.
 
 ### Doors
 
 - Every door has a switch color and cannot move.
+- A door color with no corresponding switches is legal. Because a color with
+  zero switches is inactive, such a door remains closed unless it is being held
+  open by an entity already in its cell during initialization.
 - A closed door makes its entire cell impassable at every stack height.
 - An open door does not obstruct movement.
 - An entity may occupy a cell containing an open door. The door fixture does
@@ -304,25 +409,58 @@ All explosions in the same explosion wave inspect the same pre-wave state.
 - Door state is recomputed after each tick. An open/close event is emitted only
   when effective passability changes.
 
-A level currently must not contain a door color without a corresponding switch
-or a switch color without a corresponding door. Whether this should remain an
-engine invariant or become only a level-editor warning is an open question.
+Level validation must not require switch colors and door colors to correspond.
 
-## Exits and terminal outcomes
+## Exit teleporters and terminal outcomes
 
-- An exit can be placed only on a flat cell and cannot share a cell with a door.
-- Only the player may enter an exit cell. Boxes and barrels treat it as
-  impassable.
-- The player wins only when directly touching the exit floor.
-- A player in the exit cell while standing on another entity has not reached
-  the exit.
+- A level may contain any number of exit teleporters, including zero. Every
+  teleporter has identical behavior and reaching any one of them wins the
+  level.
+- A teleporter can be placed only on a flat cell and cannot share its cell with
+  another fixture.
+- A teleporter reserves its entire vertical column to effectively infinite
+  height. No box, barrel, or stack may enter, pass over, land in, or be placed
+  in that cell at any height.
+- The player may enter a teleporter cell only directly at the teleporter floor
+  height and only if the player will be the cell's sole entity. Nothing may be
+  above or below the player there; the player's stack status in the cell it is
+  leaving is irrelevant.
+- The player wins as soon as it directly touches the teleporter floor.
+- A state containing a player stacked above another entity in a teleporter cell
+  is invalid rather than a non-winning way to occupy the teleporter.
 - If win and loss conditions occur during the same tick, **win takes
   precedence**.
+- The tick in which the player touches the teleporter completes as one atomic
+  tick. The engine emits `LevelWon` and then immediately makes the level
+  terminal.
+- All falls, slides, explosions, door changes, and other derived ticks that
+  would have happened afterward are canceled. They produce no events or state
+  snapshots.
 - After the level becomes terminal, the engine accepts no more player input.
 
-Whether a win immediately cancels already-scheduled derived ticks or whether
-the active causal chain finishes before the final outcome is emitted remains an
-open design question.
+## Level initialization and stabilization
+
+A loaded level is allowed to be physically unstable. Boxes and barrels may
+begin unsupported, ramp occupants may be ready to slide, switches may initially
+change door states, and barrels may begin in positions that cause them to fall
+and explode.
+
+After structural validation, the engine must:
+
+1. Construct the supplied initial state.
+2. Check whether the player already touches a teleporter. If so, win
+   immediately and stop initialization.
+3. Derive initial switch and door states.
+4. Run the same falling, sliding, explosion, door, loss, and conflict rules used
+   for a normal turn until the world becomes stable or terminal.
+5. Return every initialization tick and its events to the caller.
+6. Accept the first player command only if initialization finishes in a stable,
+   nonterminal state.
+
+Initialization is not a player turn and has no command. A useful API may return
+a `LoadResult` containing the supplied state, initialization ticks, stabilized
+state, and outcome. This allows a UI to animate a level settling into place
+before control is given to the player.
 
 ## Turns, ticks, and causal resolution
 
@@ -343,9 +481,12 @@ The engine should resolve a normal turn as follows:
 
 1. Validate the command against a stable, nonterminal state.
 2. Compute the complete player walk or atomic push from the pre-tick state.
-3. If it is illegal, emit a blocked-action event and leave the world unchanged.
+3. If it is illegal, return a rejected-command result with a `MoveBlocked`
+   presentation event and leave the world unchanged. No turn or tick begins.
 4. Otherwise, apply the player movement tick.
-5. After every tick, recompute switches and effective door states, detect
+5. After every tick, first check whether the player directly touched a
+   teleporter. If so, emit `LevelWon`, discard all future derived work, and end
+   the turn. Otherwise, recompute switches and effective door states, detect
    crushing, and identify newly unsupported entities and newly armed barrels.
 6. Resolve all currently possible falls and ramp slides in derived ticks until
    the affected entities are settled.
@@ -358,6 +499,25 @@ The engine should resolve a normal turn as follows:
 An armed barrel does not explode while it still has a fall or available ramp
 slide caused by the triggering interaction. This is why a blast can push a
 barrel off a ledge and the barrel can explode only after landing.
+
+### Rejected commands
+
+A command that cannot produce a legal player action is rejected. Rejection is
+observable so a UI can play a blocked-movement animation, sound, or other
+feedback.
+
+- A rejected command does not start a turn and produces no world tick.
+- The authoritative world state is unchanged.
+- The result includes the attempted direction and a stable reason code, such as
+  `world_boundary`, `ledge`, `closed_door`, `teleporter_restriction`,
+  `occupied`, `stacked_push_target`, `engine_busy`, or `level_terminal`.
+- It includes a `MoveBlocked` event outside the tick list for presentation
+  hooks.
+- A command submitted while initialization or another turn is resolving is
+  rejected as `engine_busy`; it is never queued into the active resolution.
+- A command submitted after win or loss is rejected as `level_terminal`.
+- Malformed input that is not one of the cardinal directions is an API
+  validation error rather than a gameplay rejection.
 
 ### Example chain
 
@@ -375,13 +535,23 @@ barrels, the approximate ticks are:
 
 ## Engine output
 
-The engine returns the state after every tick plus the events that occurred in
-that tick. A useful logical result shape is:
+The engine returns either a rejected-command result or the state after every
+tick plus the events that occurred in that accepted turn. A useful logical
+result shape is:
 
 ```text
+CommandResult = RejectedCommand | TurnResult
+
+RejectedCommand
+  command
+  accepted: false
+  reason
+  events: [MoveBlocked]
+  state
+
 TurnResult
   command
-  accepted
+  accepted: true
   initialState
   ticks[]
     index
@@ -396,6 +566,7 @@ Useful event kinds include:
 - `MoveBlocked`
 - `EntityMoved`
 - `EntityPushed`
+- `EntityPoppedFromStack`
 - `EntityFell`
 - `EntitySlid`
 - `BarrelArmed`
@@ -429,58 +600,28 @@ At minimum, level validation should eventually check:
 
 - Exactly one player exists.
 - Every entity has a unique ID.
+- Every cell coordinate lies within the declared rectangular width and height,
+  and every in-bounds coordinate has a cell.
 - No entity volumes overlap in the initial state.
-- The player is not below another entity.
-- Every stack is supported and contiguous.
+- No box, barrel, stack, or non-teleporter fixture occupies a teleporter cell.
+- Entities at one coordinate have a deterministic bottom-to-top order. They may
+  initially contain unsupported gaps, which initialization will resolve.
 - Fixtures obey their cell-placement restrictions.
 - Every ramp has one valid low endpoint and one valid high endpoint on opposite
   sides.
 - No ramp connects through a perpendicular edge.
-- Door/switch color requirements are satisfied.
-- The initial door state agrees with switch occupancy.
+- Every door and switch has a syntactically valid color identifier; matching
+  colors are not required.
 
-The level loader must either require an initially stable world or explicitly
-stabilize it and return the resulting setup ticks. Requiring stable initial
-states is the simpler initial implementation.
-
-## Open design questions
-
-These questions must be answered before implementing the affected feature.
-
-1. **Terminal timing:** When the player wins, are already-scheduled falls and
-   explosion waves canceled immediately, or does the active chain finish before
-   the final outcome is emitted? In either case, no new player input is allowed.
-2. **Blast effects on stacks:** If an adjacent-cell blast hits an entity that
-   has something above or below it, does the whole stack move, does only a
-   portion move, or is movement blocked? This is separate from player pushing
-   and automatic ramp-stack sliding.
-3. **Player support destroyed:** If a barrel supporting the player explodes,
-   is that immediately a loss, or may the player remain at that coordinate if a
-   new support surface is exactly at the same height? The recommended simple
-   rule is immediate loss whenever the player involuntarily loses support.
-4. **Board boundary:** Is the board rectangular or irregular, and is an absent
-   neighboring cell a solid wall or a void that objects can fall into?
-5. **Exit count:** Must a level contain exactly one exit or may it contain
-   several equivalent exits?
-6. **Exit occupancy:** Should boxes and barrels remain prohibited from exit
-   cells, or should an exit behave like ordinary goal floor that only the player
-   can activate?
-7. **Color validation:** Must every used switch color have a door and vice
-   versa, or is that merely a level-authoring warning?
-8. **Initial instability:** Must every loaded level already be stable, or does
-   loading resolve initial falls, slides, switches, and explosions?
-9. **Invalid commands:** Does a blocked command count as a turn with no ticks,
-   or does the engine return a dedicated rejected-command result outside the
-   turn history?
-10. **Multiple simultaneous falls:** What happens if independently falling
-    stacks would require overlapping destination space during the same tick?
+Initial door state is derived from switch occupancy during initialization and
+must not be rejected merely because a serialized door state disagrees with it.
 
 ## Suggested implementation order
 
 1. World schema, entity IDs, fixtures, stacks, and validation.
 2. Flat-cell walking and single-entity player pushes.
 3. Falling and crushing.
-4. Switches, doors, exits, and terminal events.
+4. Switches, doors, teleporters, and terminal events.
 5. Ramp traversal, automatic sliding, and whole-stack ramp movement.
 6. Single explosions and height-aware blast targeting.
 7. Simultaneous explosion waves and chain reactions.
