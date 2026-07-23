@@ -1,0 +1,22 @@
+# CMake and compiled output
+/out/
+/build/
+/dist/
+CMakeUserPresets.json
+
+# Tooling
+.cache/
+compile_commands.json
+
+# Editors and operating systems
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# Unreal-generated output (if the integration scaffold is copied into a project)
+Binaries/
+DerivedDataCache/
+Intermediate/
+Saved/
+

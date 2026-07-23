@@ -1,0 +1,19 @@
+{
+  "FileVersion": 3,
+  "Version": 1,
+  "VersionName": "0.1.0",
+  "FriendlyName": "Bomb Box State",
+  "Description": "Unreal adapter for the portable Bomb Box rules engine.",
+  "Category": "Gameplay",
+  "CanContainContent": false,
+  "IsBetaVersion": true,
+  "Installed": false,
+  "Modules": [
+    {
+      "Name": "BombBoxState",
+      "Type": "Runtime",
+      "LoadingPhase": "Default"
+    }
+  ]
+}
+

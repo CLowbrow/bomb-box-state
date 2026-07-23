@@ -629,3 +629,12 @@ must not be rejected merely because a serialized door state disagrees with it.
 
 Every phase should add behavior-level tests before implementation proceeds to
 the next phase.
+
+## Project scaffold
+
+The implementation scaffold uses dependency-free C++20 with CMake, CTest, native and WebAssembly
+presets, a primitive C ABI, and a future Unreal plugin wrapper. The engine is intentionally a stub.
+
+- [Development setup](docs/development.md)
+- [Architecture and portability constraints](docs/architecture.md)
+- [Unreal integration scaffold](integrations/unreal/README.md)

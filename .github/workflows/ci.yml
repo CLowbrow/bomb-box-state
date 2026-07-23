@@ -1,0 +1,38 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  native:
+    name: native (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: lukka/get-cmake@latest
+      - run: cmake --preset native-debug
+      - run: cmake --build --preset native-debug
+      - run: ctest --preset native-debug
+
+  wasm:
+    name: webassembly
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: lukka/get-cmake@latest
+      - uses: mymindstorm/setup-emsdk@v14
+        with:
+          version: latest
+          actions-cache-folder: emsdk-cache
+      - run: emcmake cmake --preset wasm-debug
+      - run: cmake --build --preset wasm-debug
+      - run: ctest --preset wasm-debug
+
