@@ -26,6 +26,7 @@ target_sources(
     PRIVATE
         src/c_api.cpp
         src/engine.cpp
+        src/world.cpp
     PUBLIC
         FILE_SET public_headers
         TYPE HEADERS
@@ -34,6 +35,7 @@ target_sources(
             include/bomb_box/c_api.h
             include/bomb_box/engine.hpp
             include/bomb_box/types.hpp
+            include/bomb_box/world.hpp
 )
 
 target_compile_features(bomb_box_state PUBLIC cxx_std_20)

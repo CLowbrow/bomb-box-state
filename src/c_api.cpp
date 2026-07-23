@@ -9,6 +9,6 @@ uint32_t bomb_box_api_version(void)
 
 const char* bomb_box_engine_status(void)
 {
-    return "not_implemented";
+    return "schema_ready";
 }
 

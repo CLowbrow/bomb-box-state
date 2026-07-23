@@ -20,6 +20,11 @@ ctest --preset native-sanitized
 
 Build artifacts stay under `out/` and are ignored by Git.
 
+The phase-one loader performs structural validation and canonical storage only. It intentionally
+accepts unsupported initial entities because initialization stabilization depends on the later
+falling, ramp, fixture, and explosion phases. Until those phases land, `loaded_level()` is a loaded
+definition snapshot rather than a claim that gameplay initialization has resolved.
+
 ## WebAssembly build
 
 Install the Emscripten SDK, activate it, and load its environment in each new shell. The SDK supplies

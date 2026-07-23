@@ -12,7 +12,7 @@ const module = await createBombBoxModule();
 const apiVersion = module.ccall("bomb_box_api_version", "number", [], []);
 const engineStatus = module.ccall("bomb_box_engine_status", "string", [], []);
 
-if (apiVersion !== 1 || engineStatus !== "not_implemented") {
+if (apiVersion !== 1 || engineStatus !== "schema_ready") {
   throw new Error(`unexpected Wasm API: version=${apiVersion}, status=${engineStatus}`);
 }
 

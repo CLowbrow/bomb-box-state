@@ -30,13 +30,13 @@ int main()
 {
     const bomb_box::Engine engine;
 
-    expect(engine.status() == bomb_box::EngineStatus::not_implemented,
-           "the C++ engine reports its stub status");
-    expect(bomb_box::to_string(engine.status()) == "not_implemented",
+    expect(engine.status() == bomb_box::EngineStatus::schema_ready,
+           "the C++ engine reports its schema-ready status");
+    expect(bomb_box::to_string(engine.status()) == "schema_ready",
            "the C++ status has a stable string representation");
     expect(bomb_box_api_version() == bomb_box::api_version,
            "the C and C++ API versions match");
-    expect(std::strcmp(bomb_box_engine_status(), "not_implemented") == 0,
+    expect(std::strcmp(bomb_box_engine_status(), "schema_ready") == 0,
            "the C ABI is callable");
 
     if (failures == 0) {

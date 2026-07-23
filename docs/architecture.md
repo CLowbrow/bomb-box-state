@@ -35,7 +35,9 @@ buffers, and explicit error codes. Do not pass C++ standard-library objects acro
 5. Serialization and the primitive C API.
 6. Thin JavaScript and Unreal-facing adapters.
 
-The current `Engine` intentionally does not guess at the final gameplay API. Introduce that API with
-the first schema behavior tests so implementation convenience does not silently define unspecified
-rules.
+The current `Engine` owns a canonical, validated `LevelDefinition`. Loading validates a candidate
+before atomically replacing the prior definition, and snapshots are returned by value so callers
+cannot retain a mutable view into engine-owned storage. Gameplay state, initialization
+stabilization, command history, and the primitive stateful C API are introduced by their later
+implementation phases.
 

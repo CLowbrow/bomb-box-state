@@ -33,7 +33,11 @@ explicit void cells and rules for falling out of the world; implementations
 should avoid making that extension unnecessarily difficult.
 
 The level format must define its coordinate origin, axis directions, width, and
-height.
+height. Coordinates cover the rectangle from the declared origin through
+`origin + (width - 1, height - 1)`. The positive x-axis must be declared as east
+or west, and the positive y-axis as north or south. Width and height must both
+be positive, and the complete coordinate range must be representable by the
+fixed-width coordinate type.
 
 ### Cells, fixtures, and entities
 
@@ -48,6 +52,9 @@ The engine distinguishes three kinds of world data:
 
 This distinction permits an entity to occupy the same cell as a switch or an
 open door without treating the fixture as part of the entity stack.
+
+A cell may have at most one fixture. This keeps fixture occupancy unambiguous;
+multiple switches or multiple doors cannot be layered in one cell.
 
 ### Flat cells, height, and support
 
