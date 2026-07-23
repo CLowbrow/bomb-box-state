@@ -1,10 +1,12 @@
 # Bomb Box state/rules engine
 
 Bomb Box is a deterministic state and rules engine for a turn-based,
-Sokoban-like puzzle game. The engine owns the authoritative world state. A UI
-submits one cardinal movement command and receives the complete, tick-by-tick
-result of that command, including every fall, slide, explosion, door change,
-and terminal event caused by it.
+Sokoban-like puzzle game. The engine owns the authoritative world state and an
+undo-only history of resolved states for the currently loaded level. A UI may
+submit a cardinal movement command or rewind to the preceding resolved state.
+For a movement command, it receives the complete, tick-by-tick result,
+including every fall, slide, explosion, door change, and terminal event caused
+by it.
 
 This document is the normative behavior specification for the engine. Any
 future unresolved behavior must be called out explicitly rather than left for
@@ -20,9 +22,9 @@ requirements. Examples illustrate the requirements but do not replace them.
 ### Coordinates and directions
 
 By default, the world is a finite rectangular grid with a cell at every
-in-bounds coordinate. Player input is exactly one of the four cardinal
-directions: north, east, south, or west. Diagonal movement and diagonal blast
-effects do not exist.
+in-bounds coordinate. A movement command contains exactly one of the four
+cardinal directions: north, east, south, or west. Diagonal movement and
+diagonal blast effects do not exist.
 
 The edge of the rectangle is a solid world boundary. Players, boxes, barrels,
 stacks, falls, slides, and blast pushes cannot enter a coordinate outside it.
@@ -82,14 +84,81 @@ box supplies a landing surface at height `2`. The barrel therefore falls by
   unsupported. Those entities fall as a stack during the following derived
   tick.
 
-## Player commands and movement
+## Player controls and resolved-state history
+
+The gameplay command set is exactly:
+
+- `Move(direction)`, where `direction` is north, east, south, or west; or
+- `Rewind`, which restores the previous resolved state.
+
+Loading a level is a separate engine lifecycle operation, not a gameplay
+command.
+
+A **resolved state** is the authoritative command-boundary snapshot produced
+after level initialization or after an accepted movement command has finished
+all of its derived work. It is either stable and ongoing or terminal. Per-tick
+snapshots are output for animation and diagnosis, but they are not rewind
+boundaries.
+
+The engine must maintain the current resolved state and a stack of earlier
+resolved states for only the currently loaded level:
+
+- The stabilized result of level initialization is the beginning of the
+  history. There is no state before it to rewind to.
+- When a movement command is accepted, the engine preserves the exact resolved
+  state from before that turn. After the turn resolves, its final state becomes
+  current.
+- A rejected movement leaves both the current state and history unchanged.
+- An accepted `Rewind` restores the most recent earlier resolved state and
+  removes it from the history stack. It does not replay events, run rules,
+  perform initialization, or create a tick or turn.
+- Rewind may be repeated until the initialized state is current. A further
+  rewind is rejected as `history_empty` and changes nothing.
+- Rewind is allowed from a won or lost state. This is the only gameplay command
+  accepted while the current state is terminal.
+- There is no redo operation or redo storage. Once a state is rewound, the
+  abandoned later state is permanently discarded by the engine. A subsequent
+  movement therefore starts a new one-way history from the restored state.
+- State history is an engine concern. Callers must not need to retain or replay
+  tick events to implement rewind.
+
+## Level loading and lifetime
+
+The engine must expose an explicit operation for loading a level. Loading is
+available when there is no level, while a level is ongoing, and after a win or
+loss; it does not require the current level to reach a particular gameplay
+state.
+
+- A successfully loaded level completely replaces the preceding level. The
+  engine must clear its current state, resolved-state history, pending derived
+  work, terminal outcome, and any other level-scoped data before establishing
+  the new level's initialized state and history.
+- No resolved state from a preceding level may be reached by rewind, affect
+  determinism, or receive events after the replacement.
+- Structural validation should occur before committing the replacement. If a
+  load is rejected as invalid, the currently loaded level remains unchanged.
+- If an integration permits a load request to overlap active initialization or
+  turn resolution, the accepted load supersedes that work. Results from the
+  superseded level must be discarded and must not overwrite or emit events into
+  the new level. A synchronous integration may instead serialize the call while
+  preserving the same observable behavior.
+- Immutable snapshots already returned to a caller may remain in caller-owned
+  memory, but the engine must retain no old level state after a successful
+  replacement.
+
+The newly loaded level then follows the initialization and stabilization rules
+below. Its stabilized or terminal initialization result is the first and only
+resolved state in a fresh history.
+
+## Movement rules
 
 ### Input gating
 
-- The engine accepts at most one player command at a time.
-- An accepted command starts a **turn**. A rejected command does not.
+- The engine accepts at most one gameplay command at a time.
+- An accepted movement command starts a **turn**. A rejected command and an
+  accepted rewind do not.
 - After applying the player's action, the engine must resolve the complete
-  causal chain to a stable state before accepting another command.
+  causal chain to a resolved state before accepting another gameplay command.
 - While falls, slides, explosions, chain reactions, or other derived actions
   remain pending, additional player input must be rejected or left outside the
   engine by the wrapper. It must never be inserted into the active turn.
@@ -436,7 +505,9 @@ Level validation must not require switch colors and door colors to correspond.
 - All falls, slides, explosions, door changes, and other derived ticks that
   would have happened afterward are canceled. They produce no events or state
   snapshots.
-- After the level becomes terminal, the engine accepts no more player input.
+- After the level becomes terminal, the engine rejects movement commands but
+  still accepts rewind when history is available. Loading another level also
+  remains available.
 
 ## Level initialization and stabilization
 
@@ -454,20 +525,23 @@ After structural validation, the engine must:
 4. Run the same falling, sliding, explosion, door, loss, and conflict rules used
    for a normal turn until the world becomes stable or terminal.
 5. Return every initialization tick and its events to the caller.
-6. Accept the first player command only if initialization finishes in a stable,
-   nonterminal state.
+6. Accept the first movement command only if initialization finishes in a
+   stable, nonterminal state. A rewind has no earlier state and is rejected as
+   `history_empty`.
 
-Initialization is not a player turn and has no command. A useful API may return
-a `LoadResult` containing the supplied state, initialization ticks, stabilized
-state, and outcome. This allows a UI to animate a level settling into place
-before control is given to the player.
+Initialization is not a player turn and has no gameplay command. A useful API
+may return a `LoadResult` containing the supplied state, initialization ticks,
+resolved state, and outcome. This allows a UI to animate a level settling into
+place before control is given to the player. A successful `LoadResult` begins a
+new history even when initialization immediately produces a terminal state.
 
 ## Turns, ticks, and causal resolution
 
 ### Definitions
 
-- A **turn** begins with one player command and includes every consequence of
-  that command until the world becomes stable or terminal handling stops it.
+- A **turn** begins with one accepted movement command and includes every
+  consequence of that command until the world becomes stable or terminal
+  handling stops it. Rewind and level loading are not turns.
 - A **tick** contains effects that happen simultaneously from one pre-tick
   state.
 - Sequentially dependent effects must occur in different ticks.
@@ -479,7 +553,7 @@ before control is given to the player.
 
 The engine should resolve a normal turn as follows:
 
-1. Validate the command against a stable, nonterminal state.
+1. Validate the movement command against a stable, nonterminal state.
 2. Compute the complete player walk or atomic push from the pre-tick state.
 3. If it is illegal, return a rejected-command result with a `MoveBlocked`
    presentation event and leave the world unchanged. No turn or tick begins.
@@ -494,30 +568,46 @@ The engine should resolve a normal turn as follows:
    shared pre-wave snapshot.
 8. Apply that wave's blast movements simultaneously.
 9. Return to step 5 and continue until no derived work remains.
-10. Only then may the wrapper submit another player command.
+10. Only then may the wrapper submit another gameplay command.
 
 An armed barrel does not explode while it still has a fall or available ramp
 slide caused by the triggering interaction. This is why a blast can push a
 barrel off a ledge and the barrel can explode only after landing.
 
-### Rejected commands
+### Rejected movement commands
 
-A command that cannot produce a legal player action is rejected. Rejection is
-observable so a UI can play a blocked-movement animation, sound, or other
-feedback.
+A movement command that cannot produce a legal player action is rejected.
+Rejection is observable so a UI can play a blocked-movement animation, sound,
+or other feedback.
 
-- A rejected command does not start a turn and produces no world tick.
+- A rejected movement command does not start a turn and produces no world tick.
 - The authoritative world state is unchanged.
 - The result includes the attempted direction and a stable reason code, such as
   `world_boundary`, `ledge`, `closed_door`, `teleporter_restriction`,
   `occupied`, `stacked_push_target`, `engine_busy`, or `level_terminal`.
 - It includes a `MoveBlocked` event outside the tick list for presentation
   hooks.
-- A command submitted while initialization or another turn is resolving is
-  rejected as `engine_busy`; it is never queued into the active resolution.
-- A command submitted after win or loss is rejected as `level_terminal`.
-- Malformed input that is not one of the cardinal directions is an API
-  validation error rather than a gameplay rejection.
+- A movement command submitted while initialization or another turn is
+  resolving is rejected as `engine_busy`; it is never queued into the active
+  resolution. Level loading follows its separate supersession rules.
+- A movement command submitted after win or loss is rejected as
+  `level_terminal`. Rewind remains eligible.
+- A malformed movement direction is an API validation error rather than a
+  gameplay rejection.
+
+### Rewind commands
+
+Rewind is resolved only at command boundaries, so it never interrupts a turn
+or selects an intermediate tick snapshot.
+
+- If earlier history exists, rewind succeeds and returns the restored current
+  state. The discarded later state is not retained for redo.
+- If no earlier history exists, rewind is rejected as `history_empty`.
+- Rewind produces no world tick. A result may include a `StateRewound`
+  presentation event outside the tick list so a UI can animate or announce the
+  jump.
+- A rewind rejected as `engine_busy` or `history_empty` leaves the current
+  state and history unchanged.
 
 ### Example chain
 
@@ -531,26 +621,35 @@ barrels, the approximate ticks are:
 4. The two barrels complete any resulting falls or ramp slides.
 5. The two settled barrels explode simultaneously in the next wave.
 6. Resolution continues until the state is stable. Only then can another
-   player command be accepted.
+   gameplay command be accepted.
 
 ## Engine output
 
-The engine returns either a rejected-command result or the state after every
-tick plus the events that occurred in that accepted turn. A useful logical
-result shape is:
+The engine returns a rejected-command result, a rewind result, or the state
+after every tick plus the events that occurred in an accepted turn. Level
+loading has its separate `LoadResult`. A useful logical gameplay result shape
+is:
 
 ```text
-CommandResult = RejectedCommand | TurnResult
+GameplayCommand = Move(direction) | Rewind
+CommandResult = RejectedCommand | RewindResult | TurnResult
 
 RejectedCommand
   command
   accepted: false
   reason
-  events: [MoveBlocked]
+  events[]
   state
 
+RewindResult
+  command: Rewind
+  accepted: true
+  events: [StateRewound]
+  state
+  outcome: ongoing | won | lost
+
 TurnResult
-  command
+  command: Move(direction)
   accepted: true
   initialState
   ticks[]
@@ -564,6 +663,7 @@ TurnResult
 Useful event kinds include:
 
 - `MoveBlocked`
+- `StateRewound`
 - `EntityMoved`
 - `EntityPushed`
 - `EntityPoppedFromStack`
@@ -593,6 +693,11 @@ new heights, and the cause: player, blast, fall, or slide.
 - State snapshots returned to callers should be immutable values.
 - Events report what happened; callers should not need to replay events to
   discover the authoritative state.
+- Rewinding restores the exact earlier resolved state; resolving the same
+  movement command from that state must produce the same result as before.
+- Loading identical level data into a fresh engine or over an existing level
+  must produce identical initialization output and resolved state. Old level
+  history must have no effect.
 
 ## Level validation
 
@@ -618,14 +723,17 @@ must not be rejected merely because a serialized door state disagrees with it.
 
 ## Suggested implementation order
 
-1. World schema, entity IDs, fixtures, stacks, and validation.
-2. Flat-cell walking and single-entity player pushes.
-3. Falling and crushing.
-4. Switches, doors, teleporters, and terminal events.
-5. Ramp traversal, automatic sliding, and whole-stack ramp movement.
-6. Single explosions and height-aware blast targeting.
-7. Simultaneous explosion waves and chain reactions.
-8. Full tick snapshots, event output, and conflict tests.
+1. World schema, entity IDs, fixtures, stacks, validation, and replaceable
+   level lifetime.
+2. Resolved-state history, undo-only rewind, and history reset on level load.
+3. Flat-cell walking and single-entity player pushes.
+4. Falling and crushing.
+5. Switches, doors, teleporters, and terminal events.
+6. Ramp traversal, automatic sliding, and whole-stack ramp movement.
+7. Single explosions and height-aware blast targeting.
+8. Simultaneous explosion waves and chain reactions.
+9. Full tick snapshots, event output, rewind/load lifecycle tests, and conflict
+   tests.
 
 Every phase should add behavior-level tests before implementation proceeds to
 the next phase.
