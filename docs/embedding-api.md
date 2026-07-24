@@ -36,7 +36,8 @@ authoritative level is available. A renderable state contains:
 
 - the coordinate system, width, and height;
 - canonical cells and fixtures using the level-format field names;
-- current authoritative entities using decimal-string IDs and integer `bottomHalfSteps`; and
+- current authoritative entities using decimal-string IDs and integer `bottomHalfSteps`;
+- canonical `armedBarrelIds`, also encoded as decimal strings; and
 - the current `outcome` (`ongoing`, `won`, or `lost`).
 
 Entity IDs remain strings at this boundary so the full unsigned 64-bit range is safe in
@@ -44,8 +45,10 @@ JavaScript. Heights remain integer half-steps. Hosts should treat response objec
 they do not alias engine-owned storage.
 
 `loadLevel` returns `loaded`, `invalid_json`, `invalid_level`, `invalid_argument`, or
-`invalid_engine`. JSON errors include stable `code`, `byteOffset`, and `path` fields. Structural
-errors include an ordered `errors` array with stable code and context fields.
+`invalid_engine`. A successful response contains the supplied dynamic `initialState`, ordered
+initialization `ticks` with semantic events and authoritative `stateAfter` snapshots, the complete
+final renderable `state`, and `outcome`. JSON errors include stable `code`, `byteOffset`, and `path`
+fields. Structural errors include an ordered `errors` array with stable code and context fields.
 
 `getState` returns `ok`, `no_level`, or `invalid_engine`. `move` additionally contains:
 
@@ -57,11 +60,12 @@ errors include an ordered `errors` array with stable code and context fields.
 - the final `outcome`.
 
 Move status strings are the same stable strings as `MoveStatus`, including `moved`, `no_level`,
-`invalid_direction`, `world_boundary`, `stacked_push_target`, and the current phase-boundary
-rejections such as `unsupported_gravity`. An accepted player push places the player's
-`entityMoved` event before the pushed box or barrel's event in the same tick. `rewind` returns
-`accepted`, semantic events, the complete restored state, and outcome with status `rewound` or
-`history_empty`.
+`invalid_direction`, `world_boundary`, `stacked_push_target`, and current phase-boundary rejections
+for unsupported geometry or fixtures. An accepted player push places the player's `entityMoved`
+event before the pushed box or barrel's event in the same tick. A derived fall uses `entityMoved`
+with cause `fall`; newly armed barrels emit `barrelArmed`. Crushing and terminal fall ticks may emit
+`playerCrushed` and `levelLost`. `rewind` returns `accepted`, semantic events, the complete restored
+state, and outcome with status `rewound` or `history_empty`.
 
 The authored examples under `tests/contracts/browser_vertical_slice/v1/` are executable version-1
 response examples shared by the native C ABI and WebAssembly tests.

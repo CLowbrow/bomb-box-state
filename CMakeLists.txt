@@ -53,6 +53,7 @@ target_sources(
         $<TARGET_OBJECTS:game_rules_yyjson>
         src/c_api.cpp
         src/engine.cpp
+        src/gravity.cpp
         src/level_json.cpp
         src/world.cpp
     PUBLIC

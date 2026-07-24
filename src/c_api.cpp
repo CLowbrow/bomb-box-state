@@ -135,10 +135,26 @@ void append_entities(std::string& output, const std::vector<Entity>& entities)
     output.push_back(']');
 }
 
+void append_entity_ids(std::string& output, const std::vector<EntityId>& ids)
+{
+    output.push_back('[');
+    for (std::size_t index = 0; index < ids.size(); ++index) {
+        if (index != 0) {
+            output.push_back(',');
+        }
+        output.push_back('"');
+        append_integer(output, ids[index]);
+        output.push_back('"');
+    }
+    output.push_back(']');
+}
+
 void append_resolved_state(std::string& output, const ResolvedState& state)
 {
     output += "{\"entities\":";
     append_entities(output, state.entities);
+    output += ",\"armedBarrelIds\":";
+    append_entity_ids(output, state.armed_barrels);
     output += ",\"outcome\":\"";
     output += outcome_name(state.outcome);
     output += "\"}";
@@ -208,6 +224,8 @@ void append_renderable_state(std::string& output,
     }
     output += "],\"entities\":";
     append_entities(output, state.entities);
+    output += ",\"armedBarrelIds\":";
+    append_entity_ids(output, state.armed_barrels);
     output += ",\"outcome\":\"";
     output += outcome_name(state.outcome);
     output += "\"}";
@@ -241,7 +259,7 @@ void append_event(std::string& output, const GameplayEvent& event)
                 output += "\"}";
             } else if constexpr (std::is_same_v<Event, StateRewoundEvent>) {
                 output += "{\"type\":\"stateRewound\"}";
-            } else {
+            } else if constexpr (std::is_same_v<Event, EntityMovedEvent>) {
                 output += "{\"type\":\"entityMoved\",\"entityId\":\"";
                 append_integer(output, value.entity_id);
                 output += "\",\"from\":";
@@ -255,6 +273,18 @@ void append_event(std::string& output, const GameplayEvent& event)
                 output += ",\"cause\":\"";
                 output += to_string(value.cause);
                 output += "\"}";
+            } else if constexpr (std::is_same_v<Event, BarrelArmedEvent>) {
+                output += "{\"type\":\"barrelArmed\",\"entityId\":\"";
+                append_integer(output, value.entity_id);
+                output += "\"}";
+            } else if constexpr (std::is_same_v<Event, PlayerCrushedEvent>) {
+                output += "{\"type\":\"playerCrushed\",\"playerId\":\"";
+                append_integer(output, value.player_id);
+                output += "\",\"crushingEntityId\":\"";
+                append_integer(output, value.crushing_entity_id);
+                output += "\"}";
+            } else {
+                output += "{\"type\":\"levelLost\"}";
             }
         },
         event);
@@ -390,10 +420,31 @@ char* game_rules_engine_load_level(game_rules_engine* const engine,
         output += "\",\"errors\":";
         append_validation_errors(output, loaded.errors);
     } else {
-        output.push_back('"');
+        output += "\",\"initialState\":";
+        append_resolved_state(output, *loaded.initial_state);
+        output += ",\"ticks\":[";
+        for (std::size_t index = 0; index < loaded.ticks.size(); ++index) {
+            if (index != 0) {
+                output.push_back(',');
+            }
+            const TickResult& tick = loaded.ticks[index];
+            output += "{\"index\":";
+            append_integer(output, tick.index);
+            output += ",\"events\":";
+            append_events(output, tick.events);
+            output += ",\"stateAfter\":";
+            append_resolved_state(output, tick.state_after);
+            output.push_back('}');
+        }
+        output.push_back(']');
     }
     output += ",\"state\":";
     append_current_state(output, engine);
+    if (loaded.accepted()) {
+        output += ",\"outcome\":\"";
+        output += outcome_name(*loaded.outcome);
+        output.push_back('"');
+    }
     output.push_back('}');
     return copy_result(output);
 }

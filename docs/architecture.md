@@ -76,14 +76,17 @@ The current `Engine` owns a canonical, validated `LevelDefinition`, the current 
 `ResolvedState`, and an undo-only stack of earlier resolved states. Loading validates and prepares a
 candidate before replacing the prior definition and resetting history. Snapshots are returned by
 value so callers cannot retain a mutable view into engine-owned storage. History transitions are an
-internal orchestration mechanism rather than a host state-injection API. Flat walking and
-single-entity player pushes commit from an immutable command-boundary snapshot and return the
-initial state, zero-based ordered ticks with semantic events and per-tick states, the final
-authoritative state, and outcome. An accepted push commits the player and pushed entity together;
-any failed source, target, or destination check leaves state and history unchanged. The primitive
-stateful C API and WebAssembly adapter carry that same create/load/input/state/rewind loop across the
-embedding boundary. Initialization physics and the remaining movement systems are introduced
-afterward.
+internal orchestration mechanism rather than a host state-injection API. Flat walking,
+single-entity player pushes, and gravity commit from immutable pre-tick snapshots and return
+zero-based ordered ticks with semantic events and per-tick states. Gravity is an independent column
+planner: it calculates final landing heights bottom-up, commits every possible fall in one tick,
+preserves spatial event order, and records armed barrel IDs in resolved state. Loading uses the same
+planner before installing the first history state and returns the supplied initial state,
+initialization ticks, stabilized or terminal state, and outcome. An accepted push commits the
+player and pushed entity together before any required fall tick; any failed source, target, or
+destination check leaves state and history unchanged. The primitive stateful C API and WebAssembly
+adapter carry that same create/load/input/state/rewind loop across the embedding boundary. Fixtures,
+ramp sliding, and explosions remain later movement systems.
 
 `decode_level_json()` produces that same canonical `LevelDefinition` only after strict format and
 structural validation. JSON decoding is deliberately separate from `Engine::load_level()` so an

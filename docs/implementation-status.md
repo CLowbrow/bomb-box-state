@@ -27,10 +27,10 @@ follow only after that loop works through WebAssembly.
 | 3. Flat walking and authoritative turn output | **Implemented** | Cardinal movement honors declared axes, walks one cell between compatible flat supports, returns complete tick/event/state/outcome results, rejects boundaries, ledges, blocking occupied destinations, malformed input, terminal states, and deferred geometry/fixtures explicitly, and preserves history only for accepted turns. |
 | 4. Stateful C ABI and browser vertical slice | **Implemented** | Opaque per-instance engines, versioned JSON loading, renderable snapshots, movement, complete tick/event results, rewind, caller-owned result memory, and a thin JavaScript ownership layer are exercised by one authored contract through native C and Node/WebAssembly. |
 | 5. Single-entity player pushes | **Implemented** | Atomic one-cell box and barrel pushes work in every cardinal direction across compatible flat supports, with unstacked-target enforcement, non-recursive destination checks, deterministic events, exact rewind, and native C/WebAssembly contract coverage. |
-| 6. Falling and crushing | **Not started** | Unsupported initial entities are structurally accepted but are not stabilized. |
-| 7. Fixtures and terminal outcomes | **Not started** | Fixture data is validated, but switches, effective door state, teleporters, and win/loss behavior are not resolved. |
+| 6. Falling and crushing | **Implemented** | Initial and post-push gravity compacts independent columns bottom-up in deterministic derived ticks, including stacks and ramp-center landings; player fall loss, latent crushing, barrel arming, complete load output, exact rewind, and replacement isolation are covered. |
+| 7. Fixtures and terminal outcomes | **Not started** | Fixture data is validated and gravity can produce a loss, but switches, effective door state, teleporters, and win outcomes are not resolved. |
 | 8. Ramps and sliding | **Not started** | Ramp geometry and endpoints are validated, but traversal and automatic sliding are not implemented. |
-| 9. Single explosions | **Not started** | Barrel entities exist in the schema, but arming, explosion, and height-aware blast behavior do not. |
+| 9. Single explosions | **Not started** | Falling barrels become authoritatively armed, but detonation and height-aware blast behavior do not exist. |
 | 10. Explosion waves and chains | **Not started** | Simultaneous impulses, conflicts, waves, and chain reactions are not implemented. |
 | 11. Lifecycle, conflict, and cross-adapter hardening | **Not started** | Phase-one loading behavior has native tests, but the complete lifecycle/conflict corpus and cross-adapter parity coverage do not exist. |
 
@@ -95,22 +95,31 @@ later rules rather than replaced after each phase.
   `has_level()`, and caller-owned `loaded_level()` snapshots. It also defines
   the dynamic `ResolvedState`, caller-owned `resolved_state()` snapshots, and
   `rewind()` results with stable `rewound` and `history_empty` status strings.
+  Resolved state includes canonical armed-barrel IDs so arming is replayable
+  and survives rewind without becoming authored level data.
 - `Engine::move()` accepts cardinal input and returns `MoveResult` with a
   stable status, attempted direction, rejection events, initial state,
   zero-based ordered tick results, final authoritative state, and outcome.
-  Semantic event payloads currently cover blocked movement, player movement,
-  and rewind, and are structured so later phases can add events without asking
-  a host to reconstruct state from them.
+  Semantic event payloads cover blocked movement, rewind, entity movement,
+  barrel arming, player crushing, and level loss without asking a host to
+  reconstruct authoritative state from them.
 - The movement planner recognizes an unstacked box or barrel intersecting the
   player's movement height as a push target. It validates the target and next
   cell from the immutable pre-tick state, then atomically commits both moves in
   one tick. Push events are deterministically ordered player first and pushed
-  entity second. Stacked targets report `stacked_push_target`; lower supports
-  report `unsupported_gravity` until phase 6 can finish the accepted turn.
-- A valid load is canonicalized before replacing the current level. An invalid
+  entity second. Stacked targets report `stacked_push_target`; a lower flat
+  support now produces a following derived fall tick in the same accepted turn.
+- Gravity plans each cell independently from one immutable pre-tick snapshot,
+  compacts separated groups bottom-up without using entity IDs to choose
+  behavior, and emits events in canonical coordinate and pre-tick height order.
+  Falls onto ramp centers settle before the deferred slide phase. Fatal player
+  falls and would-be landings on the player produce terminal loss output.
+- A valid load is canonicalized and gravity-stabilized before replacing the
+  current level. Its result includes the supplied initial dynamic state,
+  initialization ticks, final authoritative state, and outcome. An invalid
   load returns stable validation errors and leaves the current level, resolved
-  state, and history unchanged. A valid replacement installs a fresh initial
-  state and makes all earlier level history unreachable.
+  state, and history unchanged. A valid replacement installs only its final
+  initialization state and makes all earlier level history unreachable.
 - Resolved-state history is held by the engine as an undo-only stack. Accepted
   flat walks preserve their exact predecessor; rejected moves do not enter
   history. Repeated rewind and branching discard abandoned later states without
@@ -126,14 +135,12 @@ later rules rather than replaced after each phase.
   guard destruction locally. Its API and version-1 response contract are
   documented in `docs/embedding-api.md`.
 
-The loader still performs structural validation and canonical storage without
-physics stabilization. It deliberately permits unsupported initial entities
-because stabilization depends on later falling, ramp, fixture, and explosion
-phases. For phase 2, the canonical supplied entities and an `ongoing` outcome
-form the initial command-boundary state. Later phases must replace that
-provisional initialization step with full stabilization and terminal outcome
-derivation. `loaded_level()` remains the supplied definition snapshot, while
-`resolved_state()` is the dynamic state that future turns will change.
+The loader permits physically unstable authored entities, preserves that
+canonical supplied snapshot in `loaded_level()`, and runs Phase 6 gravity before
+installing `resolved_state()` as the first command boundary. Initialization can
+therefore produce falling, barrel-arming, and player-loss ticks. Fixture state,
+ramp sliding, and barrel detonation remain deferred to their later phases, so
+initialization is not yet stabilization under the complete specification.
 
 ## Test infrastructure
 
@@ -162,8 +169,8 @@ Most recently recorded on 2026-07-23:
 
 | Surface | Commands | Result |
 | --- | --- | --- |
-| Native debug | `cmake --preset native-debug`; `cmake --build --preset native-debug`; `ctest --preset native-debug --output-on-failure` | Passed: 40 of 40 tests: 32 behavior cases, 3 C ABI boundary cases, 2 focused unit cases, 1 cross-adapter contract runner, and 2 production consumer/header smokes. |
-| Native release | `cmake --preset native-release`; `cmake --build --preset native-release`; `ctest --preset native-release --output-on-failure` | Passed: 40 of 40 tests. |
+| Native debug | `cmake --preset native-debug`; `cmake --build --preset native-debug`; `ctest --preset native-debug --output-on-failure` | Passed: 47 of 47 tests: 37 behavior cases, 4 C ABI boundary cases, 3 focused unit cases, 1 cross-adapter contract runner, and 2 production consumer/header smokes. |
+| Native release | `cmake --preset native-release`; `cmake --build --preset native-release`; `ctest --preset native-release --output-on-failure` | Passed: 47 of 47 tests. |
 | WebAssembly debug | `cmake --preset wasm-debug`; `cmake --build --preset wasm-debug`; `ctest --preset wasm-debug --output-on-failure` | Passed: portable core and stateful adapter build; 1 of 1 Node tests ran the authored browser vertical-slice contract. |
 | Native sanitized | `cmake --preset native-sanitized`; `cmake --build --preset native-sanitized` | Configure and build passed with deferred GoogleTest discovery. Tests were not executed because `AGENTS.md` prohibits running the sanitizer preset inside the Codex workspace sandbox, where the runtime stalls at test startup and can leave CPU-consuming processes. CI now has an outside-sandbox sanitizer job. |
 | JSON Schema syntax | `jq empty docs/level-format.schema.json` | Passed. |
@@ -173,24 +180,29 @@ Most recently recorded on 2026-07-23:
 
 ## Known limitations
 
-- Loading does not run initialization stabilization or produce initialization
-  ticks, semantic events, or derived terminal outcomes. Its initial resolved
-  state currently mirrors the canonical supplied entities with an `ongoing`
-  outcome.
-- Movement currently resolves player walking and single-entity pushes across
-  compatible flat support surfaces. A push over a lower support is rejected as
-  `unsupported_gravity` until phase 6 can add its required derived fall tick.
-  Ramp entry and fixture destinations are rejected explicitly as
+- Initialization currently stabilizes gravity only. It does not yet derive
+  switch or door state, slide ramp occupants, detonate armed barrels, or resolve
+  teleporter wins.
+- Movement resolves player walking, single-entity pushes, and derived falling.
+  Ramp traversal and fixture destinations are rejected explicitly as
   `unsupported_geometry` and `unsupported_fixture` until their rule phases are
   implemented.
-- Fixture, gravity, ramp, and explosion behavior is schema-only.
+- A falling barrel becomes authoritatively armed, but detonation is deferred to
+  phase 9. Until that phase, an armed barrel can remain at a command boundary
+  even though complete-spec resolution will eventually explode it before more
+  input is accepted.
+- Falling-on-player crushing is implemented in the gravity planner and covered
+  through its focused internal rule seam. No currently implemented public
+  player action can create an entity above the player; ramps and blasts will
+  exercise that path through public behavior scenarios in later phases.
+- Fixture behavior, ramp traversal and sliding, and explosions remain
+  schema-only.
 - Sanitized tests must be run outside the Codex workspace sandbox; the runtime
   stalls at test startup inside it.
 
 ## Recommended next task
 
-Implement phase 6 falling and crushing next. Replace the current
-`unsupported_gravity` push boundary with the required derived fall tick, and
-stabilize initially unsupported entities during level loading. Cover column
-compaction, stacks, barrel arming, player fall loss, crushing, history, and
-level replacement before beginning fixtures, ramps, or explosions.
+Implement phase 7 fixtures and terminal outcomes next. Add initial and
+post-tick switch derivation, effective door state, safe door transitions,
+teleporter restrictions and wins, win-before-loss precedence, and complete
+terminal history behavior before beginning ramp traversal and sliding.

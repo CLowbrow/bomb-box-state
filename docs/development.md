@@ -82,13 +82,19 @@ if (rewound.accepted()) {
 }
 ```
 
-The current movement scope is flat walking and atomic single-entity pushes
-across compatible flat support surfaces. A push emits the player's movement
-event followed by the box or barrel movement event in the same tick. Stacked
-targets, recursive pushes, and blocked destinations reject without entering
-history. Pushes that require falling report `unsupported_gravity`; ramp
-traversal and fixture effects remain later phases and are also reported at
-their explicit boundaries instead of partially resolving a turn.
+The current movement scope is flat walking, atomic single-entity pushes, and
+derived falling. A push emits the player's movement event followed by the box
+or barrel movement event in the same tick; a push over a lower flat support is
+then completed by a derived fall tick. Stacked targets, recursive pushes, and
+blocked destinations reject without entering history. Ramp traversal and
+fixture effects remain later phases and are reported at their explicit
+boundaries instead of partially resolving a turn.
+
+`Engine::load_level()` runs the same gravity planner before establishing the
+new history boundary. Its `LoadResult` exposes the canonical supplied dynamic
+state as `initial_state`, every initialization tick, the final authoritative
+state, and outcome. Newly armed barrels are retained in the resolved state's
+canonical `armed_barrels` IDs for the later explosion phase.
 
 ## Level JSON
 

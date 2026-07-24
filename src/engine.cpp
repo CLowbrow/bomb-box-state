@@ -1,5 +1,7 @@
 #include "game_rules/engine.hpp"
 
+#include "gravity.hpp"
+
 #include <algorithm>
 #include <cstdint>
 #include <limits>
@@ -137,7 +139,6 @@ std::string_view to_string(const MoveStatus status) noexcept
     case MoveStatus::ledge: return "ledge";
     case MoveStatus::occupied: return "occupied";
     case MoveStatus::stacked_push_target: return "stacked_push_target";
-    case MoveStatus::unsupported_gravity: return "unsupported_gravity";
     case MoveStatus::unsupported_geometry: return "unsupported_geometry";
     case MoveStatus::unsupported_fixture: return "unsupported_fixture";
     case MoveStatus::level_terminal: return "level_terminal";
@@ -222,12 +223,32 @@ LoadResult Engine::load_level(const LevelDefinition& level)
     }
 
     LevelDefinition replacement = canonicalize_level(level);
+    const ResolvedState initial{replacement.entities, Outcome::ongoing};
+    ResolvedState stabilized = initial;
+    std::vector<TickResult> ticks;
+    while (const std::optional<TickResult> falling =
+               detail::resolve_falling_tick(replacement, stabilized,
+                                            static_cast<std::uint32_t>(ticks.size()))) {
+        stabilized = falling->state_after;
+        ticks.push_back(*falling);
+        if (stabilized.outcome != Outcome::ongoing) {
+            break;
+        }
+    }
+
     detail::ResolvedStateHistory replacement_history;
-    replacement_history.reset(ResolvedState{replacement.entities, Outcome::ongoing});
+    replacement_history.reset(stabilized);
 
     level_ = std::move(replacement);
     history_ = std::move(replacement_history);
-    return LoadResult{LoadStatus::loaded, {}};
+    return LoadResult{
+        LoadStatus::loaded,
+        {},
+        initial,
+        std::move(ticks),
+        history_.current(),
+        history_.current()->outcome,
+    };
 }
 
 MoveResult Engine::move(const Direction direction)
@@ -329,9 +350,6 @@ MoveResult Engine::move(const Direction direction)
 
         const Height pushed_destination_support = Height::from_elevation(
             std::get<FlatCell>(pushed_destination_cell->geometry).elevation);
-        if (pushed_destination_support.half_steps < push_target->bottom.half_steps) {
-            return rejected_move(MoveStatus::unsupported_gravity, direction, current);
-        }
         if (pushed_destination_support.half_steps > push_target->bottom.half_steps) {
             return rejected_move(MoveStatus::ledge, direction, current);
         }
@@ -372,12 +390,23 @@ MoveResult Engine::move(const Direction direction)
             push_target->bottom,
             MovementCause::player,
         };
-        const TickResult tick{
+        const TickResult movement_tick{
             0,
             {GameplayEvent{player_moved}, GameplayEvent{entity_moved}},
             next,
         };
-        if (!history_.commit(next)) {
+        std::vector<TickResult> ticks{movement_tick};
+        ResolvedState resolved = next;
+        while (const std::optional<TickResult> falling =
+                   detail::resolve_falling_tick(*level_, resolved,
+                                                static_cast<std::uint32_t>(ticks.size()))) {
+            resolved = falling->state_after;
+            ticks.push_back(*falling);
+            if (resolved.outcome != Outcome::ongoing) {
+                break;
+            }
+        }
+        if (!history_.commit(std::move(resolved))) {
             return rejected_move(MoveStatus::no_level, direction, history_.current());
         }
 
@@ -386,7 +415,7 @@ MoveResult Engine::move(const Direction direction)
             direction,
             {},
             initial,
-            {tick},
+            std::move(ticks),
             history_.current(),
             history_.current()->outcome,
         };

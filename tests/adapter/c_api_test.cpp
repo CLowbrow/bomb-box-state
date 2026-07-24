@@ -39,6 +39,23 @@ constexpr char valid_level[] = R"({
   "entities":[{"id":"18446744073709551615","type":"player","coordinate":{"x":0,"y":0},"bottomHalfSteps":0}]
 })";
 
+constexpr char falling_level[] = R"({
+  "format":"game-rules-level",
+  "version":1,
+  "coordinateSystem":{"origin":{"x":0,"y":0},"positiveX":"east","positiveY":"north"},
+  "width":2,
+  "height":1,
+  "cells":[
+    {"coordinate":{"x":0,"y":0},"type":"flat","elevation":0},
+    {"coordinate":{"x":1,"y":0},"type":"flat","elevation":0}
+  ],
+  "fixtures":[],
+  "entities":[
+    {"id":"8","type":"barrel","coordinate":{"x":0,"y":0},"bottomHalfSteps":4},
+    {"id":"1","type":"player","coordinate":{"x":1,"y":0},"bottomHalfSteps":0}
+  ]
+})";
+
 TEST(CApi, HandlesLifecycleNullsAndCallerOwnedResults)
 {
     EnginePointer engine{game_rules_engine_create()};
@@ -105,6 +122,24 @@ TEST(CApi, RejectsMalformedInputAndDirectionWithoutReplacingState)
     EXPECT_NE(invalid_direction.find(R"("state":{)"), std::string::npos);
     EXPECT_NE(take(game_rules_engine_rewind(engine.get())).find(R"("status":"history_empty")"),
               std::string::npos);
+}
+
+TEST(CApi, ReturnsInitializationFallsAndAuthoritativeBarrelArming)
+{
+    EnginePointer engine{game_rules_engine_create()};
+    ASSERT_NE(engine, nullptr);
+
+    const std::string loaded = take(game_rules_engine_load_level(
+        engine.get(), falling_level,
+        static_cast<std::uint32_t>(sizeof(falling_level) - 1U)));
+
+    EXPECT_NE(loaded.find(R"("status":"loaded","initialState":{)"), std::string::npos);
+    EXPECT_NE(loaded.find(R"("ticks":[{"index":0)"), std::string::npos);
+    EXPECT_NE(loaded.find(R"("cause":"fall")"), std::string::npos);
+    EXPECT_NE(loaded.find(R"({"type":"barrelArmed","entityId":"8"})"),
+              std::string::npos);
+    EXPECT_NE(loaded.find(R"("armedBarrelIds":["8"])"), std::string::npos);
+    EXPECT_NE(loaded.find(R"("newBottomHalfSteps":0)"), std::string::npos);
 }
 
 } // namespace

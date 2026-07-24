@@ -204,17 +204,6 @@ TEST(PlayerPush, RejectsWorldAndDeferredRuleBoundariesWithoutPartialMovement)
     EXPECT_EQ(higher_engine.move(Direction::east),
               expected_rejection(MoveStatus::ledge, Direction::east, higher));
 
-    LevelDefinition lower = flat_grid(3, 1, {0, 0});
-    lower.cells[0].geometry = FlatCell{1};
-    lower.cells[1].geometry = FlatCell{1};
-    lower.entities[0].bottom = Height::from_elevation(1);
-    lower.entities.push_back(Entity{4, EntityKind::box, {1, 0}, Height::from_elevation(1)});
-    Engine lower_engine;
-    ASSERT_TRUE(lower_engine.load_level(lower).accepted());
-    EXPECT_EQ(lower_engine.move(Direction::east),
-              expected_rejection(MoveStatus::unsupported_gravity, Direction::east, lower));
-    EXPECT_EQ(to_string(MoveStatus::unsupported_gravity), "unsupported_gravity");
-
     LevelDefinition ramp = flat_grid(4, 1, {0, 0});
     ramp.cells = {
         Cell{{0, 0}, FlatCell{0}},

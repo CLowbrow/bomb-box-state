@@ -233,6 +233,18 @@ player-push rules permit only one.
 - If a falling entity or stack would land on the player, the level is lost.
 - A fall event should record the complete start height, end height, and fall
   distance rather than emitting one tick per unit of height.
+- A completed fall is reported as `EntityMoved` with cause `fall`, unchanged
+  grid coordinates, and its complete old and new bottom heights. If the
+  falling entity is a newly armed barrel, its `BarrelArmed` event immediately
+  follows its movement event.
+- Falling movement events are ordered by cell coordinate in canonical row-major
+  order, then by the entities' pre-tick bottom-to-top order within each cell.
+  `LevelLost`, when produced by the tick, is last.
+- A falling entity that would land on the player does not enter the player's
+  occupied volume or create an illegal stack. It remains at its pre-tick
+  position, `PlayerCrushed` identifies both entities, and the tick ends with
+  `LevelLost`. Other independent falls calculated from the same pre-tick state
+  still complete before the level becomes terminal.
 
 ### Falling-column resolution
 

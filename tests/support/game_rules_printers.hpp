@@ -205,7 +205,14 @@ inline void PrintTo(const ResolvedState& value, std::ostream* const output)
     test_detail::print_field(output, "entities", value.entities);
     *output << ", ";
     test_detail::print_field(output, "outcome", value.outcome);
+    *output << ", ";
+    test_detail::print_field(output, "armed_barrels", value.armed_barrels);
     *output << '}';
+}
+
+inline void PrintTo(const LoadStatus value, std::ostream* const output)
+{
+    *output << to_string(value);
 }
 
 inline void PrintTo(const MoveStatus value, std::ostream* const output)
@@ -249,6 +256,27 @@ inline void PrintTo(const EntityMovedEvent& value, std::ostream* const output)
     *output << '}';
 }
 
+inline void PrintTo(const BarrelArmedEvent& value, std::ostream* const output)
+{
+    *output << "BarrelArmed{";
+    test_detail::print_field(output, "entity_id", value.entity_id);
+    *output << '}';
+}
+
+inline void PrintTo(const PlayerCrushedEvent& value, std::ostream* const output)
+{
+    *output << "PlayerCrushed{";
+    test_detail::print_field(output, "player_id", value.player_id);
+    *output << ", ";
+    test_detail::print_field(output, "crushing_entity_id", value.crushing_entity_id);
+    *output << '}';
+}
+
+inline void PrintTo(const LevelLostEvent&, std::ostream* const output)
+{
+    *output << "LevelLost{}";
+}
+
 inline void PrintTo(const TickResult& value, std::ostream* const output)
 {
     *output << "TickResult{";
@@ -257,6 +285,23 @@ inline void PrintTo(const TickResult& value, std::ostream* const output)
     test_detail::print_field(output, "events", value.events);
     *output << ", ";
     test_detail::print_field(output, "state_after", value.state_after);
+    *output << '}';
+}
+
+inline void PrintTo(const LoadResult& value, std::ostream* const output)
+{
+    *output << "LoadResult{";
+    test_detail::print_field(output, "status", value.status);
+    *output << ", ";
+    test_detail::print_field(output, "errors", value.errors);
+    *output << ", ";
+    test_detail::print_field(output, "initial_state", value.initial_state);
+    *output << ", ";
+    test_detail::print_field(output, "ticks", value.ticks);
+    *output << ", ";
+    test_detail::print_field(output, "final_state", value.final_state);
+    *output << ", ";
+    test_detail::print_field(output, "outcome", value.outcome);
     *output << '}';
 }
 

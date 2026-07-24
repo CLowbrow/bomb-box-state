@@ -25,18 +25,14 @@ enum class LoadStatus : std::uint8_t {
 
 [[nodiscard]] std::string_view to_string(LoadStatus status) noexcept;
 
-struct LoadResult final {
-    LoadStatus status{LoadStatus::invalid_level};
-    std::vector<ValidationError> errors{};
-
-    [[nodiscard]] bool accepted() const noexcept { return status == LoadStatus::loaded; }
-};
-
 // The authoritative dynamic state at a gameplay command boundary. Static cell
 // geometry and fixtures remain in the loaded LevelDefinition.
 struct ResolvedState final {
     std::vector<Entity> entities{};
     Outcome outcome{Outcome::ongoing};
+    // Canonical ascending IDs. Arming is dynamic state rather than authored
+    // level data, and therefore survives rewind but not level replacement.
+    std::vector<EntityId> armed_barrels{};
 
     [[nodiscard]] friend bool operator==(const ResolvedState&, const ResolvedState&) = default;
 };
@@ -49,7 +45,6 @@ enum class MoveStatus : std::uint8_t {
     ledge,
     occupied,
     stacked_push_target,
-    unsupported_gravity,
     unsupported_geometry,
     unsupported_fixture,
     level_terminal,
@@ -89,7 +84,31 @@ struct EntityMovedEvent final {
                                                    const EntityMovedEvent&) noexcept = default;
 };
 
-using GameplayEvent = std::variant<MoveBlockedEvent, StateRewoundEvent, EntityMovedEvent>;
+struct BarrelArmedEvent final {
+    EntityId entity_id{};
+
+    [[nodiscard]] friend constexpr bool operator==(BarrelArmedEvent,
+                                                   BarrelArmedEvent) noexcept = default;
+};
+
+struct PlayerCrushedEvent final {
+    EntityId player_id{};
+    EntityId crushing_entity_id{};
+
+    [[nodiscard]] friend constexpr bool operator==(PlayerCrushedEvent,
+                                                   PlayerCrushedEvent) noexcept = default;
+};
+
+struct LevelLostEvent final {
+    [[nodiscard]] friend constexpr bool operator==(LevelLostEvent, LevelLostEvent) noexcept = default;
+};
+
+using GameplayEvent = std::variant<MoveBlockedEvent,
+                                   StateRewoundEvent,
+                                   EntityMovedEvent,
+                                   BarrelArmedEvent,
+                                   PlayerCrushedEvent,
+                                   LevelLostEvent>;
 
 struct TickResult final {
     std::uint32_t index{};
@@ -97,6 +116,18 @@ struct TickResult final {
     ResolvedState state_after{};
 
     [[nodiscard]] friend bool operator==(const TickResult&, const TickResult&) = default;
+};
+
+struct LoadResult final {
+    LoadStatus status{LoadStatus::invalid_level};
+    std::vector<ValidationError> errors{};
+    std::optional<ResolvedState> initial_state{};
+    std::vector<TickResult> ticks{};
+    std::optional<ResolvedState> final_state{};
+    std::optional<Outcome> outcome{};
+
+    [[nodiscard]] bool accepted() const noexcept { return status == LoadStatus::loaded; }
+    [[nodiscard]] friend bool operator==(const LoadResult&, const LoadResult&) = default;
 };
 
 struct MoveResult final {
@@ -162,7 +193,8 @@ class Engine final {
     [[nodiscard]] std::optional<LevelDefinition> loaded_level() const;
     [[nodiscard]] std::optional<ResolvedState> resolved_state() const;
 
-    // Validation happens before replacement. A rejected load leaves the
+    // Validation and initialization happen before replacement. A successful
+    // result includes every initialization tick; a rejected load leaves the
     // previously loaded level and its resolved-state history unchanged.
     [[nodiscard]] LoadResult load_level(const LevelDefinition& level);
     [[nodiscard]] MoveResult move(Direction direction);
