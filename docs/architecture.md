@@ -76,9 +76,14 @@ The current `Engine` owns a canonical, validated `LevelDefinition`, the current 
 `ResolvedState`, and an undo-only stack of earlier resolved states. Loading validates and prepares a
 candidate before replacing the prior definition and resetting history. Snapshots are returned by
 value so callers cannot retain a mutable view into engine-owned storage. History transitions are an
-internal orchestration mechanism rather than a host state-injection API. Flat walking,
-single-entity player pushes, and gravity commit from immutable pre-tick snapshots and return
-zero-based ordered ticks with semantic events and per-tick states. Gravity is an independent column
+internal orchestration mechanism rather than a host state-injection API. Internal world and state
+query helpers centralize coordinate stepping, bounds and fixture lookup, support heights, occupancy,
+entity ordering, and armed-barrel bookkeeping so rule planners share the same deterministic
+semantics. Player walking and pushing are planned from an immutable command-boundary state by a
+dedicated physical-movement planner; `Engine` remains responsible for command gating, fixture
+derivation, derived stabilization, history commit, and public result assembly. Flat walking,
+single-entity player pushes, and gravity return zero-based ordered ticks with semantic events and
+per-tick states. Gravity is an independent column
 planner: it calculates final landing heights bottom-up, commits every possible fall in one tick,
 preserves spatial event order, and records armed barrel IDs in resolved state. Fixture resolution
 derives palette-ordered active switch colors and row-major effectively open doors after each

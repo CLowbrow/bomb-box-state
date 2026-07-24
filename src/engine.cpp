@@ -3,12 +3,10 @@
 #include "explosions.hpp"
 #include "fixtures.hpp"
 #include "gravity.hpp"
+#include "player_movement.hpp"
 #include "ramps.hpp"
 
-#include <algorithm>
 #include <cstdint>
-#include <limits>
-#include <tuple>
 #include <utility>
 
 namespace game_rules {
@@ -24,84 +22,6 @@ namespace {
         return true;
     }
     return false;
-}
-
-[[nodiscard]] std::optional<Coordinate> step(const Coordinate coordinate,
-                                             const Direction direction,
-                                             const CoordinateSystem& system) noexcept
-{
-    std::int32_t dx = 0;
-    std::int32_t dy = 0;
-    switch (direction) {
-    case Direction::north:
-        dy = system.positive_y == VerticalAxisDirection::north ? 1 : -1;
-        break;
-    case Direction::east:
-        dx = system.positive_x == HorizontalAxisDirection::east ? 1 : -1;
-        break;
-    case Direction::south:
-        dy = system.positive_y == VerticalAxisDirection::south ? 1 : -1;
-        break;
-    case Direction::west:
-        dx = system.positive_x == HorizontalAxisDirection::west ? 1 : -1;
-        break;
-    }
-
-    const auto x = static_cast<std::int64_t>(coordinate.x) + dx;
-    const auto y = static_cast<std::int64_t>(coordinate.y) + dy;
-    if (x < std::numeric_limits<std::int32_t>::min()
-        || x > std::numeric_limits<std::int32_t>::max()
-        || y < std::numeric_limits<std::int32_t>::min()
-        || y > std::numeric_limits<std::int32_t>::max()) {
-        return std::nullopt;
-    }
-    return Coordinate{static_cast<std::int32_t>(x), static_cast<std::int32_t>(y)};
-}
-
-[[nodiscard]] bool in_bounds(const LevelDefinition& level, const Coordinate coordinate) noexcept
-{
-    const auto offset_x = static_cast<std::int64_t>(coordinate.x) - level.coordinates.origin.x;
-    const auto offset_y = static_cast<std::int64_t>(coordinate.y) - level.coordinates.origin.y;
-    return offset_x >= 0 && offset_y >= 0
-        && offset_x < static_cast<std::int64_t>(level.width)
-        && offset_y < static_cast<std::int64_t>(level.height);
-}
-
-[[nodiscard]] const Cell* find_cell(const LevelDefinition& level, const Coordinate coordinate) noexcept
-{
-    const auto cell = std::find_if(level.cells.begin(), level.cells.end(), [coordinate](const Cell& value) {
-        return value.coordinate == coordinate;
-    });
-    return cell == level.cells.end() ? nullptr : &*cell;
-}
-
-[[nodiscard]] Direction opposite(const Direction direction) noexcept
-{
-    switch (direction) {
-    case Direction::north: return Direction::south;
-    case Direction::east: return Direction::west;
-    case Direction::south: return Direction::north;
-    case Direction::west: return Direction::east;
-    }
-    return direction;
-}
-
-[[nodiscard]] Height surface_height(const Cell& cell) noexcept
-{
-    if (const auto* const flat = std::get_if<FlatCell>(&cell.geometry)) {
-        return Height::from_elevation(flat->elevation);
-    }
-    const RampCell& ramp = std::get<RampCell>(cell.geometry);
-    return Height{static_cast<std::int32_t>(
-        static_cast<std::int64_t>(ramp.low_elevation) * 2 + 1)};
-}
-
-void canonicalize_entities(std::vector<Entity>& entities)
-{
-    std::sort(entities.begin(), entities.end(), [](const Entity& lhs, const Entity& rhs) {
-        return std::tuple{lhs.coordinate.y, lhs.coordinate.x, lhs.bottom.half_steps, lhs.id}
-            < std::tuple{rhs.coordinate.y, rhs.coordinate.x, rhs.bottom.half_steps, rhs.id};
-    });
 }
 
 void resolve_derived_ticks(const LevelDefinition& level,
@@ -322,241 +242,17 @@ MoveResult Engine::move(const Direction direction)
         return rejected_move(MoveStatus::level_terminal, direction, current);
     }
 
-    const auto player = std::find_if(current.entities.begin(), current.entities.end(), [](const Entity& entity) {
-        return entity.kind == EntityKind::player;
-    });
-    if (player == current.entities.end()) {
-        return rejected_move(MoveStatus::no_level, direction, current);
-    }
-
-    const std::optional<Coordinate> destination = step(player->coordinate, direction, level_->coordinates);
-    if (!destination.has_value() || !in_bounds(*level_, *destination)) {
-        return rejected_move(MoveStatus::world_boundary, direction, current);
-    }
-
-    const Cell* const source_cell = find_cell(*level_, player->coordinate);
-    const Cell* const destination_cell = find_cell(*level_, *destination);
-    if (source_cell == nullptr || destination_cell == nullptr) {
-        return rejected_move(MoveStatus::unsupported_geometry, direction, current);
-    }
-
-    const auto fixture = std::find_if(level_->fixtures.begin(), level_->fixtures.end(),
-                                     [destination](const Fixture& value) {
-                                         return value.coordinate == *destination;
-                                     });
-    const bool destination_is_exit = fixture != level_->fixtures.end()
-        && std::holds_alternative<ExitTeleporter>(fixture->kind);
-    if (fixture != level_->fixtures.end() && std::holds_alternative<Door>(fixture->kind)
-        && !detail::is_effectively_open_door(*level_, current, *destination)) {
-        return rejected_move(MoveStatus::closed_door, direction, current);
-    }
-
-    Height destination_support = surface_height(*destination_cell);
-    std::size_t destination_entity_count = 0;
-    const Entity* push_target = nullptr;
-    for (const Entity& entity : current.entities) {
-        if (entity.coordinate != *destination) {
-            continue;
-        }
-        ++destination_entity_count;
-        if (entity.bottom == player->bottom
-            && (entity.kind == EntityKind::box || entity.kind == EntityKind::barrel)) {
-            push_target = &entity;
-        }
-        const auto top_half_steps = static_cast<std::int64_t>(entity.bottom.half_steps) + 2;
-        if (top_half_steps > destination_support.half_steps
-            && top_half_steps <= std::numeric_limits<std::int32_t>::max()) {
-            destination_support.half_steps = static_cast<std::int32_t>(top_half_steps);
-        }
-    }
-
-    if (push_target != nullptr) {
-        if (!std::holds_alternative<FlatCell>(destination_cell->geometry)) {
-            return rejected_move(MoveStatus::unsupported_geometry, direction, current);
-        }
-        if (destination_entity_count != 1) {
-            return rejected_move(MoveStatus::stacked_push_target, direction, current);
-        }
-
-        if (destination_is_exit) {
-            return rejected_move(MoveStatus::teleporter_restriction, direction, current);
-        }
-
-        const std::optional<Coordinate> pushed_destination =
-            step(push_target->coordinate, direction, level_->coordinates);
-        if (!pushed_destination.has_value() || !in_bounds(*level_, *pushed_destination)) {
-            return rejected_move(MoveStatus::world_boundary, direction, current);
-        }
-
-        const Cell* const pushed_destination_cell = find_cell(*level_, *pushed_destination);
-        if (pushed_destination_cell == nullptr) {
-            return rejected_move(MoveStatus::unsupported_geometry, direction, current);
-        }
-
-        Height pushed_new_bottom = push_target->bottom;
-        if (const auto* const ramp =
-                std::get_if<RampCell>(&pushed_destination_cell->geometry)) {
-            const Height high_endpoint{
-                static_cast<std::int32_t>(
-                    static_cast<std::int64_t>(ramp->low_elevation) * 2 + 2)};
-            if (direction != ramp->low_direction || push_target->bottom != high_endpoint) {
-                return rejected_move(MoveStatus::unsupported_geometry, direction, current);
-            }
-            pushed_new_bottom = surface_height(*pushed_destination_cell);
-        }
-
-        const auto pushed_destination_fixture =
-            std::find_if(level_->fixtures.begin(), level_->fixtures.end(),
-                         [pushed_destination](const Fixture& value) {
-                             return value.coordinate == *pushed_destination;
-                         });
-        if (pushed_destination_fixture != level_->fixtures.end()) {
-            if (std::holds_alternative<ExitTeleporter>(pushed_destination_fixture->kind)) {
-                return rejected_move(MoveStatus::teleporter_restriction, direction, current);
-            }
-            if (std::holds_alternative<Door>(pushed_destination_fixture->kind)
-                && !detail::is_effectively_open_door(*level_, current,
-                                                     *pushed_destination)) {
-                return rejected_move(MoveStatus::closed_door, direction, current);
-            }
-        }
-
-        const bool pushed_destination_occupied =
-            std::any_of(current.entities.begin(), current.entities.end(),
-                        [pushed_destination](const Entity& entity) {
-                            return entity.coordinate == *pushed_destination;
-                        });
-        if (pushed_destination_occupied) {
-            return rejected_move(MoveStatus::occupied, direction, current);
-        }
-
-        const Height pushed_destination_support = surface_height(*pushed_destination_cell);
-        if (pushed_destination_support.half_steps > push_target->bottom.half_steps) {
-            return rejected_move(MoveStatus::ledge, direction, current);
-        }
-
-        const ResolvedState initial = current;
-        ResolvedState next = current;
-        const auto next_player = std::find_if(
-            next.entities.begin(), next.entities.end(), [player](const Entity& entity) {
-                return entity.id == player->id;
-            });
-        const auto next_pushed = std::find_if(
-            next.entities.begin(), next.entities.end(), [push_target](const Entity& entity) {
-                return entity.id == push_target->id;
-            });
-        next_player->coordinate = *destination;
-        next_pushed->coordinate = *pushed_destination;
-        next_pushed->bottom = pushed_new_bottom;
-        canonicalize_entities(next.entities);
-
-        const EntityMovedEvent player_moved{
-            player->id,
-            player->coordinate,
-            *destination,
-            player->bottom,
-            player->bottom,
-            MovementCause::player,
-        };
-        const EntityMovedEvent entity_moved{
-            push_target->id,
-            push_target->coordinate,
-            *pushed_destination,
-            push_target->bottom,
-            pushed_new_bottom,
-            MovementCause::player,
-        };
-        TickResult movement_tick{
-            0,
-            {GameplayEvent{player_moved}, GameplayEvent{entity_moved}},
-            next,
-        };
-        detail::resolve_fixtures_after_tick(*level_, movement_tick);
-        std::vector<TickResult> ticks{movement_tick};
-        ResolvedState resolved = movement_tick.state_after;
-        resolve_derived_ticks(*level_, resolved, ticks);
-        if (!history_.commit(std::move(resolved))) {
-            return rejected_move(MoveStatus::no_level, direction, history_.current());
-        }
-
-        return MoveResult{
-            MoveStatus::moved,
-            direction,
-            {},
-            initial,
-            std::move(ticks),
-            history_.current(),
-            history_.current()->outcome,
-        };
-    }
-
-    Height player_new_bottom = player->bottom;
-    const auto* const source_flat = std::get_if<FlatCell>(&source_cell->geometry);
-    const auto* const source_ramp = std::get_if<RampCell>(&source_cell->geometry);
-    const auto* const destination_flat =
-        std::get_if<FlatCell>(&destination_cell->geometry);
-    const auto* const destination_ramp =
-        std::get_if<RampCell>(&destination_cell->geometry);
-
-    if (source_flat != nullptr && destination_flat != nullptr) {
-        if (destination_is_exit
-            && (destination_entity_count != 0
-                || player->bottom != Height::from_elevation(destination_flat->elevation))) {
-            return rejected_move(MoveStatus::teleporter_restriction, direction, current);
-        }
-        if (destination_support != player->bottom) {
-            const MoveStatus status =
-                destination_entity_count != 0 ? MoveStatus::occupied : MoveStatus::ledge;
-            return rejected_move(status, direction, current);
-        }
-    } else if (source_flat != nullptr && destination_ramp != nullptr) {
-        if (destination_entity_count != 0
-            || player->bottom != Height::from_elevation(source_flat->elevation)
-            || (direction != destination_ramp->low_direction
-                && direction != opposite(destination_ramp->low_direction))) {
-            return rejected_move(MoveStatus::unsupported_geometry, direction, current);
-        }
-        player_new_bottom = surface_height(*destination_cell);
-    } else if (source_ramp != nullptr && destination_flat != nullptr) {
-        if (destination_entity_count != 0
-            || player->bottom != surface_height(*source_cell)
-            || (direction != source_ramp->low_direction
-                && direction != opposite(source_ramp->low_direction))) {
-            return rejected_move(MoveStatus::unsupported_geometry, direction, current);
-        }
-        player_new_bottom = Height::from_elevation(destination_flat->elevation);
-    } else {
-        return rejected_move(MoveStatus::unsupported_geometry, direction, current);
-    }
-
-    if (destination_is_exit) {
-        const Height teleporter_floor = Height::from_elevation(destination_flat->elevation);
-        if (destination_entity_count != 0 || player_new_bottom != teleporter_floor) {
-            return rejected_move(MoveStatus::teleporter_restriction, direction, current);
-        }
-    }
-
-    ResolvedState next = current;
-    const auto next_player = std::find_if(next.entities.begin(), next.entities.end(), [player](const Entity& entity) {
-        return entity.id == player->id;
-    });
-    next_player->coordinate = *destination;
-    next_player->bottom = player_new_bottom;
-    canonicalize_entities(next.entities);
-
-    const EntityMovedEvent moved{
-        player->id,
-        player->coordinate,
-        *destination,
-        player->bottom,
-        player_new_bottom,
-        MovementCause::player,
-    };
     const ResolvedState initial = current;
-    TickResult tick{0, {GameplayEvent{moved}}, next};
-    detail::resolve_fixtures_after_tick(*level_, tick);
-    std::vector<TickResult> ticks{tick};
-    ResolvedState resolved = tick.state_after;
+    detail::PlayerMovementPlan movement =
+        detail::plan_player_movement(*level_, current, direction);
+    if (!movement.accepted()) {
+        return rejected_move(movement.status, direction, current);
+    }
+
+    detail::resolve_fixtures_after_tick(*level_, *movement.tick);
+    std::vector<TickResult> ticks;
+    ticks.push_back(std::move(*movement.tick));
+    ResolvedState resolved = ticks.back().state_after;
     resolve_derived_ticks(*level_, resolved, ticks);
     if (!history_.commit(std::move(resolved))) {
         return rejected_move(MoveStatus::no_level, direction, history_.current());

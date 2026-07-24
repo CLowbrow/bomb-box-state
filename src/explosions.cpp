@@ -1,6 +1,8 @@
 #include "explosions.hpp"
 
 #include "fixtures.hpp"
+#include "state_queries.hpp"
+#include "world_queries.hpp"
 
 #include <algorithm>
 #include <array>
@@ -21,77 +23,6 @@ struct BlastTarget final {
     Height bottom{};
     std::optional<Direction> movement_direction{};
 };
-
-[[nodiscard]] Direction opposite(const Direction direction) noexcept
-{
-    switch (direction) {
-    case Direction::north: return Direction::south;
-    case Direction::east: return Direction::west;
-    case Direction::south: return Direction::north;
-    case Direction::west: return Direction::east;
-    }
-    return direction;
-}
-
-[[nodiscard]] std::optional<Coordinate> step(const Coordinate coordinate,
-                                             const Direction direction,
-                                             const CoordinateSystem& system) noexcept
-{
-    std::int32_t dx = 0;
-    std::int32_t dy = 0;
-    switch (direction) {
-    case Direction::north:
-        dy = system.positive_y == VerticalAxisDirection::north ? 1 : -1;
-        break;
-    case Direction::east:
-        dx = system.positive_x == HorizontalAxisDirection::east ? 1 : -1;
-        break;
-    case Direction::south:
-        dy = system.positive_y == VerticalAxisDirection::south ? 1 : -1;
-        break;
-    case Direction::west:
-        dx = system.positive_x == HorizontalAxisDirection::west ? 1 : -1;
-        break;
-    }
-
-    const auto x = static_cast<std::int64_t>(coordinate.x) + dx;
-    const auto y = static_cast<std::int64_t>(coordinate.y) + dy;
-    if (x < std::numeric_limits<std::int32_t>::min()
-        || x > std::numeric_limits<std::int32_t>::max()
-        || y < std::numeric_limits<std::int32_t>::min()
-        || y > std::numeric_limits<std::int32_t>::max()) {
-        return std::nullopt;
-    }
-    return Coordinate{static_cast<std::int32_t>(x), static_cast<std::int32_t>(y)};
-}
-
-[[nodiscard]] bool in_bounds(const LevelDefinition& level,
-                             const Coordinate coordinate) noexcept
-{
-    const auto offset_x = static_cast<std::int64_t>(coordinate.x) - level.coordinates.origin.x;
-    const auto offset_y = static_cast<std::int64_t>(coordinate.y) - level.coordinates.origin.y;
-    return offset_x >= 0 && offset_y >= 0
-        && offset_x < static_cast<std::int64_t>(level.width)
-        && offset_y < static_cast<std::int64_t>(level.height);
-}
-
-[[nodiscard]] const Cell* find_cell(const LevelDefinition& level,
-                                    const Coordinate coordinate) noexcept
-{
-    const auto found = std::find_if(level.cells.begin(), level.cells.end(),
-                                    [coordinate](const Cell& cell) {
-                                        return cell.coordinate == coordinate;
-                                    });
-    return found == level.cells.end() ? nullptr : &*found;
-}
-
-[[nodiscard]] std::int64_t support_half_steps(const Cell& cell) noexcept
-{
-    if (const auto* const flat = std::get_if<FlatCell>(&cell.geometry)) {
-        return static_cast<std::int64_t>(flat->elevation) * 2;
-    }
-    return static_cast<std::int64_t>(std::get<RampCell>(cell.geometry).low_elevation) * 2 + 1;
-}
 
 [[nodiscard]] std::optional<Height> offset_height(const Height height,
                                                   const std::int32_t offset) noexcept
@@ -144,11 +75,8 @@ struct BlastTarget final {
                                                const ResolvedState& state,
                                                const Coordinate coordinate) noexcept
 {
-    const auto fixture = std::find_if(level.fixtures.begin(), level.fixtures.end(),
-                                      [coordinate](const Fixture& value) {
-                                          return value.coordinate == coordinate;
-                                      });
-    if (fixture == level.fixtures.end()) {
+    const Fixture* const fixture = find_fixture(level, coordinate);
+    if (fixture == nullptr) {
         return false;
     }
     if (std::holds_alternative<ExitTeleporter>(fixture->kind)) {
@@ -188,28 +116,6 @@ struct BlastTarget final {
     }
     const Cell* const cell = find_cell(level, destination);
     return cell != nullptr && support_half_steps(*cell) <= target.bottom.half_steps;
-}
-
-[[nodiscard]] bool is_armed(const ResolvedState& state, const EntityId id) noexcept
-{
-    return std::binary_search(state.armed_barrels.begin(), state.armed_barrels.end(), id);
-}
-
-void arm_barrel(ResolvedState& state, const EntityId id)
-{
-    const auto position = std::lower_bound(state.armed_barrels.begin(),
-                                           state.armed_barrels.end(), id);
-    if (position == state.armed_barrels.end() || *position != id) {
-        state.armed_barrels.insert(position, id);
-    }
-}
-
-void canonicalize_entities(std::vector<Entity>& entities)
-{
-    std::sort(entities.begin(), entities.end(), [](const Entity& lhs, const Entity& rhs) {
-        return std::tuple{lhs.coordinate.y, lhs.coordinate.x, lhs.bottom.half_steps, lhs.id}
-            < std::tuple{rhs.coordinate.y, rhs.coordinate.x, rhs.bottom.half_steps, rhs.id};
-    });
 }
 
 } // namespace

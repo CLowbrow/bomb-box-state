@@ -1,5 +1,8 @@
 #include "fixtures.hpp"
 
+#include "state_queries.hpp"
+#include "world_queries.hpp"
+
 #include <algorithm>
 #include <array>
 #include <vector>
@@ -14,16 +17,6 @@ constexpr std::array colors{
     SwitchColor::yellow,
 };
 
-[[nodiscard]] const Cell* find_cell(const LevelDefinition& level,
-                                    const Coordinate coordinate) noexcept
-{
-    const auto found = std::find_if(level.cells.begin(), level.cells.end(),
-                                    [coordinate](const Cell& cell) {
-                                        return cell.coordinate == coordinate;
-                                    });
-    return found == level.cells.end() ? nullptr : &*found;
-}
-
 [[nodiscard]] bool contains(const std::vector<SwitchColor>& values,
                             const SwitchColor color) noexcept
 {
@@ -34,15 +27,6 @@ constexpr std::array colors{
                             const Coordinate coordinate) noexcept
 {
     return std::find(values.begin(), values.end(), coordinate) != values.end();
-}
-
-[[nodiscard]] bool occupied(const ResolvedState& state,
-                            const Coordinate coordinate) noexcept
-{
-    return std::any_of(state.entities.begin(), state.entities.end(),
-                       [coordinate](const Entity& entity) {
-                           return entity.coordinate == coordinate;
-                       });
 }
 
 [[nodiscard]] bool switch_pressed(const LevelDefinition& level,
@@ -75,12 +59,8 @@ constexpr std::array colors{
     if (player == state.entities.end()) {
         return false;
     }
-    const auto fixture = std::find_if(level.fixtures.begin(), level.fixtures.end(),
-                                      [player](const Fixture& value) {
-                                          return value.coordinate == player->coordinate
-                                              && std::holds_alternative<ExitTeleporter>(value.kind);
-                                      });
-    if (fixture == level.fixtures.end()) {
+    const Fixture* const fixture = find_fixture(level, player->coordinate);
+    if (fixture == nullptr || !std::holds_alternative<ExitTeleporter>(fixture->kind)) {
         return false;
     }
     const Cell* const cell = find_cell(level, player->coordinate);
@@ -157,12 +137,9 @@ bool is_effectively_open_door(const LevelDefinition& level,
                               const ResolvedState& state,
                               const Coordinate coordinate) noexcept
 {
-    const auto fixture = std::find_if(level.fixtures.begin(), level.fixtures.end(),
-                                      [coordinate](const Fixture& value) {
-                                          return value.coordinate == coordinate
-                                              && std::holds_alternative<Door>(value.kind);
-                                      });
-    return fixture != level.fixtures.end() && contains(state.open_doors, coordinate);
+    const Fixture* const fixture = find_fixture(level, coordinate);
+    return fixture != nullptr && std::holds_alternative<Door>(fixture->kind)
+        && contains(state.open_doors, coordinate);
 }
 
 std::optional<TickResult> resolve_initial_fixture_tick(const LevelDefinition& level,

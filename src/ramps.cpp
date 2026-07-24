@@ -1,10 +1,11 @@
 #include "ramps.hpp"
 
 #include "fixtures.hpp"
+#include "state_queries.hpp"
+#include "world_queries.hpp"
 
 #include <algorithm>
 #include <cstdint>
-#include <limits>
 #include <map>
 #include <tuple>
 #include <utility>
@@ -13,69 +14,18 @@
 namespace game_rules::detail {
 namespace {
 
-struct CoordinateLess final {
-    [[nodiscard]] bool operator()(const Coordinate lhs, const Coordinate rhs) const noexcept
-    {
-        return std::tie(lhs.y, lhs.x) < std::tie(rhs.y, rhs.x);
-    }
-};
-
 struct SlideCandidate final {
     Coordinate source{};
     Coordinate destination{};
     std::vector<std::size_t> entity_indices{};
 };
 
-[[nodiscard]] std::optional<Coordinate> step(const Coordinate coordinate,
-                                             const Direction direction,
-                                             const CoordinateSystem& system) noexcept
-{
-    std::int32_t dx = 0;
-    std::int32_t dy = 0;
-    switch (direction) {
-    case Direction::north:
-        dy = system.positive_y == VerticalAxisDirection::north ? 1 : -1;
-        break;
-    case Direction::east:
-        dx = system.positive_x == HorizontalAxisDirection::east ? 1 : -1;
-        break;
-    case Direction::south:
-        dy = system.positive_y == VerticalAxisDirection::south ? 1 : -1;
-        break;
-    case Direction::west:
-        dx = system.positive_x == HorizontalAxisDirection::west ? 1 : -1;
-        break;
-    }
-
-    const auto x = static_cast<std::int64_t>(coordinate.x) + dx;
-    const auto y = static_cast<std::int64_t>(coordinate.y) + dy;
-    if (x < std::numeric_limits<std::int32_t>::min()
-        || x > std::numeric_limits<std::int32_t>::max()
-        || y < std::numeric_limits<std::int32_t>::min()
-        || y > std::numeric_limits<std::int32_t>::max()) {
-        return std::nullopt;
-    }
-    return Coordinate{static_cast<std::int32_t>(x), static_cast<std::int32_t>(y)};
-}
-
-[[nodiscard]] bool occupied(const ResolvedState& state,
-                            const Coordinate coordinate) noexcept
-{
-    return std::any_of(state.entities.begin(), state.entities.end(),
-                       [coordinate](const Entity& entity) {
-                           return entity.coordinate == coordinate;
-                       });
-}
-
 [[nodiscard]] bool destination_fixture_blocks(const LevelDefinition& level,
                                                const ResolvedState& state,
                                                const Coordinate coordinate) noexcept
 {
-    const auto fixture = std::find_if(level.fixtures.begin(), level.fixtures.end(),
-                                      [coordinate](const Fixture& value) {
-                                          return value.coordinate == coordinate;
-                                      });
-    if (fixture == level.fixtures.end()) {
+    const Fixture* const fixture = find_fixture(level, coordinate);
+    if (fixture == nullptr) {
         return false;
     }
     if (std::holds_alternative<ExitTeleporter>(fixture->kind)) {
@@ -83,14 +33,6 @@ struct SlideCandidate final {
     }
     return std::holds_alternative<Door>(fixture->kind)
         && !is_effectively_open_door(level, state, coordinate);
-}
-
-void canonicalize_entities(std::vector<Entity>& entities)
-{
-    std::sort(entities.begin(), entities.end(), [](const Entity& lhs, const Entity& rhs) {
-        return std::tuple{lhs.coordinate.y, lhs.coordinate.x, lhs.bottom.half_steps, lhs.id}
-            < std::tuple{rhs.coordinate.y, rhs.coordinate.x, rhs.bottom.half_steps, rhs.id};
-    });
 }
 
 } // namespace

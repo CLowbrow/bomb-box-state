@@ -1,5 +1,8 @@
 #include "gravity.hpp"
 
+#include "state_queries.hpp"
+#include "world_queries.hpp"
+
 #include <algorithm>
 #include <cstdint>
 #include <map>
@@ -8,47 +11,6 @@
 #include <vector>
 
 namespace game_rules::detail {
-namespace {
-
-struct CoordinateLess final {
-    [[nodiscard]] bool operator()(const Coordinate lhs, const Coordinate rhs) const noexcept
-    {
-        return std::tie(lhs.y, lhs.x) < std::tie(rhs.y, rhs.x);
-    }
-};
-
-[[nodiscard]] std::int64_t support_half_steps(const Cell& cell) noexcept
-{
-    if (const auto* flat = std::get_if<FlatCell>(&cell.geometry)) {
-        return static_cast<std::int64_t>(flat->elevation) * 2;
-    }
-    return static_cast<std::int64_t>(std::get<RampCell>(cell.geometry).low_elevation) * 2 + 1;
-}
-
-[[nodiscard]] const Cell* find_cell(const LevelDefinition& level,
-                                    const Coordinate coordinate) noexcept
-{
-    const auto found = std::find_if(level.cells.begin(), level.cells.end(),
-                                    [coordinate](const Cell& cell) {
-                                        return cell.coordinate == coordinate;
-                                    });
-    return found == level.cells.end() ? nullptr : &*found;
-}
-
-[[nodiscard]] bool is_armed(const ResolvedState& state, const EntityId id) noexcept
-{
-    return std::binary_search(state.armed_barrels.begin(), state.armed_barrels.end(), id);
-}
-
-void arm_barrel(ResolvedState& state, const EntityId id)
-{
-    const auto position = std::lower_bound(state.armed_barrels.begin(), state.armed_barrels.end(), id);
-    if (position == state.armed_barrels.end() || *position != id) {
-        state.armed_barrels.insert(position, id);
-    }
-}
-
-} // namespace
 
 std::optional<TickResult> resolve_falling_tick(const LevelDefinition& level,
                                                const ResolvedState& state,

@@ -1,5 +1,7 @@
 #include "game_rules/world.hpp"
 
+#include "world_queries.hpp"
+
 #include <algorithm>
 #include <cstdint>
 #include <limits>
@@ -10,13 +12,6 @@
 
 namespace game_rules {
 namespace {
-
-struct CoordinateLess final {
-    [[nodiscard]] bool operator()(const Coordinate lhs, const Coordinate rhs) const noexcept
-    {
-        return std::tie(lhs.y, lhs.x) < std::tie(rhs.y, rhs.x);
-    }
-};
 
 [[nodiscard]] bool valid(const HorizontalAxisDirection direction) noexcept
 {
@@ -68,98 +63,12 @@ struct CoordinateLess final {
         && highest_half_steps <= std::numeric_limits<std::int32_t>::max();
 }
 
-[[nodiscard]] bool valid_extent(const LevelDefinition& level) noexcept
-{
-    if (level.width == 0 || level.height == 0) {
-        return false;
-    }
-
-    const auto last_x = static_cast<std::int64_t>(level.coordinates.origin.x)
-        + static_cast<std::int64_t>(level.width) - 1;
-    const auto last_y = static_cast<std::int64_t>(level.coordinates.origin.y)
-        + static_cast<std::int64_t>(level.height) - 1;
-    return last_x <= std::numeric_limits<std::int32_t>::max()
-        && last_y <= std::numeric_limits<std::int32_t>::max();
-}
-
-[[nodiscard]] bool in_bounds(const LevelDefinition& level, const Coordinate coordinate) noexcept
-{
-    if (!valid_extent(level)) {
-        return false;
-    }
-    const auto offset_x = static_cast<std::int64_t>(coordinate.x) - level.coordinates.origin.x;
-    const auto offset_y = static_cast<std::int64_t>(coordinate.y) - level.coordinates.origin.y;
-    return offset_x >= 0 && offset_y >= 0
-        && offset_x < static_cast<std::int64_t>(level.width)
-        && offset_y < static_cast<std::int64_t>(level.height);
-}
-
-[[nodiscard]] std::optional<Coordinate> step(const Coordinate coordinate,
-                                             const Direction direction,
-                                             const CoordinateSystem& system) noexcept
-{
-    std::int32_t dx = 0;
-    std::int32_t dy = 0;
-    switch (direction) {
-    case Direction::east:
-        dx = system.positive_x == HorizontalAxisDirection::east ? 1 : -1;
-        break;
-    case Direction::west:
-        dx = system.positive_x == HorizontalAxisDirection::west ? 1 : -1;
-        break;
-    case Direction::north:
-        dy = system.positive_y == VerticalAxisDirection::north ? 1 : -1;
-        break;
-    case Direction::south:
-        dy = system.positive_y == VerticalAxisDirection::south ? 1 : -1;
-        break;
-    }
-    const auto x = static_cast<std::int64_t>(coordinate.x) + dx;
-    const auto y = static_cast<std::int64_t>(coordinate.y) + dy;
-    if (x < std::numeric_limits<std::int32_t>::min()
-        || x > std::numeric_limits<std::int32_t>::max()
-        || y < std::numeric_limits<std::int32_t>::min()
-        || y > std::numeric_limits<std::int32_t>::max()) {
-        return std::nullopt;
-    }
-    return Coordinate{static_cast<std::int32_t>(x), static_cast<std::int32_t>(y)};
-}
-
-[[nodiscard]] Direction opposite(const Direction direction) noexcept
-{
-    switch (direction) {
-    case Direction::north:
-        return Direction::south;
-    case Direction::east:
-        return Direction::west;
-    case Direction::south:
-        return Direction::north;
-    case Direction::west:
-        return Direction::east;
-    }
-    return direction;
-}
-
-[[nodiscard]] std::int64_t support_half_steps(const Cell& cell) noexcept
-{
-    if (const auto* flat = std::get_if<FlatCell>(&cell.geometry)) {
-        return static_cast<std::int64_t>(flat->elevation) * 2;
-    }
-    const auto& ramp = std::get<RampCell>(cell.geometry);
-    return static_cast<std::int64_t>(ramp.low_elevation) * 2 + 1;
-}
-
 void add_error(ValidationResult& result,
                const ValidationErrorCode code,
                const Coordinate coordinate = {},
                const EntityId entity_id = 0)
 {
     result.errors.push_back(ValidationError{code, coordinate, entity_id});
-}
-
-[[nodiscard]] auto spatial_key(const Coordinate coordinate) noexcept
-{
-    return std::tuple{coordinate.y, coordinate.x};
 }
 
 } // namespace
@@ -195,7 +104,7 @@ std::string_view to_string(const ValidationErrorCode code) noexcept
 ValidationResult validate_level(const LevelDefinition& level)
 {
     ValidationResult result;
-    if (!valid_extent(level)) {
+    if (!detail::has_representable_extent(level)) {
         add_error(result, ValidationErrorCode::invalid_dimensions, level.coordinates.origin);
     }
     if (!valid(level.coordinates.positive_x) || !valid(level.coordinates.positive_y)) {
@@ -208,9 +117,9 @@ ValidationResult validate_level(const LevelDefinition& level)
         add_error(result, ValidationErrorCode::cell_count_mismatch, level.coordinates.origin);
     }
 
-    std::map<Coordinate, const Cell*, CoordinateLess> cells;
+    std::map<Coordinate, const Cell*, detail::CoordinateLess> cells;
     for (const Cell& cell : level.cells) {
-        if (!in_bounds(level, cell.coordinate)) {
+        if (!detail::in_bounds(level, cell.coordinate)) {
             add_error(result, ValidationErrorCode::cell_out_of_bounds, cell.coordinate);
             continue;
         }
@@ -239,8 +148,10 @@ ValidationResult validate_level(const LevelDefinition& level)
         if (ramp == nullptr || !valid(ramp->low_direction)) {
             continue;
         }
-        const auto low_coordinate = step(coordinate, ramp->low_direction, level.coordinates);
-        const auto high_coordinate = step(coordinate, opposite(ramp->low_direction), level.coordinates);
+        const auto low_coordinate = detail::step(
+            coordinate, ramp->low_direction, level.coordinates);
+        const auto high_coordinate = detail::step(
+            coordinate, detail::opposite(ramp->low_direction), level.coordinates);
         if (!low_coordinate || !high_coordinate) {
             add_error(result, ValidationErrorCode::invalid_ramp_endpoints, coordinate);
             continue;
@@ -257,9 +168,9 @@ ValidationResult validate_level(const LevelDefinition& level)
         }
     }
 
-    std::map<Coordinate, const Fixture*, CoordinateLess> fixtures;
+    std::map<Coordinate, const Fixture*, detail::CoordinateLess> fixtures;
     for (const Fixture& fixture : level.fixtures) {
-        if (!in_bounds(level, fixture.coordinate)) {
+        if (!detail::in_bounds(level, fixture.coordinate)) {
             add_error(result, ValidationErrorCode::fixture_out_of_bounds, fixture.coordinate);
             continue;
         }
@@ -286,7 +197,7 @@ ValidationResult validate_level(const LevelDefinition& level)
     }
 
     std::set<EntityId> entity_ids;
-    std::map<Coordinate, std::vector<const Entity*>, CoordinateLess> columns;
+    std::map<Coordinate, std::vector<const Entity*>, detail::CoordinateLess> columns;
     std::size_t player_count = 0;
     for (const Entity& entity : level.entities) {
         if (entity.kind == EntityKind::player) {
@@ -301,7 +212,7 @@ ValidationResult validate_level(const LevelDefinition& level)
         if (!entity_ids.insert(entity.id).second) {
             add_error(result, ValidationErrorCode::duplicate_entity_id, entity.coordinate, entity.id);
         }
-        if (!in_bounds(level, entity.coordinate)) {
+        if (!detail::in_bounds(level, entity.coordinate)) {
             add_error(result, ValidationErrorCode::entity_out_of_bounds, entity.coordinate, entity.id);
             continue;
         }
@@ -310,7 +221,8 @@ ValidationResult validate_level(const LevelDefinition& level)
             add_error(result, ValidationErrorCode::entity_out_of_bounds, entity.coordinate, entity.id);
             continue;
         }
-        if (static_cast<std::int64_t>(entity.bottom.half_steps) < support_half_steps(*cell->second)) {
+        if (static_cast<std::int64_t>(entity.bottom.half_steps)
+            < detail::support_half_steps(*cell->second)) {
             add_error(result, ValidationErrorCode::entity_below_surface, entity.coordinate, entity.id);
         }
         columns[entity.coordinate].push_back(&entity);
@@ -344,7 +256,8 @@ ValidationResult validate_level(const LevelDefinition& level)
             const auto cell = cells.find(coordinate);
             const bool sole_player = column.size() == 1 && column.front()->kind == EntityKind::player;
             const bool at_floor = cell != cells.end()
-                && column.front()->bottom.half_steps == support_half_steps(*cell->second);
+                && column.front()->bottom.half_steps
+                    == detail::support_half_steps(*cell->second);
             if (!sole_player || !at_floor) {
                 add_error(result, ValidationErrorCode::invalid_teleporter_occupancy, coordinate,
                           column.front()->id);
@@ -363,10 +276,10 @@ ValidationResult validate_level(const LevelDefinition& level)
 LevelDefinition canonicalize_level(LevelDefinition level)
 {
     std::sort(level.cells.begin(), level.cells.end(), [](const Cell& lhs, const Cell& rhs) {
-        return spatial_key(lhs.coordinate) < spatial_key(rhs.coordinate);
+        return detail::spatial_key(lhs.coordinate) < detail::spatial_key(rhs.coordinate);
     });
     std::sort(level.fixtures.begin(), level.fixtures.end(), [](const Fixture& lhs, const Fixture& rhs) {
-        return spatial_key(lhs.coordinate) < spatial_key(rhs.coordinate);
+        return detail::spatial_key(lhs.coordinate) < detail::spatial_key(rhs.coordinate);
     });
     std::sort(level.entities.begin(), level.entities.end(), [](const Entity& lhs, const Entity& rhs) {
         return std::tuple{lhs.coordinate.y, lhs.coordinate.x, lhs.bottom.half_steps, lhs.id}

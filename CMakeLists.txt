@@ -57,6 +57,7 @@ target_sources(
         src/fixtures.cpp
         src/gravity.cpp
         src/level_json.cpp
+        src/player_movement.cpp
         src/ramps.cpp
         src/world.cpp
     PUBLIC
