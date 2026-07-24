@@ -1,23 +1,15 @@
 #include "bomb_box/engine.hpp"
 #include "bomb_box/world.hpp"
+#include "support/bomb_box_printers.hpp"
+
+#include <gtest/gtest.h>
 
 #include <algorithm>
-#include <iostream>
-#include <string_view>
+#include <optional>
 
 namespace {
 
 using namespace bomb_box;
-
-int failures = 0;
-
-void expect(const bool condition, const std::string_view message)
-{
-    if (!condition) {
-        std::cerr << "FAIL: " << message << '\n';
-        ++failures;
-    }
-}
 
 [[nodiscard]] bool contains(const ValidationResult& result, const ValidationErrorCode code)
 {
@@ -75,92 +67,79 @@ void expect(const bool condition, const std::string_view message)
     return level;
 }
 
-void valid_schema_and_stacks()
+TEST(WorldSchema, AcceptsValidSchemaStacksAndDeferredStabilization)
 {
-    const LevelDefinition level = ramp_level();
-    const ValidationResult result = validate_level(level);
-    expect(result.valid(), "a complete level with explicit axes, a ramp, fixture, IDs, and stack is valid");
+    EXPECT_TRUE(validate_level(ramp_level()).valid());
 
     LevelDefinition unsupported = flat_level();
     unsupported.entities.push_back(
         Entity{2, EntityKind::box, Coordinate{1, 0}, Height::from_elevation(3)});
-    expect(validate_level(unsupported).valid(),
-           "structural validation permits an unsupported initial entity for later stabilization");
+    EXPECT_TRUE(validate_level(unsupported).valid());
 }
 
-void schema_rejections()
+TEST(WorldSchema, RejectsInvalidStructure)
 {
     {
         LevelDefinition level = flat_level();
         level.width = 0;
-        expect(contains(validate_level(level), ValidationErrorCode::invalid_dimensions),
-               "zero-width boards are rejected");
+        EXPECT_TRUE(contains(validate_level(level), ValidationErrorCode::invalid_dimensions));
     }
     {
         LevelDefinition level = flat_level();
         level.coordinates.positive_x = static_cast<HorizontalAxisDirection>(99);
-        expect(contains(validate_level(level), ValidationErrorCode::invalid_coordinate_system),
-               "malformed coordinate-axis values are rejected");
+        EXPECT_TRUE(contains(validate_level(level),
+                             ValidationErrorCode::invalid_coordinate_system));
     }
     {
         LevelDefinition level = flat_level();
         level.cells.pop_back();
-        expect(contains(validate_level(level), ValidationErrorCode::cell_count_mismatch),
-               "incomplete cell rectangles are rejected");
+        EXPECT_TRUE(contains(validate_level(level), ValidationErrorCode::cell_count_mismatch));
     }
     {
         LevelDefinition level = flat_level();
         level.cells[1].coordinate = level.cells[0].coordinate;
-        expect(contains(validate_level(level), ValidationErrorCode::duplicate_cell),
-               "duplicate cell coordinates are rejected");
+        EXPECT_TRUE(contains(validate_level(level), ValidationErrorCode::duplicate_cell));
     }
     {
         LevelDefinition level = flat_level();
         level.entities.front().id = 0;
-        expect(contains(validate_level(level), ValidationErrorCode::invalid_entity_id),
-               "entity ID zero is reserved for API no-entity sentinels");
+        EXPECT_TRUE(contains(validate_level(level), ValidationErrorCode::invalid_entity_id));
     }
     {
         LevelDefinition level = flat_level();
         level.entities.push_back(Entity{1, EntityKind::box, Coordinate{1, 0}, Height{0}});
-        expect(contains(validate_level(level), ValidationErrorCode::duplicate_entity_id),
-               "entity IDs must be unique");
+        EXPECT_TRUE(contains(validate_level(level), ValidationErrorCode::duplicate_entity_id));
     }
     {
         LevelDefinition level = flat_level();
         level.entities.front().kind = EntityKind::box;
-        expect(contains(validate_level(level), ValidationErrorCode::player_count_not_one),
-               "a level must contain exactly one player");
+        EXPECT_TRUE(contains(validate_level(level), ValidationErrorCode::player_count_not_one));
     }
     {
         LevelDefinition level = flat_level();
         level.entities.push_back(Entity{2, EntityKind::box, Coordinate{0, 0}, Height{1}});
-        expect(contains(validate_level(level), ValidationErrorCode::overlapping_entities),
-               "overlapping entity volumes are rejected");
+        EXPECT_TRUE(contains(validate_level(level), ValidationErrorCode::overlapping_entities));
     }
     {
         LevelDefinition level = flat_level();
         level.entities.push_back(Entity{2, EntityKind::box, Coordinate{0, 0}, Height{2}});
-        expect(contains(validate_level(level), ValidationErrorCode::player_not_top_of_stack),
-               "the player cannot have an entity above it");
+        EXPECT_TRUE(contains(validate_level(level),
+                             ValidationErrorCode::player_not_top_of_stack));
     }
     {
         LevelDefinition level = flat_level();
         level.cells[0].geometry = FlatCell{1};
-        expect(contains(validate_level(level), ValidationErrorCode::entity_below_surface),
-               "entities cannot intersect a cell surface");
+        EXPECT_TRUE(contains(validate_level(level), ValidationErrorCode::entity_below_surface));
     }
     {
         LevelDefinition level = ramp_level();
         level.cells[2].geometry = RampCell{Direction::east, -1'073'741'825};
-        expect(contains(validate_level(level), ValidationErrorCode::invalid_cell_height),
-               "a ramp center below the representable half-step range is rejected");
+        EXPECT_TRUE(contains(validate_level(level), ValidationErrorCode::invalid_cell_height));
     }
     {
         LevelDefinition level = ramp_level();
         level.fixtures.front().coordinate = Coordinate{11, -4};
-        expect(contains(validate_level(level), ValidationErrorCode::fixture_on_ramp),
-               "fixtures cannot be placed on ramps");
+        EXPECT_TRUE(contains(validate_level(level), ValidationErrorCode::fixture_on_ramp));
     }
     {
         LevelDefinition level = flat_level();
@@ -168,25 +147,23 @@ void schema_rejections()
             Fixture{Coordinate{1, 0}, Switch{SwitchColor::red}},
             Fixture{Coordinate{1, 0}, Door{SwitchColor::red}},
         };
-        expect(contains(validate_level(level), ValidationErrorCode::duplicate_fixture),
-               "a cell cannot contain multiple fixtures");
+        EXPECT_TRUE(contains(validate_level(level), ValidationErrorCode::duplicate_fixture));
     }
     {
         LevelDefinition level = flat_level();
         level.fixtures = {Fixture{Coordinate{1, 0}, ExitTeleporter{}}};
         level.entities.push_back(Entity{2, EntityKind::box, Coordinate{1, 0}, Height{0}});
-        expect(contains(validate_level(level), ValidationErrorCode::invalid_teleporter_occupancy),
-               "non-player entities cannot occupy teleporter columns");
+        EXPECT_TRUE(contains(validate_level(level),
+                             ValidationErrorCode::invalid_teleporter_occupancy));
     }
     {
         LevelDefinition level = ramp_level();
         level.cells[0].geometry = FlatCell{2};
-        expect(contains(validate_level(level), ValidationErrorCode::invalid_ramp_endpoints),
-               "ramp endpoint elevations must match the ramp geometry");
+        EXPECT_TRUE(contains(validate_level(level), ValidationErrorCode::invalid_ramp_endpoints));
     }
 }
 
-void canonical_and_replaceable_lifetime()
+TEST(WorldSchema, CanonicalizesAndReplacesLevelAtomically)
 {
     LevelDefinition first = ramp_level();
     LevelDefinition reordered = first;
@@ -195,43 +172,26 @@ void canonical_and_replaceable_lifetime()
 
     Engine first_engine;
     Engine second_engine;
-    expect(first_engine.load_level(first).accepted(), "the first valid level loads");
-    expect(second_engine.load_level(reordered).accepted(), "the reordered valid level loads");
-    expect(first_engine.loaded_level() == second_engine.loaded_level(),
-           "input container order does not affect the stored authoritative level");
+    ASSERT_TRUE(first_engine.load_level(first).accepted());
+    ASSERT_TRUE(second_engine.load_level(reordered).accepted());
+    EXPECT_EQ(first_engine.loaded_level(), second_engine.loaded_level());
 
     auto caller_snapshot = first_engine.loaded_level();
-    expect(caller_snapshot.has_value(), "a loaded level is available as an owned snapshot");
+    ASSERT_TRUE(caller_snapshot.has_value());
     caller_snapshot->entities.front().id = 999;
-    expect(first_engine.loaded_level()->entities.front().id != 999,
-           "mutating a caller-owned snapshot cannot mutate the engine");
+    EXPECT_NE(first_engine.loaded_level()->entities.front().id, 999U);
 
     const auto before_rejection = first_engine.loaded_level();
     LevelDefinition invalid = flat_level();
     invalid.entities.clear();
     const LoadResult rejected = first_engine.load_level(invalid);
-    expect(!rejected.accepted(), "an invalid replacement is rejected");
-    expect(contains(rejected, ValidationErrorCode::player_count_not_one),
-           "a rejected replacement reports stable validation codes");
-    expect(first_engine.loaded_level() == before_rejection,
-           "an invalid replacement leaves the current level exactly unchanged");
+    EXPECT_FALSE(rejected.accepted());
+    EXPECT_TRUE(contains(rejected, ValidationErrorCode::player_count_not_one));
+    EXPECT_EQ(first_engine.loaded_level(), before_rejection);
 
     const LevelDefinition second = flat_level(Coordinate{-7, 5});
-    expect(first_engine.load_level(second).accepted(), "a later valid replacement succeeds");
-    expect(first_engine.loaded_level() == std::optional{canonicalize_level(second)},
-           "a valid replacement completely replaces the prior level data");
+    ASSERT_TRUE(first_engine.load_level(second).accepted());
+    EXPECT_EQ(first_engine.loaded_level(), std::optional{canonicalize_level(second)});
 }
 
 } // namespace
-
-int main()
-{
-    valid_schema_and_stacks();
-    schema_rejections();
-    canonical_and_replaceable_lifetime();
-
-    if (failures == 0) {
-        std::cout << "All world-schema behavior checks passed.\n";
-    }
-    return failures == 0 ? 0 : 1;
-}

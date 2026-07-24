@@ -60,9 +60,12 @@ gameplay system is added. It is complete when:
 - the WebAssembly ES module exposes those operations through a thin JavaScript
   interface without leaking C++ ownership or requiring a host to reconstruct
   authoritative state from events; and
-- an automated JavaScript integration scenario creates an engine, loads a
-  simple world, reads renderable cells and entities, moves the player, observes
-  the updated authoritative state, rewinds it, and destroys the engine.
+- a versioned, adapter-neutral contract scenario runs through both the native C
+  ABI and Node/WebAssembly surfaces: it creates an engine, loads a simple
+  world, reads renderable cells and entities, moves the player, compares the
+  complete authoritative result, rewinds, and destroys the engine. Each runner
+  compares normalized output with authored expectations rather than using the
+  other adapter's live output as its oracle.
 
 The browser milestone supplies state and semantic results to a rendering host;
 rendering, animation, and input mapping remain outside this headless library.
@@ -112,19 +115,39 @@ provisional initialization step with full stabilization and terminal outcome
 derivation. `loaded_level()` remains the supplied definition snapshot, while
 `resolved_state()` is the dynamic state that future turns will change.
 
+## Test infrastructure
+
+- Native unit and behavior tests use GoogleTest 1.17.0 fetched from its exact
+  release commit and verified archive hash as a build-only dependency.
+  Individual cases are discovered by CTest and retain `unit`, `behavior`, and
+  `native` labels.
+- Public behavior scenarios, focused white-box history tests, and the
+  framework-free production-mode consumer smoke are separate targets. The
+  core and consumer smoke retain no-exceptions/no-RTTI compilation while the
+  richer runners do not change the core's installed or exported dependencies.
+- Test-only domain printers report structured states, turns, ticks, and events
+  on equality failures. Table-driven cases attach their input as failure
+  context.
+- GoogleTest discovery occurs at CTest time. This prevents a sanitized build
+  from starting the sanitizer runtime merely to enumerate cases inside the
+  Codex workspace sandbox.
+- The adapter-neutral phase-4 corpus and its native C ABI and Node/WebAssembly
+  runners remain future work; internal C++ unit tests will not be duplicated
+  under Emscripten.
+
 ## Verification record
 
 Most recently recorded on 2026-07-23:
 
 | Surface | Commands | Result |
 | --- | --- | --- |
-| Native debug | `cmake --preset native-debug`; `cmake --build --preset native-debug`; `ctest --preset native-debug --output-on-failure` | Passed: 5 of 5 tests, including the complete flat-walking turn, rejection, determinism, rewind, and branching scenarios. |
-| Native release | `cmake --preset native-release`; `cmake --build --preset native-release`; `ctest --preset native-release --output-on-failure` | Passed: 5 of 5 tests. |
+| Native debug | `cmake --preset native-debug`; `cmake --build --preset native-debug`; `ctest --preset native-debug --output-on-failure` | Passed: 27 of 27 individually discovered tests: 24 behavior cases, 2 focused unit cases, and 1 production-mode consumer smoke. |
+| Native release | `cmake --preset native-release`; `cmake --build --preset native-release`; `ctest --preset native-release --output-on-failure` | Passed: 27 of 27 tests. |
 | WebAssembly debug | `cmake --build --preset wasm-debug`; `ctest --preset wasm-debug --output-on-failure` | Passed: portable core and adapter build; 1 of 1 Node smoke test. The existing preset was already configured with Emscripten; linking required access to its Homebrew compiler cache outside the workspace sandbox. |
-| Native sanitized | `cmake --preset native-sanitized`; `cmake --build --preset native-sanitized` | Configure and build passed with the phase-3 movement suite. Tests were not executed because `AGENTS.md` prohibits running the sanitizer preset inside the Codex workspace sandbox, where the runtime stalls at process startup and can leave CPU-consuming processes. |
+| Native sanitized | `cmake --preset native-sanitized`; `cmake --build --preset native-sanitized` | Configure and build passed with deferred GoogleTest discovery. Tests were not executed because `AGENTS.md` prohibits running the sanitizer preset inside the Codex workspace sandbox, where the runtime stalls at test startup and can leave CPU-consuming processes. CI now has an outside-sandbox sanitizer job. |
 | JSON Schema syntax | `jq empty docs/level-format.schema.json` | Passed. |
 | Vendored yyjson | `shasum -a 256 vendor/yyjson/yyjson.c vendor/yyjson/yyjson.h vendor/yyjson/LICENSE`; global-symbol inspection with `nm` | All files match the recorded 0.12.0 import checksums. Only the two Bomb Box-prefixed bridge symbols are global; no upstream `yyjson_*` implementation symbol is exported. |
-| Install package | `cmake --install out/build/native-debug --prefix <temporary-directory>` | Passed. The static archive is self-contained and the package includes the yyjson MIT license, third-party notice, and provenance README. |
+| Install package | `cmake --install out/build/native-debug --prefix <temporary-directory>` | Passed. The static archive is self-contained, no GoogleTest artifact or dependency is installed, and the package includes the yyjson MIT license, third-party notice, and provenance README. |
 | Unreal | Not run. | The Unreal wrapper remains a scaffold and no Unreal toolchain verification has been recorded. |
 
 ## Known limitations
@@ -150,9 +173,10 @@ Most recently recorded on 2026-07-23:
 Implement phase 4 as the next browser-facing vertical slice. Add opaque engine
 creation and destruction, JSON level loading, movement, rewind, and
 caller-owned state/result access to the primitive C ABI. Wrap those operations
-in a thin WebAssembly ES module and add an automated Node scenario that loads a
-simple flat world, reads renderable cells and entities, moves the player,
-observes the authoritative tick and final state, rewinds, and destroys the
-engine. Extend the phase-3 result types across the boundary rather than
-inventing a parallel rules model; do not begin pushes, gravity, fixtures,
-ramps, or explosions first.
+in a thin WebAssembly ES module and introduce the versioned, adapter-neutral
+contract corpus described above. Its first scenario should run through native
+C ABI and Node/WebAssembly runners, load a simple flat world, read renderable
+cells and entities, move the player, compare the complete authoritative tick
+and final state, rewind, and destroy the engine. Extend the phase-3 result
+types across the boundary rather than inventing a parallel rules model; do not
+begin pushes, gravity, fixtures, ramps, or explosions first.

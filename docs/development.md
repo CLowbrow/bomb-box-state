@@ -20,8 +20,45 @@ ctest --preset native-sanitized
 
 Build artifacts stay under `out/` and are ignored by Git.
 
+When native tests are enabled, the first configure downloads GoogleTest 1.17.0 from its exact
+release commit and verifies its archive hash through CMake `FetchContent`. GoogleTest is a
+build-only dependency: it is not linked into `BombBox::State`, exported, installed, or required by
+an embedding host. Configure with `-DBUILD_TESTING=OFF` when only the library or an install package
+is needed.
+
 See the [implementation status](implementation-status.md) for current feature coverage, verification
 results, and known toolchain limitations.
+
+## Test organization
+
+CTest remains the suite runner. GoogleTest supplies native test registration, assertions, and
+failure diagnostics; `gtest_discover_tests()` registers each named GoogleTest case separately with
+CTest. Useful filtered runs include:
+
+```sh
+ctest --preset native-debug -L unit
+ctest --preset native-debug -L behavior
+ctest --preset native-debug -L consumer
+```
+
+Native tests are divided by purpose:
+
+- `tests/unit` contains focused white-box checks of internal algorithms where the public engine
+  boundary would make failures unnecessarily difficult to localize.
+- `tests/behavior` contains specification-level scenarios expressed through public operations. A
+  scenario should construct complete input state, perform one public operation when practical, and
+  compare the complete ordered result and resulting lifecycle state.
+- `tests/support` contains test-only builders, printers, and matchers. Helpers should improve
+  diagnostics without hiding the rule-relevant state in a scenario.
+- `tests/consumer` contains framework-free consumer checks compiled with the same no-exceptions and
+  no-RTTI policy as the core. The GoogleTest runners use their normal runtime while linking the
+  already production-compiled core; sanitizer instrumentation is applied to both.
+
+Phase 4 will add a separate adapter-neutral contract corpus for the stateful C ABI and WebAssembly
+surface. Native C++ unit tests do not need to be recompiled under Emscripten. Instead, native C ABI
+and Node/WebAssembly runners must execute the same authored public scenarios and compare their
+normalized complete results against the same expectations. The test runner may own fixture files
+and platform facilities; the engine remains headless and filesystem-independent.
 
 ## Native gameplay loop
 
@@ -80,6 +117,9 @@ yyjson is the only approved source dependency in the portable core. Its upstream
 unmodified. Provenance, checksums, license, isolation details, and the update procedure are recorded
 in `vendor/yyjson/README.bomb-box.md`; the repository-level attribution is in
 `THIRD_PARTY_NOTICES.md`. The installed package includes the upstream MIT license.
+
+GoogleTest is fetched only while building native tests and is intentionally not vendored into or
+installed with the portable core.
 
 ## WebAssembly build
 

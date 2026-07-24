@@ -12,7 +12,7 @@ concept EngineLike = requires(const T& value) {
     { value.status() } -> std::same_as<bomb_box::EngineStatus>;
 };
 
-static_assert(EngineLike<bomb_box::Engine>, "The scaffold requires C++20 concepts");
+static_assert(EngineLike<bomb_box::Engine>, "The public engine requires C++20 concepts");
 
 int failures = 0;
 
@@ -40,9 +40,8 @@ int main()
            "the C ABI is callable");
 
     if (failures == 0) {
-        std::cout << "All scaffold checks passed.\n";
+        std::cout << "All production-mode consumer checks passed.\n";
     }
 
     return failures == 0 ? 0 : 1;
 }
-

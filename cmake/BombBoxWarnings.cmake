@@ -39,6 +39,10 @@ function(bomb_box_set_runtime_options target)
         endif()
     endif()
 
+    bomb_box_enable_sanitizers(${target})
+endfunction()
+
+function(bomb_box_enable_sanitizers target)
     if(BOMB_BOX_ENABLE_SANITIZERS)
         if(MSVC)
             message(FATAL_ERROR "The sanitizer preset currently supports Clang and GCC toolchains only.")

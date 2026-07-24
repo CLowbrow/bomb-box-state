@@ -36,6 +36,27 @@ final binary unless they reference it. See the [level format specification](leve
 - Avoid hidden global state. An engine instance should own all mutable simulation state.
 - Behavior tests should compare complete tick/event/state results across native and Wasm builds.
 
+## Verification boundary
+
+The installed engine and its public package must not acquire dependencies from the test system.
+Native unit and behavior tests may use a test-only framework, filesystem fixtures, and richer
+diagnostic support because those facilities are excluded from the `BombBox::State` target and its
+install/export surface. The core itself is still compiled with its production no-exceptions,
+no-RTTI, portability, and sanitizer settings when tests link it.
+
+Cross-adapter confidence comes from shared logical contracts, not from compiling every C++ unit
+test for every host. Native C++ runs the complete unit and behavior suites. Beginning with the
+stateful phase-4 boundary, native C ABI and Node/WebAssembly runners execute the same versioned,
+adapter-neutral public scenarios and normalize their outputs to the same logical result model.
+Those scenarios compare authored expected acceptance, ticks, ordered events, authoritative state,
+outcome, and lifecycle effects. They must not treat one adapter's live output as the oracle for
+another, because a shared core defect could otherwise make both agree on the wrong result.
+
+Boundary-specific tests remain necessary for C compilation, opaque-handle and buffer ownership,
+WebAssembly memory and export behavior, JavaScript representation of 64-bit entity IDs, and later
+Unreal ownership and packaging. Internal unit tests, fuzz targets, and benchmarks are not part of
+the cross-adapter contract corpus.
+
 ## Intended implementation layers
 
 1. Value types, validated level schema, and versioned level JSON encoding.

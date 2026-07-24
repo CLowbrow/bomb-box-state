@@ -1,24 +1,15 @@
 #include "bomb_box/engine.hpp"
+#include "support/bomb_box_printers.hpp"
+
+#include <gtest/gtest.h>
 
 #include <cstdint>
-#include <iostream>
 #include <optional>
-#include <string_view>
 #include <vector>
 
 namespace {
 
 using namespace bomb_box;
-
-int failures = 0;
-
-void expect(const bool condition, const std::string_view message)
-{
-    if (!condition) {
-        std::cerr << "FAIL: " << message << '\n';
-        ++failures;
-    }
-}
 
 [[nodiscard]] LevelDefinition grid_level(const Coordinate player_coordinate = {1, 1})
 {
@@ -84,7 +75,7 @@ void expect(const bool condition, const std::string_view message)
     };
 }
 
-void walks_in_all_cardinal_directions()
+TEST(FlatWalking, WalksInAllCardinalDirections)
 {
     struct Scenario final {
         Direction direction;
@@ -98,82 +89,72 @@ void walks_in_all_cardinal_directions()
     };
 
     for (const Scenario& scenario : scenarios) {
+        SCOPED_TRACE(::testing::PrintToString(scenario.direction));
         Engine engine;
-        expect(engine.load_level(grid_level()).accepted(), "cardinal scenario level loads");
+        ASSERT_TRUE(engine.load_level(grid_level()).accepted());
         const MoveResult actual = engine.move(scenario.direction);
-        expect(actual == expected_move(scenario.direction, {1, 1}, scenario.destination),
-               "a cardinal walk returns the complete expected turn result");
-        expect(engine.resolved_state() == actual.final_state,
-               "the returned final state is the authoritative current state");
+        EXPECT_EQ(actual, expected_move(scenario.direction, {1, 1}, scenario.destination));
+        EXPECT_EQ(engine.resolved_state(), actual.final_state);
     }
 }
 
-void honors_declared_axis_directions()
+TEST(FlatWalking, HonorsDeclaredAxisDirections)
 {
     LevelDefinition level = grid_level();
     level.coordinates.positive_x = HorizontalAxisDirection::west;
     level.coordinates.positive_y = VerticalAxisDirection::south;
 
     Engine east_engine;
-    expect(east_engine.load_level(level).accepted(), "reversed-axis east level loads");
-    expect(east_engine.move(Direction::east)
-               == expected_move(Direction::east, {1, 1}, {0, 1}),
-           "east follows the declared negative x direction");
+    ASSERT_TRUE(east_engine.load_level(level).accepted());
+    EXPECT_EQ(east_engine.move(Direction::east),
+              expected_move(Direction::east, {1, 1}, {0, 1}));
 
     Engine north_engine;
-    expect(north_engine.load_level(level).accepted(), "reversed-axis north level loads");
-    expect(north_engine.move(Direction::north)
-               == expected_move(Direction::north, {1, 1}, {1, 0}),
-           "north follows the declared negative y direction");
+    ASSERT_TRUE(north_engine.load_level(level).accepted());
+    EXPECT_EQ(north_engine.move(Direction::north),
+              expected_move(Direction::north, {1, 1}, {1, 0}));
 }
 
-void rejects_without_mutating_state_or_history()
+TEST(FlatWalking, RejectsWithoutMutatingStateOrHistory)
 {
     Engine boundary_engine;
     const LevelDefinition boundary_level = grid_level({0, 0});
-    expect(boundary_engine.load_level(boundary_level).accepted(), "boundary level loads");
+    ASSERT_TRUE(boundary_engine.load_level(boundary_level).accepted());
     const ResolvedState boundary_state = player_state({0, 0});
-    expect(boundary_engine.move(Direction::west)
-               == expected_rejection(MoveStatus::world_boundary, Direction::west, boundary_state),
-           "the world edge returns a complete blocked result");
-    expect(boundary_engine.rewind().status == RewindStatus::history_empty,
-           "a blocked move does not create history");
+    EXPECT_EQ(boundary_engine.move(Direction::west),
+              expected_rejection(MoveStatus::world_boundary, Direction::west, boundary_state));
+    EXPECT_EQ(boundary_engine.rewind().status, RewindStatus::history_empty);
 
     LevelDefinition high_ledge = grid_level();
     high_ledge.cells[5].geometry = FlatCell{1};
     Engine high_engine;
-    expect(high_engine.load_level(high_ledge).accepted(), "high-ledge level loads");
-    expect(high_engine.move(Direction::east)
-               == expected_rejection(MoveStatus::ledge, Direction::east, player_state({1, 1})),
-           "a player cannot climb a flat-cell ledge");
+    ASSERT_TRUE(high_engine.load_level(high_ledge).accepted());
+    EXPECT_EQ(high_engine.move(Direction::east),
+              expected_rejection(MoveStatus::ledge, Direction::east, player_state({1, 1})));
 
     LevelDefinition low_ledge = grid_level();
     low_ledge.cells[4].geometry = FlatCell{1};
     low_ledge.entities.front().bottom = Height::from_elevation(1);
     Engine low_engine;
-    expect(low_engine.load_level(low_ledge).accepted(), "low-ledge level loads");
-    expect(low_engine.move(Direction::east)
-               == expected_rejection(MoveStatus::ledge,
-                                     Direction::east,
-                                     player_state({1, 1}, Height::from_elevation(1))),
-           "a player cannot voluntarily walk down a flat-cell ledge");
+    ASSERT_TRUE(low_engine.load_level(low_ledge).accepted());
+    EXPECT_EQ(low_engine.move(Direction::east),
+              expected_rejection(MoveStatus::ledge,
+                                 Direction::east,
+                                 player_state({1, 1}, Height::from_elevation(1))));
 
     LevelDefinition occupied = grid_level();
     occupied.entities.push_back(
         Entity{4, EntityKind::box, Coordinate{2, 1}, Height::from_elevation(0)});
     Engine occupied_engine;
-    expect(occupied_engine.load_level(occupied).accepted(), "occupied destination level loads");
+    ASSERT_TRUE(occupied_engine.load_level(occupied).accepted());
     const MoveResult occupied_result = occupied_engine.move(Direction::east);
     const ResolvedState occupied_state{canonicalize_level(occupied).entities, Outcome::ongoing};
-    expect(occupied_result == expected_rejection(MoveStatus::occupied,
-                                                 Direction::east,
-                                                 occupied_state),
-           "an entity at the player's height returns a complete occupied rejection");
-    expect(occupied_engine.resolved_state() == std::optional{occupied_state},
-           "an occupied rejection preserves the complete state");
+    EXPECT_EQ(occupied_result,
+              expected_rejection(MoveStatus::occupied, Direction::east, occupied_state));
+    EXPECT_EQ(occupied_engine.resolved_state(), std::optional{occupied_state});
 }
 
-void walks_onto_compatible_stack_support()
+TEST(FlatWalking, WalksOntoCompatibleStackSupport)
 {
     LevelDefinition level;
     level.width = 2;
@@ -188,37 +169,32 @@ void walks_onto_compatible_stack_support()
     };
 
     Engine engine;
-    expect(engine.load_level(level).accepted(), "compatible stack-support level loads");
+    ASSERT_TRUE(engine.load_level(level).accepted());
     const MoveResult result = engine.move(Direction::east);
-    expect(result.accepted(), "the player may walk onto a box whose top matches its support height");
-    expect(result.final_state.has_value() && result.final_state->entities.size() == 2,
-           "stack walking returns every entity in the authoritative state");
-    if (result.final_state.has_value() && result.final_state->entities.size() == 2) {
-        expect(result.final_state->entities[1].coordinate == Coordinate{1, 0},
-               "the player moves onto the destination stack");
-        expect(result.final_state->entities[1].bottom == Height::from_elevation(1),
-               "walking onto a stack preserves player height");
-    }
+    ASSERT_TRUE(result.accepted());
+    ASSERT_TRUE(result.final_state.has_value());
+    ASSERT_EQ(result.final_state->entities.size(), 2U);
+    EXPECT_EQ(result.final_state->entities[1].coordinate, (Coordinate{1, 0}));
+    EXPECT_EQ(result.final_state->entities[1].bottom, Height::from_elevation(1));
 }
 
-void validates_input_and_reports_unsupported_phase_boundaries()
+TEST(FlatWalking, ValidatesInputAndReportsUnsupportedPhaseBoundaries)
 {
     Engine empty;
     const MoveResult no_level = empty.move(Direction::north);
-    expect(no_level.status == MoveStatus::no_level && !no_level.final_state.has_value()
-               && no_level.ticks.empty(),
-           "movement before load is rejected without inventing a state or tick");
+    EXPECT_EQ(no_level.status, MoveStatus::no_level);
+    EXPECT_FALSE(no_level.final_state.has_value());
+    EXPECT_TRUE(no_level.ticks.empty());
 
     Engine engine;
-    expect(engine.load_level(grid_level()).accepted(), "invalid-direction level loads");
+    ASSERT_TRUE(engine.load_level(grid_level()).accepted());
     const ResolvedState unchanged = player_state({1, 1});
     const Direction malformed = static_cast<Direction>(255);
     const MoveResult invalid = engine.move(malformed);
-    expect(invalid.status == MoveStatus::invalid_direction && invalid.events.empty()
-               && invalid.final_state == std::optional{unchanged},
-           "a malformed direction is an API validation error without MoveBlocked");
-    expect(engine.rewind().status == RewindStatus::history_empty,
-           "an invalid direction does not create history");
+    EXPECT_EQ(invalid.status, MoveStatus::invalid_direction);
+    EXPECT_TRUE(invalid.events.empty());
+    EXPECT_EQ(invalid.final_state, std::optional{unchanged});
+    EXPECT_EQ(engine.rewind().status, RewindStatus::history_empty);
 
     LevelDefinition ramp = grid_level();
     ramp.width = 3;
@@ -232,25 +208,22 @@ void validates_input_and_reports_unsupported_phase_boundaries()
         Entity{17, EntityKind::player, {0, 0}, Height::from_elevation(0)},
     };
     Engine ramp_engine;
-    expect(ramp_engine.load_level(ramp).accepted(), "valid ramp boundary level loads");
-    expect(ramp_engine.move(Direction::east).status == MoveStatus::unsupported_geometry,
-           "ramp traversal is explicitly deferred instead of partially resolved");
+    ASSERT_TRUE(ramp_engine.load_level(ramp).accepted());
+    EXPECT_EQ(ramp_engine.move(Direction::east).status, MoveStatus::unsupported_geometry);
 
     LevelDefinition fixture = grid_level();
     fixture.fixtures = {
         Fixture{{2, 1}, Switch{SwitchColor::red}},
     };
     Engine fixture_engine;
-    expect(fixture_engine.load_level(fixture).accepted(), "fixture boundary level loads");
-    expect(fixture_engine.move(Direction::east).status == MoveStatus::unsupported_fixture,
-           "fixture interactions are explicitly deferred instead of partially resolved");
+    ASSERT_TRUE(fixture_engine.load_level(fixture).accepted());
+    EXPECT_EQ(fixture_engine.move(Direction::east).status, MoveStatus::unsupported_fixture);
 
-    expect(to_string(MoveStatus::world_boundary) == "world_boundary"
-               && to_string(MovementCause::player) == "player",
-           "movement results expose stable status and cause strings");
+    EXPECT_EQ(to_string(MoveStatus::world_boundary), "world_boundary");
+    EXPECT_EQ(to_string(MovementCause::player), "player");
 }
 
-void preserves_rewind_and_deterministic_branching()
+TEST(FlatWalking, PreservesRewindAndDeterministicBranching)
 {
     LevelDefinition line;
     line.width = 3;
@@ -266,41 +239,21 @@ void preserves_rewind_and_deterministic_branching()
 
     Engine first;
     Engine second;
-    expect(first.load_level(line).accepted() && second.load_level(line).accepted(),
-           "determinism comparison levels load");
+    ASSERT_TRUE(first.load_level(line).accepted());
+    ASSERT_TRUE(second.load_level(line).accepted());
     const MoveResult first_result = first.move(Direction::east);
     const MoveResult second_result = second.move(Direction::east);
-    expect(first_result == second_result, "identical state and command produce identical complete output");
+    EXPECT_EQ(first_result, second_result);
 
-    expect(first.move(Direction::east).accepted(), "a second accepted move advances the line");
+    ASSERT_TRUE(first.move(Direction::east).accepted());
     const RewindResult first_rewind = first.rewind();
-    expect(first_rewind.state == std::optional{player_state({1, 0})},
-           "rewind restores the state before the second accepted move");
-    expect(first_rewind.events == std::vector<GameplayEvent>{StateRewoundEvent{}}
-               && first_rewind.outcome == std::optional{Outcome::ongoing},
-           "accepted rewind returns its presentation event and authoritative outcome");
-    expect(first.move(Direction::west).accepted(), "a move after rewind starts a new branch");
-    expect(first.rewind().state == std::optional{player_state({1, 0})},
-           "rewinding the branch restores its actual predecessor");
-    expect(first.rewind().state == std::optional{player_state({0, 0})},
-           "repeated rewind reaches the initialized state");
-    expect(first.rewind().status == RewindStatus::history_empty,
-           "the abandoned later state is not retained as redo history");
+    EXPECT_EQ(first_rewind.state, std::optional{player_state({1, 0})});
+    EXPECT_EQ(first_rewind.events, std::vector<GameplayEvent>{StateRewoundEvent{}});
+    EXPECT_EQ(first_rewind.outcome, std::optional{Outcome::ongoing});
+    ASSERT_TRUE(first.move(Direction::west).accepted());
+    EXPECT_EQ(first.rewind().state, std::optional{player_state({1, 0})});
+    EXPECT_EQ(first.rewind().state, std::optional{player_state({0, 0})});
+    EXPECT_EQ(first.rewind().status, RewindStatus::history_empty);
 }
 
 } // namespace
-
-int main()
-{
-    walks_in_all_cardinal_directions();
-    honors_declared_axis_directions();
-    rejects_without_mutating_state_or_history();
-    walks_onto_compatible_stack_support();
-    validates_input_and_reports_unsupported_phase_boundaries();
-    preserves_rewind_and_deterministic_branching();
-
-    if (failures == 0) {
-        std::cout << "All flat-walking behavior checks passed.\n";
-    }
-    return failures == 0 ? 0 : 1;
-}

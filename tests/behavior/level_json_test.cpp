@@ -1,9 +1,11 @@
 #include "bomb_box/engine.hpp"
 #include "bomb_box/level_json.hpp"
+#include "support/bomb_box_printers.hpp"
+
+#include <gtest/gtest.h>
 
 #include <algorithm>
 #include <cstdint>
-#include <iostream>
 #include <limits>
 #include <string>
 #include <string_view>
@@ -11,16 +13,6 @@
 namespace {
 
 using namespace bomb_box;
-
-int failures = 0;
-
-void expect(const bool condition, const std::string_view message)
-{
-    if (!condition) {
-        std::cerr << "FAIL: " << message << '\n';
-        ++failures;
-    }
-}
 
 [[nodiscard]] LevelDefinition representative_level()
 {
@@ -67,163 +59,151 @@ void expect(const bool condition, const std::string_view message)
 )"} + std::string{extra_root} + "}";
 }
 
-void round_trip_is_exact_and_canonical()
+TEST(LevelJson, RoundTripIsExactAndCanonical)
 {
     const LevelDefinition source = representative_level();
     const EncodeLevelJsonResult encoded = encode_level_json(source);
-    expect(encoded.accepted(), "a valid level serializes");
-    if (!encoded.json.has_value()) {
-        return;
-    }
-    expect(encoded.json->find("\"18446744073709551615\"") != std::string::npos,
-           "a uint64 entity ID is a lossless decimal JSON string");
-    expect(encoded.json->back() == '\n', "canonical JSON ends in one newline");
+    ASSERT_TRUE(encoded.accepted());
+    ASSERT_TRUE(encoded.json.has_value());
+    EXPECT_NE(encoded.json->find("\"18446744073709551615\""), std::string::npos);
+    EXPECT_EQ(encoded.json->back(), '\n');
 
     const DecodeLevelJsonResult decoded = decode_level_json(*encoded.json);
-    expect(decoded.accepted(), "canonical JSON decodes");
-    expect(decoded.level == canonicalize_level(source), "round-trip preserves the complete level");
+    ASSERT_TRUE(decoded.accepted());
+    EXPECT_EQ(decoded.level, canonicalize_level(source));
 
-    if (decoded.level.has_value()) {
-        const EncodeLevelJsonResult reencoded = encode_level_json(*decoded.level);
-        expect(reencoded.json == encoded.json, "canonical serialization is byte-stable");
-    }
+    ASSERT_TRUE(decoded.level.has_value());
+    const EncodeLevelJsonResult reencoded = encode_level_json(*decoded.level);
+    EXPECT_EQ(reencoded.json, encoded.json);
 
     LevelDefinition reordered = source;
     std::reverse(reordered.cells.begin(), reordered.cells.end());
     std::reverse(reordered.fixtures.begin(), reordered.fixtures.end());
     std::reverse(reordered.entities.begin(), reordered.entities.end());
-    expect(encode_level_json(reordered).json == encoded.json,
-           "input array order cannot affect canonical serialized bytes");
+    EXPECT_EQ(encode_level_json(reordered).json, encoded.json);
 }
 
-void decoded_level_loads_through_the_existing_boundary()
+TEST(LevelJson, DecodedLevelLoadsThroughExistingBoundary)
 {
     const DecodeLevelJsonResult decoded = decode_level_json(minimal_json());
     Engine engine;
-    expect(decoded.level.has_value(), "the minimal document decodes");
-    if (decoded.level.has_value()) {
-        expect(engine.load_level(*decoded.level).accepted(), "decoded data loads through Engine");
-        expect(engine.loaded_level() == decoded.level, "Engine owns the decoded canonical definition");
-    }
+    ASSERT_TRUE(decoded.level.has_value());
+    EXPECT_TRUE(engine.load_level(*decoded.level).accepted());
+    EXPECT_EQ(engine.loaded_level(), decoded.level);
 }
 
-void format_errors_are_precise_and_non_accepting()
+TEST(LevelJson, RejectsMalformedJson)
 {
-    {
-        const DecodeLevelJsonResult result = decode_level_json("[");
-        expect(!result.accepted() && result.json_error.has_value()
-                   && result.json_error->code == LevelJsonErrorCode::invalid_json,
-               "malformed JSON is rejected as invalid_json");
-    }
-    {
-        const DecodeLevelJsonResult result = decode_level_json("[]");
-        expect(result.json_error.has_value()
-                   && result.json_error->code == LevelJsonErrorCode::root_not_object,
-               "the document root must be an object");
-    }
-    {
-        const std::string input = minimal_json(",\"widht\":1");
-        const DecodeLevelJsonResult result = decode_level_json(input);
-        expect(result.json_error.has_value()
-                   && result.json_error->code == LevelJsonErrorCode::unknown_member
-                   && result.json_error->path == "/widht",
-               "unknown fields are rejected with a JSON Pointer path");
-    }
-    {
-        const std::string input = minimal_json(",\"width\":1");
-        const DecodeLevelJsonResult result = decode_level_json(input);
-        expect(result.json_error.has_value()
-                   && result.json_error->code == LevelJsonErrorCode::duplicate_member
-                   && result.json_error->path == "/width",
-               "duplicate fields remain rejected after generic parsing");
-    }
-    {
-        std::string input = minimal_json();
-        const auto position = input.find("\"version\":1");
-        input.replace(position, std::string{"\"version\":1"}.size(), "\"version\":2");
-        const DecodeLevelJsonResult result = decode_level_json(input);
-        expect(result.json_error.has_value()
-                   && result.json_error->code == LevelJsonErrorCode::unsupported_version
-                   && result.json_error->path == "/version",
-               "newer format versions are never silently interpreted as version 1");
-    }
-    {
-        std::string input = minimal_json();
-        const auto position = input.find("\"id\":\"1\"");
-        input.replace(position, std::string{"\"id\":\"1\""}.size(), "\"id\":\"0\"");
-        const DecodeLevelJsonResult result = decode_level_json(input);
-        expect(result.json_error.has_value()
-                   && result.json_error->code == LevelJsonErrorCode::invalid_entity_id,
-               "entity ID zero is reserved and rejected by the wire format");
-    }
-    {
-        std::string input = minimal_json();
-        const auto position = input.find("\"id\":\"1\"");
-        input.replace(position, std::string{"\"id\":\"1\""}.size(), "\"id\":1");
-        const DecodeLevelJsonResult result = decode_level_json(input);
-        expect(result.json_error.has_value()
-                   && result.json_error->code == LevelJsonErrorCode::invalid_member_type
-                   && result.json_error->path == "/entities/0/id",
-               "entity IDs must use the browser-safe string representation");
-    }
-    {
-        std::string input = minimal_json();
-        const auto position = input.find("\"id\":\"1\"");
-        input.replace(position, std::string{"\"id\":\"1\""}.size(),
-                      "\"id\":\"18446744073709551616\"");
-        const DecodeLevelJsonResult result = decode_level_json(input);
-        expect(result.json_error.has_value()
-                   && result.json_error->code == LevelJsonErrorCode::invalid_entity_id,
-               "entity IDs outside uint64 are rejected");
-    }
-    {
-        const DecodeLevelJsonResult result = decode_level_json(
-            minimal_json(), LevelJsonReadOptions{8, 32});
-        expect(result.json_error.has_value()
-                   && result.json_error->code == LevelJsonErrorCode::document_too_large,
-               "callers can bound untrusted document size");
-    }
-    {
-        const DecodeLevelJsonResult result = decode_level_json(
-            minimal_json(), LevelJsonReadOptions{16U * 1024U * 1024U, 2});
-        expect(result.json_error.has_value()
-                   && result.json_error->code == LevelJsonErrorCode::nesting_too_deep,
-               "callers can bound nesting even though yyjson supports deeper documents");
-    }
+    const DecodeLevelJsonResult result = decode_level_json("[");
+    ASSERT_FALSE(result.accepted());
+    ASSERT_TRUE(result.json_error.has_value());
+    EXPECT_EQ(result.json_error->code, LevelJsonErrorCode::invalid_json);
 }
 
-void gameplay_validation_is_preserved()
+TEST(LevelJson, RequiresObjectRoot)
+{
+    const DecodeLevelJsonResult result = decode_level_json("[]");
+    ASSERT_TRUE(result.json_error.has_value());
+    EXPECT_EQ(result.json_error->code, LevelJsonErrorCode::root_not_object);
+}
+
+TEST(LevelJson, RejectsUnknownMembersWithPath)
+{
+    const DecodeLevelJsonResult result = decode_level_json(minimal_json(",\"widht\":1"));
+    ASSERT_TRUE(result.json_error.has_value());
+    EXPECT_EQ(result.json_error->code, LevelJsonErrorCode::unknown_member);
+    EXPECT_EQ(result.json_error->path, "/widht");
+}
+
+TEST(LevelJson, RejectsDuplicateMembersWithPath)
+{
+    const DecodeLevelJsonResult result = decode_level_json(minimal_json(",\"width\":1"));
+    ASSERT_TRUE(result.json_error.has_value());
+    EXPECT_EQ(result.json_error->code, LevelJsonErrorCode::duplicate_member);
+    EXPECT_EQ(result.json_error->path, "/width");
+}
+
+TEST(LevelJson, RejectsUnsupportedVersion)
+{
+    std::string input = minimal_json();
+    const auto position = input.find("\"version\":1");
+    input.replace(position, std::string{"\"version\":1"}.size(), "\"version\":2");
+    const DecodeLevelJsonResult result = decode_level_json(input);
+    ASSERT_TRUE(result.json_error.has_value());
+    EXPECT_EQ(result.json_error->code, LevelJsonErrorCode::unsupported_version);
+    EXPECT_EQ(result.json_error->path, "/version");
+}
+
+TEST(LevelJson, RejectsReservedEntityId)
+{
+    std::string input = minimal_json();
+    const auto position = input.find("\"id\":\"1\"");
+    input.replace(position, std::string{"\"id\":\"1\""}.size(), "\"id\":\"0\"");
+    const DecodeLevelJsonResult result = decode_level_json(input);
+    ASSERT_TRUE(result.json_error.has_value());
+    EXPECT_EQ(result.json_error->code, LevelJsonErrorCode::invalid_entity_id);
+}
+
+TEST(LevelJson, RequiresBrowserSafeEntityIdString)
+{
+    std::string input = minimal_json();
+    const auto position = input.find("\"id\":\"1\"");
+    input.replace(position, std::string{"\"id\":\"1\""}.size(), "\"id\":1");
+    const DecodeLevelJsonResult result = decode_level_json(input);
+    ASSERT_TRUE(result.json_error.has_value());
+    EXPECT_EQ(result.json_error->code, LevelJsonErrorCode::invalid_member_type);
+    EXPECT_EQ(result.json_error->path, "/entities/0/id");
+}
+
+TEST(LevelJson, RejectsEntityIdOutsideUint64)
+{
+    std::string input = minimal_json();
+    const auto position = input.find("\"id\":\"1\"");
+    input.replace(position,
+                  std::string{"\"id\":\"1\""}.size(),
+                  "\"id\":\"18446744073709551616\"");
+    const DecodeLevelJsonResult result = decode_level_json(input);
+    ASSERT_TRUE(result.json_error.has_value());
+    EXPECT_EQ(result.json_error->code, LevelJsonErrorCode::invalid_entity_id);
+}
+
+TEST(LevelJson, EnforcesDocumentSizeLimit)
+{
+    const DecodeLevelJsonResult result =
+        decode_level_json(minimal_json(), LevelJsonReadOptions{8, 32});
+    ASSERT_TRUE(result.json_error.has_value());
+    EXPECT_EQ(result.json_error->code, LevelJsonErrorCode::document_too_large);
+}
+
+TEST(LevelJson, EnforcesNestingLimit)
+{
+    const DecodeLevelJsonResult result =
+        decode_level_json(minimal_json(), LevelJsonReadOptions{16U * 1024U * 1024U, 2});
+    ASSERT_TRUE(result.json_error.has_value());
+    EXPECT_EQ(result.json_error->code, LevelJsonErrorCode::nesting_too_deep);
+}
+
+TEST(LevelJson, PreservesGameplayValidationBoundary)
 {
     std::string input = minimal_json();
     const auto position = input.find("\"type\":\"player\"");
-    input.replace(position, std::string{"\"type\":\"player\""}.size(), "\"type\":\"box\"");
+    input.replace(position,
+                  std::string{"\"type\":\"player\""}.size(),
+                  "\"type\":\"box\"");
     const DecodeLevelJsonResult decoded = decode_level_json(input);
-    expect(!decoded.accepted() && !decoded.json_error.has_value(),
-           "well-formed level JSON can fail gameplay-structure validation separately");
-    expect(std::any_of(decoded.validation_errors.begin(), decoded.validation_errors.end(),
-                       [](const ValidationError& error) {
-                           return error.code == ValidationErrorCode::player_count_not_one;
-                       }),
-           "decoder reports the shared validation error codes");
+    EXPECT_FALSE(decoded.accepted());
+    EXPECT_FALSE(decoded.json_error.has_value());
+    EXPECT_TRUE(std::any_of(decoded.validation_errors.begin(),
+                            decoded.validation_errors.end(),
+                            [](const ValidationError& error) {
+                                return error.code == ValidationErrorCode::player_count_not_one;
+                            }));
 
     LevelDefinition invalid = representative_level();
     invalid.entities.clear();
     const EncodeLevelJsonResult encoded = encode_level_json(invalid);
-    expect(!encoded.accepted() && !encoded.validation_errors.empty(),
-           "invalid in-memory definitions cannot be serialized as valid level documents");
+    EXPECT_FALSE(encoded.accepted());
+    EXPECT_FALSE(encoded.validation_errors.empty());
 }
 
 } // namespace
-
-int main()
-{
-    round_trip_is_exact_and_canonical();
-    decoded_level_loads_through_the_existing_boundary();
-    format_errors_are_precise_and_non_accepting();
-    gameplay_validation_is_preserved();
-
-    if (failures == 0) {
-        std::cout << "All level-JSON behavior checks passed.\n";
-    }
-    return failures == 0 ? 0 : 1;
-}
