@@ -136,6 +136,8 @@ std::string_view to_string(const MoveStatus status) noexcept
     case MoveStatus::world_boundary: return "world_boundary";
     case MoveStatus::ledge: return "ledge";
     case MoveStatus::occupied: return "occupied";
+    case MoveStatus::stacked_push_target: return "stacked_push_target";
+    case MoveStatus::unsupported_gravity: return "unsupported_gravity";
     case MoveStatus::unsupported_geometry: return "unsupported_geometry";
     case MoveStatus::unsupported_fixture: return "unsupported_fixture";
     case MoveStatus::level_terminal: return "level_terminal";
@@ -270,13 +272,19 @@ MoveResult Engine::move(const Direction direction)
         return rejected_move(MoveStatus::unsupported_fixture, direction, current);
     }
 
-    Height destination_support = Height::from_elevation(std::get<FlatCell>(destination_cell->geometry).elevation);
-    bool destination_occupied = false;
+    Height destination_support =
+        Height::from_elevation(std::get<FlatCell>(destination_cell->geometry).elevation);
+    std::size_t destination_entity_count = 0;
+    const Entity* push_target = nullptr;
     for (const Entity& entity : current.entities) {
         if (entity.coordinate != *destination) {
             continue;
         }
-        destination_occupied = true;
+        ++destination_entity_count;
+        if (entity.bottom == player->bottom
+            && (entity.kind == EntityKind::box || entity.kind == EntityKind::barrel)) {
+            push_target = &entity;
+        }
         const auto top_half_steps = static_cast<std::int64_t>(entity.bottom.half_steps) + 2;
         if (top_half_steps > destination_support.half_steps
             && top_half_steps <= std::numeric_limits<std::int32_t>::max()) {
@@ -284,8 +292,109 @@ MoveResult Engine::move(const Direction direction)
         }
     }
 
+    if (push_target != nullptr) {
+        if (destination_entity_count != 1) {
+            return rejected_move(MoveStatus::stacked_push_target, direction, current);
+        }
+
+        const std::optional<Coordinate> pushed_destination =
+            step(push_target->coordinate, direction, level_->coordinates);
+        if (!pushed_destination.has_value() || !in_bounds(*level_, *pushed_destination)) {
+            return rejected_move(MoveStatus::world_boundary, direction, current);
+        }
+
+        const Cell* const pushed_destination_cell = find_cell(*level_, *pushed_destination);
+        if (pushed_destination_cell == nullptr
+            || !std::holds_alternative<FlatCell>(pushed_destination_cell->geometry)) {
+            return rejected_move(MoveStatus::unsupported_geometry, direction, current);
+        }
+
+        const auto pushed_destination_fixture =
+            std::find_if(level_->fixtures.begin(), level_->fixtures.end(),
+                         [pushed_destination](const Fixture& value) {
+                             return value.coordinate == *pushed_destination;
+                         });
+        if (pushed_destination_fixture != level_->fixtures.end()) {
+            return rejected_move(MoveStatus::unsupported_fixture, direction, current);
+        }
+
+        const bool pushed_destination_occupied =
+            std::any_of(current.entities.begin(), current.entities.end(),
+                        [pushed_destination](const Entity& entity) {
+                            return entity.coordinate == *pushed_destination;
+                        });
+        if (pushed_destination_occupied) {
+            return rejected_move(MoveStatus::occupied, direction, current);
+        }
+
+        const Height pushed_destination_support = Height::from_elevation(
+            std::get<FlatCell>(pushed_destination_cell->geometry).elevation);
+        if (pushed_destination_support.half_steps < push_target->bottom.half_steps) {
+            return rejected_move(MoveStatus::unsupported_gravity, direction, current);
+        }
+        if (pushed_destination_support.half_steps > push_target->bottom.half_steps) {
+            return rejected_move(MoveStatus::ledge, direction, current);
+        }
+
+        const ResolvedState initial = current;
+        ResolvedState next = current;
+        const auto next_player = std::find_if(
+            next.entities.begin(), next.entities.end(), [player](const Entity& entity) {
+                return entity.id == player->id;
+            });
+        const auto next_pushed = std::find_if(
+            next.entities.begin(), next.entities.end(), [push_target](const Entity& entity) {
+                return entity.id == push_target->id;
+            });
+        next_player->coordinate = *destination;
+        next_pushed->coordinate = *pushed_destination;
+        std::sort(next.entities.begin(), next.entities.end(),
+                  [](const Entity& lhs, const Entity& rhs) {
+                      return std::tuple{lhs.coordinate.y, lhs.coordinate.x,
+                                        lhs.bottom.half_steps, lhs.id}
+                          < std::tuple{rhs.coordinate.y, rhs.coordinate.x,
+                                       rhs.bottom.half_steps, rhs.id};
+                  });
+
+        const EntityMovedEvent player_moved{
+            player->id,
+            player->coordinate,
+            *destination,
+            player->bottom,
+            player->bottom,
+            MovementCause::player,
+        };
+        const EntityMovedEvent entity_moved{
+            push_target->id,
+            push_target->coordinate,
+            *pushed_destination,
+            push_target->bottom,
+            push_target->bottom,
+            MovementCause::player,
+        };
+        const TickResult tick{
+            0,
+            {GameplayEvent{player_moved}, GameplayEvent{entity_moved}},
+            next,
+        };
+        if (!history_.commit(next)) {
+            return rejected_move(MoveStatus::no_level, direction, history_.current());
+        }
+
+        return MoveResult{
+            MoveStatus::moved,
+            direction,
+            {},
+            initial,
+            {tick},
+            history_.current(),
+            history_.current()->outcome,
+        };
+    }
+
     if (destination_support != player->bottom) {
-        const MoveStatus status = destination_occupied ? MoveStatus::occupied : MoveStatus::ledge;
+        const MoveStatus status =
+            destination_entity_count != 0 ? MoveStatus::occupied : MoveStatus::ledge;
         return rejected_move(status, direction, current);
     }
 

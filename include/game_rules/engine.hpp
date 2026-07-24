@@ -48,6 +48,8 @@ enum class MoveStatus : std::uint8_t {
     world_boundary,
     ledge,
     occupied,
+    stacked_push_target,
+    unsupported_gravity,
     unsupported_geometry,
     unsupported_fixture,
     level_terminal,

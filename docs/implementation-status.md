@@ -26,7 +26,7 @@ follow only after that loop works through WebAssembly.
 | 2. Resolved-state history and rewind | **Implemented** | Caller-owned resolved-state snapshots, engine-owned undo-only history, rewind results, initialized `history_empty` behavior, repeated rewind, branching after rewind, and atomic load-time history replacement are covered. |
 | 3. Flat walking and authoritative turn output | **Implemented** | Cardinal movement honors declared axes, walks one cell between compatible flat supports, returns complete tick/event/state/outcome results, rejects boundaries, ledges, blocking occupied destinations, malformed input, terminal states, and deferred geometry/fixtures explicitly, and preserves history only for accepted turns. |
 | 4. Stateful C ABI and browser vertical slice | **Implemented** | Opaque per-instance engines, versioned JSON loading, renderable snapshots, movement, complete tick/event results, rewind, caller-owned result memory, and a thin JavaScript ownership layer are exercised by one authored contract through native C and Node/WebAssembly. |
-| 5. Single-entity player pushes | **Not started** | Boxes and barrels exist in the schema, but player push behavior is not implemented. |
+| 5. Single-entity player pushes | **Implemented** | Atomic one-cell box and barrel pushes work in every cardinal direction across compatible flat supports, with unstacked-target enforcement, non-recursive destination checks, deterministic events, exact rewind, and native C/WebAssembly contract coverage. |
 | 6. Falling and crushing | **Not started** | Unsupported initial entities are structurally accepted but are not stabilized. |
 | 7. Fixtures and terminal outcomes | **Not started** | Fixture data is validated, but switches, effective door state, teleporters, and win/loss behavior are not resolved. |
 | 8. Ramps and sliding | **Not started** | Ramp geometry and endpoints are validated, but traversal and automatic sliding are not implemented. |
@@ -101,6 +101,12 @@ later rules rather than replaced after each phase.
   Semantic event payloads currently cover blocked movement, player movement,
   and rewind, and are structured so later phases can add events without asking
   a host to reconstruct state from them.
+- The movement planner recognizes an unstacked box or barrel intersecting the
+  player's movement height as a push target. It validates the target and next
+  cell from the immutable pre-tick state, then atomically commits both moves in
+  one tick. Push events are deterministically ordered player first and pushed
+  entity second. Stacked targets report `stacked_push_target`; lower supports
+  report `unsupported_gravity` until phase 6 can finish the accepted turn.
 - A valid load is canonicalized before replacing the current level. An invalid
   load returns stable validation errors and leaves the current level, resolved
   state, and history unchanged. A valid replacement installs a fresh initial
@@ -156,8 +162,8 @@ Most recently recorded on 2026-07-23:
 
 | Surface | Commands | Result |
 | --- | --- | --- |
-| Native debug | `cmake --preset native-debug`; `cmake --build --preset native-debug`; `ctest --preset native-debug --output-on-failure` | Passed: 33 of 33 tests: 25 behavior cases, 3 C ABI boundary cases, 2 focused unit cases, 1 cross-adapter contract runner, and 2 production consumer/header smokes. |
-| Native release | `cmake --preset native-release`; `cmake --build --preset native-release`; `ctest --preset native-release --output-on-failure` | Passed: 33 of 33 tests. |
+| Native debug | `cmake --preset native-debug`; `cmake --build --preset native-debug`; `ctest --preset native-debug --output-on-failure` | Passed: 40 of 40 tests: 32 behavior cases, 3 C ABI boundary cases, 2 focused unit cases, 1 cross-adapter contract runner, and 2 production consumer/header smokes. |
+| Native release | `cmake --preset native-release`; `cmake --build --preset native-release`; `ctest --preset native-release --output-on-failure` | Passed: 40 of 40 tests. |
 | WebAssembly debug | `cmake --preset wasm-debug`; `cmake --build --preset wasm-debug`; `ctest --preset wasm-debug --output-on-failure` | Passed: portable core and stateful adapter build; 1 of 1 Node tests ran the authored browser vertical-slice contract. |
 | Native sanitized | `cmake --preset native-sanitized`; `cmake --build --preset native-sanitized` | Configure and build passed with deferred GoogleTest discovery. Tests were not executed because `AGENTS.md` prohibits running the sanitizer preset inside the Codex workspace sandbox, where the runtime stalls at test startup and can leave CPU-consuming processes. CI now has an outside-sandbox sanitizer job. |
 | JSON Schema syntax | `jq empty docs/level-format.schema.json` | Passed. |
@@ -171,19 +177,20 @@ Most recently recorded on 2026-07-23:
   ticks, semantic events, or derived terminal outcomes. Its initial resolved
   state currently mirrors the canonical supplied entities with an `ongoing`
   outcome.
-- Movement currently resolves only player walking across compatible flat
-  support surfaces. Same-height occupied space is rejected as `occupied`
-  until phase 5 adds pushes. Ramp entry and fixture destinations are rejected
-  explicitly as `unsupported_geometry` and `unsupported_fixture` until their
-  rule phases are implemented.
+- Movement currently resolves player walking and single-entity pushes across
+  compatible flat support surfaces. A push over a lower support is rejected as
+  `unsupported_gravity` until phase 6 can add its required derived fall tick.
+  Ramp entry and fixture destinations are rejected explicitly as
+  `unsupported_geometry` and `unsupported_fixture` until their rule phases are
+  implemented.
 - Fixture, gravity, ramp, and explosion behavior is schema-only.
 - Sanitized tests must be run outside the Codex workspace sandbox; the runtime
   stalls at test startup inside it.
 
 ## Recommended next task
 
-Implement phase 5 single-entity player pushes next. Extend the existing
-authoritative move/tick/event model and the version-1 cross-adapter contract
-where the new behavior reaches the public boundary. Do not begin gravity,
-fixtures, ramps, or explosions before push legality and atomicity have complete
-specification-level coverage.
+Implement phase 6 falling and crushing next. Replace the current
+`unsupported_gravity` push boundary with the required derived fall tick, and
+stabilize initially unsupported entities during level loading. Cover column
+compaction, stacks, barrel arming, player fall loss, crushing, history, and
+level replacement before beginning fixtures, ramps, or explosions.

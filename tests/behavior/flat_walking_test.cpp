@@ -142,9 +142,11 @@ TEST(FlatWalking, RejectsWithoutMutatingStateOrHistory)
                                  Direction::east,
                                  player_state({1, 1}, Height::from_elevation(1))));
 
-    LevelDefinition occupied = grid_level();
+    LevelDefinition occupied = grid_level({0, 1});
     occupied.entities.push_back(
-        Entity{4, EntityKind::box, Coordinate{2, 1}, Height::from_elevation(0)});
+        Entity{4, EntityKind::box, Coordinate{1, 1}, Height::from_elevation(0)});
+    occupied.entities.push_back(
+        Entity{5, EntityKind::barrel, Coordinate{2, 1}, Height::from_elevation(0)});
     Engine occupied_engine;
     ASSERT_TRUE(occupied_engine.load_level(occupied).accepted());
     const MoveResult occupied_result = occupied_engine.move(Direction::east);

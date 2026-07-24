@@ -198,6 +198,10 @@ resolved state in a fresh history.
   theoretically move later in the same tick.
 - A push is atomic: either the pushed entity and player both move, or neither
   moves.
+- An accepted player-push tick emits the player's `EntityMoved` event first
+  and the pushed entity's `EntityMoved` event second. Both movements still
+  occur simultaneously from the same pre-tick state; event order is only a
+  deterministic output convention.
 - A box or barrel may be pushed horizontally onto a support surface at its
   current height or over a lower surface, after which it falls.
 - A box or barrel cannot be pushed into a higher solid surface.

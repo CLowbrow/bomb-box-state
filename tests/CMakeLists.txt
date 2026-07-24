@@ -49,6 +49,7 @@ game_rules_add_gtest(
     behavior/level_json_test.cpp
     behavior/resolved_state_history_test.cpp
     behavior/flat_walking_test.cpp
+    behavior/player_push_test.cpp
 )
 
 game_rules_add_gtest(

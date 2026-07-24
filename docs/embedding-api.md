@@ -57,7 +57,9 @@ errors include an ordered `errors` array with stable code and context fields.
 - the final `outcome`.
 
 Move status strings are the same stable strings as `MoveStatus`, including `moved`, `no_level`,
-`invalid_direction`, `world_boundary`, and the current phase-boundary rejections. `rewind` returns
+`invalid_direction`, `world_boundary`, `stacked_push_target`, and the current phase-boundary
+rejections such as `unsupported_gravity`. An accepted player push places the player's
+`entityMoved` event before the pushed box or barrel's event in the same tick. `rewind` returns
 `accepted`, semantic events, the complete restored state, and outcome with status `rewound` or
 `history_empty`.
 
