@@ -95,7 +95,7 @@ if (rewound.accepted()) {
 
 The current movement scope is flat and oriented ramp walking, atomic
 single-entity pushes including downhill ramp entry, derived falling and
-whole-stack sliding, single-source explosions, switches, doors, and exit
+whole-stack sliding, explosion waves and chains, switches, doors, and exit
 teleporters. A push emits the
 player's movement event followed by the box or barrel movement event in the
 same tick; fixture changes follow physical events. A push over a lower flat
@@ -110,10 +110,11 @@ ramp-slide planners before establishing the new history boundary. Its
 every initialization tick, the final authoritative state, and outcome.
 Initialization derives active switch colors and effectively open doors,
 recognizes an immediate teleporter win, and stabilizes gravity and ramp
-movement. One settled armed barrel detonates only after those movements finish;
-its blast tick may be followed by additional falls and slides. Barrels newly
-armed by that blast remain in the resolved state's canonical `armed_barrels`
-IDs until the later wave-and-chain phase is implemented.
+movement. All settled armed barrels ready for the same wave detonate only after those
+movements finish. A blast tick may be followed by additional falls and slides;
+barrels newly armed by that blast stay in the canonical `armed_barrels` IDs
+while they settle, then create a later chain wave before the next command
+boundary.
 
 ## Level JSON
 

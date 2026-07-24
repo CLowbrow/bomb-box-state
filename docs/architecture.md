@@ -94,18 +94,17 @@ center. Downhill pushes enter the ramp center atomically, then a separate immuta
 moves every unblocked ramp stack to its low endpoint, rejects shared-destination conflicts, and
 retries blocked stacks after later physical or fixture changes. Derived stabilization always runs
 gravity before sliding so entities falling onto a ramp settle and arm before the complete stack can
-slide in a later tick. The single-explosion planner removes one settled armed source from an
-immutable pre-blast state, targets adjacent flat and oriented ramp heights, applies legal one-cell
-blast pops, arms affected barrels, and reports direct player loss atomically. Gravity and sliding
-then settle consequences in later ticks. Simultaneously ready sources, later explosion waves, and
-chain scheduling remain a separate orchestration phase so entity IDs never choose a source order.
+slide in a later tick. The explosion-wave planner removes every settled armed source in a wave from one
+immutable pre-blast state, targets adjacent flat and oriented ramp heights, combines simultaneous
+blast impulses without ID-based priority, applies non-conflicting legal one-cell blast pops, arms
+affected barrels, and reports direct player loss atomically. Gravity and sliding then settle
+consequences before any newly armed barrels create a later chain wave.
 Loading runs initial fixture derivation followed by the same derived/post-tick path before installing
 the first history state and returns the supplied initial state, initialization ticks, stabilized or
 terminal state, and outcome. An accepted push commits the player and pushed entity together before
 any required fall tick; any failed source, target, or destination check leaves state and history
 unchanged. The primitive stateful C API and WebAssembly adapter carry that same
-create/load/input/state/rewind loop across the embedding boundary. Single-source blasts are
-integrated; simultaneous explosion waves and chains are the next movement-system extension.
+create/load/input/state/rewind loop across the embedding boundary. Explosion waves and chain reactions are integrated with the derived stabilization loop.
 
 `decode_level_json()` produces that same canonical `LevelDefinition` only after strict format and
 structural validation. JSON decoding is deliberately separate from `Engine::load_level()` so an

@@ -12,8 +12,7 @@
 namespace game_rules {
 namespace {
 
-[[nodiscard]] bool valid(const Direction direction) noexcept
-{
+[[nodiscard]] bool valid(const Direction direction) noexcept {
     switch (direction) {
     case Direction::north:
     case Direction::east:
@@ -24,22 +23,18 @@ namespace {
     return false;
 }
 
-void resolve_derived_ticks(const LevelDefinition& level,
-                           ResolvedState& state,
-                           std::vector<TickResult>& ticks)
-{
-    bool explosion_resolved = false;
+void resolve_derived_ticks(const LevelDefinition& level, ResolvedState& state,
+                           std::vector<TickResult>& ticks) {
     while (state.outcome == Outcome::ongoing) {
-        std::optional<TickResult> derived = detail::resolve_falling_tick(
-            level, state, static_cast<std::uint32_t>(ticks.size()));
+        std::optional<TickResult> derived =
+            detail::resolve_falling_tick(level, state, static_cast<std::uint32_t>(ticks.size()));
         if (!derived.has_value()) {
-            derived = detail::resolve_sliding_tick(
-                level, state, static_cast<std::uint32_t>(ticks.size()));
+            derived = detail::resolve_sliding_tick(level, state,
+                                                   static_cast<std::uint32_t>(ticks.size()));
         }
-        if (!derived.has_value() && !explosion_resolved) {
-            derived = detail::resolve_single_explosion_tick(
-                level, state, static_cast<std::uint32_t>(ticks.size()));
-            explosion_resolved = derived.has_value();
+        if (!derived.has_value()) {
+            derived = detail::resolve_explosion_wave_tick(level, state,
+                                                          static_cast<std::uint32_t>(ticks.size()));
         }
         if (!derived.has_value()) {
             break;
@@ -51,11 +46,9 @@ void resolve_derived_ticks(const LevelDefinition& level,
     }
 }
 
-[[nodiscard]] MoveResult rejected_move(const MoveStatus status,
-                                       const Direction direction,
+[[nodiscard]] MoveResult rejected_move(const MoveStatus status, const Direction direction,
                                        const std::optional<ResolvedState>& state,
-                                       const bool gameplay_rejection = true)
-{
+                                       const bool gameplay_rejection = true) {
     MoveResult result;
     result.status = status;
     result.direction = direction;
@@ -71,8 +64,7 @@ void resolve_derived_ticks(const LevelDefinition& level,
 
 } // namespace
 
-std::string_view to_string(const EngineStatus status) noexcept
-{
+std::string_view to_string(const EngineStatus status) noexcept {
     switch (status) {
     case EngineStatus::schema_ready:
         return "schema_ready";
@@ -81,13 +73,9 @@ std::string_view to_string(const EngineStatus status) noexcept
     return "unknown";
 }
 
-EngineStatus Engine::status() const noexcept
-{
-    return EngineStatus::schema_ready;
-}
+EngineStatus Engine::status() const noexcept { return EngineStatus::schema_ready; }
 
-std::string_view to_string(const LoadStatus status) noexcept
-{
+std::string_view to_string(const LoadStatus status) noexcept {
     switch (status) {
     case LoadStatus::loaded:
         return "loaded";
@@ -97,8 +85,7 @@ std::string_view to_string(const LoadStatus status) noexcept
     return "unknown";
 }
 
-std::string_view to_string(const RewindStatus status) noexcept
-{
+std::string_view to_string(const RewindStatus status) noexcept {
     switch (status) {
     case RewindStatus::rewound:
         return "rewound";
@@ -108,58 +95,62 @@ std::string_view to_string(const RewindStatus status) noexcept
     return "unknown";
 }
 
-std::string_view to_string(const MoveStatus status) noexcept
-{
+std::string_view to_string(const MoveStatus status) noexcept {
     switch (status) {
-    case MoveStatus::moved: return "moved";
-    case MoveStatus::no_level: return "no_level";
-    case MoveStatus::invalid_direction: return "invalid_direction";
-    case MoveStatus::world_boundary: return "world_boundary";
-    case MoveStatus::ledge: return "ledge";
-    case MoveStatus::occupied: return "occupied";
-    case MoveStatus::stacked_push_target: return "stacked_push_target";
-    case MoveStatus::closed_door: return "closed_door";
-    case MoveStatus::teleporter_restriction: return "teleporter_restriction";
-    case MoveStatus::unsupported_geometry: return "unsupported_geometry";
-    case MoveStatus::level_terminal: return "level_terminal";
+    case MoveStatus::moved:
+        return "moved";
+    case MoveStatus::no_level:
+        return "no_level";
+    case MoveStatus::invalid_direction:
+        return "invalid_direction";
+    case MoveStatus::world_boundary:
+        return "world_boundary";
+    case MoveStatus::ledge:
+        return "ledge";
+    case MoveStatus::occupied:
+        return "occupied";
+    case MoveStatus::stacked_push_target:
+        return "stacked_push_target";
+    case MoveStatus::closed_door:
+        return "closed_door";
+    case MoveStatus::teleporter_restriction:
+        return "teleporter_restriction";
+    case MoveStatus::unsupported_geometry:
+        return "unsupported_geometry";
+    case MoveStatus::level_terminal:
+        return "level_terminal";
     }
     return "unknown";
 }
 
-std::string_view to_string(const MovementCause cause) noexcept
-{
+std::string_view to_string(const MovementCause cause) noexcept {
     switch (cause) {
-    case MovementCause::player: return "player";
-    case MovementCause::blast: return "blast";
-    case MovementCause::fall: return "fall";
-    case MovementCause::slide: return "slide";
+    case MovementCause::player:
+        return "player";
+    case MovementCause::blast:
+        return "blast";
+    case MovementCause::fall:
+        return "fall";
+    case MovementCause::slide:
+        return "slide";
     }
     return "unknown";
 }
 
-bool detail::ResolvedStateHistory::has_current() const noexcept
-{
-    return current_.has_value();
-}
+bool detail::ResolvedStateHistory::has_current() const noexcept { return current_.has_value(); }
 
-const std::optional<ResolvedState>& detail::ResolvedStateHistory::current() const noexcept
-{
+const std::optional<ResolvedState>& detail::ResolvedStateHistory::current() const noexcept {
     return current_;
 }
 
-std::size_t detail::ResolvedStateHistory::earlier_count() const noexcept
-{
-    return earlier_.size();
-}
+std::size_t detail::ResolvedStateHistory::earlier_count() const noexcept { return earlier_.size(); }
 
-void detail::ResolvedStateHistory::reset(ResolvedState initial_state)
-{
+void detail::ResolvedStateHistory::reset(ResolvedState initial_state) {
     current_ = std::move(initial_state);
     earlier_.clear();
 }
 
-bool detail::ResolvedStateHistory::commit(ResolvedState next_state)
-{
+bool detail::ResolvedStateHistory::commit(ResolvedState next_state) {
     if (!current_.has_value()) {
         return false;
     }
@@ -169,8 +160,7 @@ bool detail::ResolvedStateHistory::commit(ResolvedState next_state)
     return true;
 }
 
-bool detail::ResolvedStateHistory::rewind()
-{
+bool detail::ResolvedStateHistory::rewind() {
     if (earlier_.empty()) {
         return false;
     }
@@ -180,23 +170,13 @@ bool detail::ResolvedStateHistory::rewind()
     return true;
 }
 
-bool Engine::has_level() const noexcept
-{
-    return level_.has_value();
-}
+bool Engine::has_level() const noexcept { return level_.has_value(); }
 
-std::optional<LevelDefinition> Engine::loaded_level() const
-{
-    return level_;
-}
+std::optional<LevelDefinition> Engine::loaded_level() const { return level_; }
 
-std::optional<ResolvedState> Engine::resolved_state() const
-{
-    return history_.current();
-}
+std::optional<ResolvedState> Engine::resolved_state() const { return history_.current(); }
 
-LoadResult Engine::load_level(const LevelDefinition& level)
-{
+LoadResult Engine::load_level(const LevelDefinition& level) {
     ValidationResult validation = validate_level(level);
     if (!validation.valid()) {
         return LoadResult{LoadStatus::invalid_level, std::move(validation.errors)};
@@ -219,17 +199,12 @@ LoadResult Engine::load_level(const LevelDefinition& level)
     level_ = std::move(replacement);
     history_ = std::move(replacement_history);
     return LoadResult{
-        LoadStatus::loaded,
-        {},
-        initial,
-        std::move(ticks),
-        history_.current(),
+        LoadStatus::loaded,          {}, initial, std::move(ticks), history_.current(),
         history_.current()->outcome,
     };
 }
 
-MoveResult Engine::move(const Direction direction)
-{
+MoveResult Engine::move(const Direction direction) {
     if (!valid(direction)) {
         return rejected_move(MoveStatus::invalid_direction, direction, history_.current(), false);
     }
@@ -243,8 +218,7 @@ MoveResult Engine::move(const Direction direction)
     }
 
     const ResolvedState initial = current;
-    detail::PlayerMovementPlan movement =
-        detail::plan_player_movement(*level_, current, direction);
+    detail::PlayerMovementPlan movement = detail::plan_player_movement(*level_, current, direction);
     if (!movement.accepted()) {
         return rejected_move(movement.status, direction, current);
     }
@@ -259,18 +233,12 @@ MoveResult Engine::move(const Direction direction)
     }
 
     return MoveResult{
-        MoveStatus::moved,
-        direction,
-        {},
-        initial,
-        std::move(ticks),
-        history_.current(),
+        MoveStatus::moved,           direction, {}, initial, std::move(ticks), history_.current(),
         history_.current()->outcome,
     };
 }
 
-RewindResult Engine::rewind()
-{
+RewindResult Engine::rewind() {
     const bool accepted = history_.rewind();
     std::vector<GameplayEvent> events;
     if (accepted) {

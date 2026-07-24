@@ -9,8 +9,7 @@ namespace {
 
 using namespace game_rules;
 
-TEST(SingleExplosionPlanner, DoesNotChooseBetweenSimultaneouslyReadySources)
-{
+TEST(ExplosionWavePlanner, ResolvesSimultaneouslyReadySourcesDeterministically) {
     LevelDefinition level;
     level.width = 3;
     level.height = 1;
@@ -29,12 +28,20 @@ TEST(SingleExplosionPlanner, DoesNotChooseBetweenSimultaneouslyReadySources)
         {4, 8},
     };
 
-    EXPECT_FALSE(detail::resolve_single_explosion_tick(level, state, 0).has_value());
+    const auto wave = detail::resolve_explosion_wave_tick(level, state, 0);
+    ASSERT_TRUE(wave.has_value());
+    EXPECT_EQ(wave->events, (std::vector<GameplayEvent>{
+                                BarrelExplodedEvent{8, {0, 0}, Height{0}},
+                                BarrelExplodedEvent{4, {2, 0}, Height{0}},
+                            }));
+    EXPECT_TRUE(wave->state_after.armed_barrels.empty());
 
     ResolvedState reversed = state;
     std::reverse(reversed.entities.begin(), reversed.entities.end());
     std::reverse(reversed.armed_barrels.begin(), reversed.armed_barrels.end());
-    EXPECT_FALSE(detail::resolve_single_explosion_tick(level, reversed, 0).has_value());
+    const auto reversed_wave = detail::resolve_explosion_wave_tick(level, reversed, 0);
+    ASSERT_TRUE(reversed_wave.has_value());
+    EXPECT_EQ(*reversed_wave, *wave);
 }
 
 } // namespace
