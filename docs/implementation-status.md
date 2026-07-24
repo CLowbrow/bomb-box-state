@@ -24,7 +24,7 @@ follow only after that loop works through WebAssembly.
 | --- | --- | --- |
 | 1. World schema and level lifetime | **Implemented** | Typed coordinates, explicit axis conventions, flat and ramp cells, fixtures, stable entity IDs, half-step heights, stacks, structural validation, deterministic canonical storage and JSON, owned snapshots, and atomic valid/invalid level replacement. |
 | 2. Resolved-state history and rewind | **Implemented** | Caller-owned resolved-state snapshots, engine-owned undo-only history, rewind results, initialized `history_empty` behavior, repeated rewind, branching after rewind, and atomic load-time history replacement are covered. |
-| 3. Flat walking and authoritative turn output | **Not started** | No gameplay movement command API, flat-cell walking rules, or public movement result exists yet. |
+| 3. Flat walking and authoritative turn output | **Implemented** | Cardinal movement honors declared axes, walks one cell between compatible flat supports, returns complete tick/event/state/outcome results, rejects boundaries, ledges, blocking occupied destinations, malformed input, terminal states, and deferred geometry/fixtures explicitly, and preserves history only for accepted turns. |
 | 4. Stateful C ABI and browser vertical slice | **Not started** | The C ABI and WebAssembly module cannot yet create an engine, load a level, submit movement or rewind, or publish host-readable state and turn results. |
 | 5. Single-entity player pushes | **Not started** | Boxes and barrels exist in the schema, but player push behavior is not implemented. |
 | 6. Falling and crushing | **Not started** | Unsupported initial entities are structurally accepted but are not stabilized. |
@@ -86,14 +86,20 @@ later rules rather than replaced after each phase.
   `has_level()`, and caller-owned `loaded_level()` snapshots. It also defines
   the dynamic `ResolvedState`, caller-owned `resolved_state()` snapshots, and
   `rewind()` results with stable `rewound` and `history_empty` status strings.
+- `Engine::move()` accepts cardinal input and returns `MoveResult` with a
+  stable status, attempted direction, rejection events, initial state,
+  zero-based ordered tick results, final authoritative state, and outcome.
+  Semantic event payloads currently cover blocked movement, player movement,
+  and rewind, and are structured so later phases can add events without asking
+  a host to reconstruct state from them.
 - A valid load is canonicalized before replacing the current level. An invalid
   load returns stable validation errors and leaves the current level, resolved
   state, and history unchanged. A valid replacement installs a fresh initial
   state and makes all earlier level history unreachable.
-- Resolved-state history is held by the engine as an undo-only stack. The
-  internal transition mechanism preserves exact states, supports repeated
-  rewind and branching without redo storage, and is ready for accepted
-  movement turns to commit states in phase 3.
+- Resolved-state history is held by the engine as an undo-only stack. Accepted
+  flat walks preserve their exact predecessor; rejected moves do not enter
+  history. Repeated rewind and branching discard abandoned later states without
+  redo storage.
 - The C ABI currently exposes only its API version and `schema_ready` status.
   A stateful primitive C boundary remains future work.
 
@@ -112,10 +118,10 @@ Most recently recorded on 2026-07-23:
 
 | Surface | Commands | Result |
 | --- | --- | --- |
-| Native debug | `cmake --preset native-debug`; `cmake --build --preset native-debug`; `ctest --preset native-debug --output-on-failure` | Passed: 4 of 4 tests, including the resolved-state history behavior suite. |
-| Native release | `cmake --preset native-release`; `cmake --build --preset native-release`; `ctest --preset native-release --output-on-failure` | Passed: 4 of 4 tests. |
-| WebAssembly debug | `cmake --build --preset wasm-debug`; `ctest --preset wasm-debug --output-on-failure` | Passed: portable core and adapter build; 1 of 1 Node smoke test. The existing preset was already configured with Emscripten. |
-| Native sanitized | `cmake --preset native-sanitized`; `cmake --build --preset native-sanitized` | Configure and build passed. Test execution was stopped at startup because the sanitizer runtime is known to stall in the Codex workspace sandbox and leave CPU-consuming processes; `AGENTS.md` now prohibits running this preset's tests inside that sandbox. |
+| Native debug | `cmake --preset native-debug`; `cmake --build --preset native-debug`; `ctest --preset native-debug --output-on-failure` | Passed: 5 of 5 tests, including the complete flat-walking turn, rejection, determinism, rewind, and branching scenarios. |
+| Native release | `cmake --preset native-release`; `cmake --build --preset native-release`; `ctest --preset native-release --output-on-failure` | Passed: 5 of 5 tests. |
+| WebAssembly debug | `cmake --build --preset wasm-debug`; `ctest --preset wasm-debug --output-on-failure` | Passed: portable core and adapter build; 1 of 1 Node smoke test. The existing preset was already configured with Emscripten; linking required access to its Homebrew compiler cache outside the workspace sandbox. |
+| Native sanitized | `cmake --preset native-sanitized`; `cmake --build --preset native-sanitized` | Configure and build passed with the phase-3 movement suite. Tests were not executed because `AGENTS.md` prohibits running the sanitizer preset inside the Codex workspace sandbox, where the runtime stalls at process startup and can leave CPU-consuming processes. |
 | JSON Schema syntax | `jq empty docs/level-format.schema.json` | Passed. |
 | Vendored yyjson | `shasum -a 256 vendor/yyjson/yyjson.c vendor/yyjson/yyjson.h vendor/yyjson/LICENSE`; global-symbol inspection with `nm` | All files match the recorded 0.12.0 import checksums. Only the two Bomb Box-prefixed bridge symbols are global; no upstream `yyjson_*` implementation symbol is exported. |
 | Install package | `cmake --install out/build/native-debug --prefix <temporary-directory>` | Passed. The static archive is self-contained and the package includes the yyjson MIT license, third-party notice, and provenance README. |
@@ -127,10 +133,11 @@ Most recently recorded on 2026-07-23:
   ticks, semantic events, or derived terminal outcomes. Its initial resolved
   state currently mirrors the canonical supplied entities with an `ongoing`
   outcome.
-- There is no movement command API or turn/tick orchestration. Consequently,
-  accepted-turn history entries use the same internal mechanism verified by
-  the phase-two behavior suite but cannot yet be produced through a public
-  movement command.
+- Movement currently resolves only player walking across compatible flat
+  support surfaces. Same-height occupied space is rejected as `occupied`
+  until phase 5 adds pushes. Ramp entry and fixture destinations are rejected
+  explicitly as `unsupported_geometry` and `unsupported_fixture` until their
+  rule phases are implemented.
 - Fixture, gravity, ramp, and explosion behavior is schema-only.
 - The stateful C ABI and cross-adapter behavior corpus remain unimplemented.
 - The level JSON codec is C++-only today; the C ABI and WebAssembly adapter do
@@ -140,12 +147,12 @@ Most recently recorded on 2026-07-23:
 
 ## Recommended next task
 
-Implement phase 3 without pulling later physics into the first vertical slice:
-add the public cardinal movement command and result types, then implement
-one-cell walking on simple flat-cell levels. Return a complete authoritative
-result for accepted movement and explicit rejection information otherwise.
-Add specification-level scenarios for all four directions, applicable blocked
-movement and invalid-input cases, deterministic complete state/event output,
-history preservation only for accepted turns, repeated rewind, and branching
-with a new move after rewind. Once that passes natively, phase 4 is the next
-priority; do not begin pushes, gravity, fixtures, ramps, or explosions first.
+Implement phase 4 as the next browser-facing vertical slice. Add opaque engine
+creation and destruction, JSON level loading, movement, rewind, and
+caller-owned state/result access to the primitive C ABI. Wrap those operations
+in a thin WebAssembly ES module and add an automated Node scenario that loads a
+simple flat world, reads renderable cells and entities, moves the player,
+observes the authoritative tick and final state, rewinds, and destroys the
+engine. Extend the phase-3 result types across the boundary rather than
+inventing a parallel rules model; do not begin pushes, gravity, fixtures,
+ramps, or explosions first.

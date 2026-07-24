@@ -553,6 +553,8 @@ new history even when initialization immediately produces a terminal state.
   handling stops it. Rewind and level loading are not turns.
 - A **tick** contains effects that happen simultaneously from one pre-tick
   state.
+- Tick indices in command results are zero-based and contiguous within the
+  turn. They are presentation identifiers, not additional state boundaries.
 - Sequentially dependent effects must occur in different ticks.
 - Multiple independent effects may occur in the same tick.
 - The world is **stable** when no fall, slide, explosion, chain reaction, door
@@ -603,6 +605,8 @@ or other feedback.
   `level_terminal`. Rewind remains eligible.
 - A malformed movement direction is an API validation error rather than a
   gameplay rejection.
+- A movement request before any level has loaded is rejected as `no_level`,
+  has no authoritative state or outcome, and creates no tick or history entry.
 
 ### Rewind commands
 

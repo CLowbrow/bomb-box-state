@@ -1,8 +1,94 @@
 #include "bomb_box/engine.hpp"
 
+#include <algorithm>
+#include <cstdint>
+#include <limits>
+#include <tuple>
 #include <utility>
 
 namespace bomb_box {
+namespace {
+
+[[nodiscard]] bool valid(const Direction direction) noexcept
+{
+    switch (direction) {
+    case Direction::north:
+    case Direction::east:
+    case Direction::south:
+    case Direction::west:
+        return true;
+    }
+    return false;
+}
+
+[[nodiscard]] std::optional<Coordinate> step(const Coordinate coordinate,
+                                             const Direction direction,
+                                             const CoordinateSystem& system) noexcept
+{
+    std::int32_t dx = 0;
+    std::int32_t dy = 0;
+    switch (direction) {
+    case Direction::north:
+        dy = system.positive_y == VerticalAxisDirection::north ? 1 : -1;
+        break;
+    case Direction::east:
+        dx = system.positive_x == HorizontalAxisDirection::east ? 1 : -1;
+        break;
+    case Direction::south:
+        dy = system.positive_y == VerticalAxisDirection::south ? 1 : -1;
+        break;
+    case Direction::west:
+        dx = system.positive_x == HorizontalAxisDirection::west ? 1 : -1;
+        break;
+    }
+
+    const auto x = static_cast<std::int64_t>(coordinate.x) + dx;
+    const auto y = static_cast<std::int64_t>(coordinate.y) + dy;
+    if (x < std::numeric_limits<std::int32_t>::min()
+        || x > std::numeric_limits<std::int32_t>::max()
+        || y < std::numeric_limits<std::int32_t>::min()
+        || y > std::numeric_limits<std::int32_t>::max()) {
+        return std::nullopt;
+    }
+    return Coordinate{static_cast<std::int32_t>(x), static_cast<std::int32_t>(y)};
+}
+
+[[nodiscard]] bool in_bounds(const LevelDefinition& level, const Coordinate coordinate) noexcept
+{
+    const auto offset_x = static_cast<std::int64_t>(coordinate.x) - level.coordinates.origin.x;
+    const auto offset_y = static_cast<std::int64_t>(coordinate.y) - level.coordinates.origin.y;
+    return offset_x >= 0 && offset_y >= 0
+        && offset_x < static_cast<std::int64_t>(level.width)
+        && offset_y < static_cast<std::int64_t>(level.height);
+}
+
+[[nodiscard]] const Cell* find_cell(const LevelDefinition& level, const Coordinate coordinate) noexcept
+{
+    const auto cell = std::find_if(level.cells.begin(), level.cells.end(), [coordinate](const Cell& value) {
+        return value.coordinate == coordinate;
+    });
+    return cell == level.cells.end() ? nullptr : &*cell;
+}
+
+[[nodiscard]] MoveResult rejected_move(const MoveStatus status,
+                                       const Direction direction,
+                                       const std::optional<ResolvedState>& state,
+                                       const bool gameplay_rejection = true)
+{
+    MoveResult result;
+    result.status = status;
+    result.direction = direction;
+    if (gameplay_rejection) {
+        result.events.emplace_back(MoveBlockedEvent{direction, status});
+    }
+    result.final_state = state;
+    if (state.has_value()) {
+        result.outcome = state->outcome;
+    }
+    return result;
+}
+
+} // namespace
 
 std::string_view to_string(const EngineStatus status) noexcept
 {
@@ -37,6 +123,33 @@ std::string_view to_string(const RewindStatus status) noexcept
         return "rewound";
     case RewindStatus::history_empty:
         return "history_empty";
+    }
+    return "unknown";
+}
+
+std::string_view to_string(const MoveStatus status) noexcept
+{
+    switch (status) {
+    case MoveStatus::moved: return "moved";
+    case MoveStatus::no_level: return "no_level";
+    case MoveStatus::invalid_direction: return "invalid_direction";
+    case MoveStatus::world_boundary: return "world_boundary";
+    case MoveStatus::ledge: return "ledge";
+    case MoveStatus::occupied: return "occupied";
+    case MoveStatus::unsupported_geometry: return "unsupported_geometry";
+    case MoveStatus::unsupported_fixture: return "unsupported_fixture";
+    case MoveStatus::level_terminal: return "level_terminal";
+    }
+    return "unknown";
+}
+
+std::string_view to_string(const MovementCause cause) noexcept
+{
+    switch (cause) {
+    case MovementCause::player: return "player";
+    case MovementCause::blast: return "blast";
+    case MovementCause::fall: return "fall";
+    case MovementCause::slide: return "slide";
     }
     return "unknown";
 }
@@ -115,12 +228,114 @@ LoadResult Engine::load_level(const LevelDefinition& level)
     return LoadResult{LoadStatus::loaded, {}};
 }
 
+MoveResult Engine::move(const Direction direction)
+{
+    if (!valid(direction)) {
+        return rejected_move(MoveStatus::invalid_direction, direction, history_.current(), false);
+    }
+    if (!level_.has_value() || !history_.current().has_value()) {
+        return rejected_move(MoveStatus::no_level, direction, std::nullopt);
+    }
+
+    const ResolvedState& current = *history_.current();
+    if (current.outcome != Outcome::ongoing) {
+        return rejected_move(MoveStatus::level_terminal, direction, current);
+    }
+
+    const auto player = std::find_if(current.entities.begin(), current.entities.end(), [](const Entity& entity) {
+        return entity.kind == EntityKind::player;
+    });
+    if (player == current.entities.end()) {
+        return rejected_move(MoveStatus::no_level, direction, current);
+    }
+
+    const std::optional<Coordinate> destination = step(player->coordinate, direction, level_->coordinates);
+    if (!destination.has_value() || !in_bounds(*level_, *destination)) {
+        return rejected_move(MoveStatus::world_boundary, direction, current);
+    }
+
+    const Cell* const source_cell = find_cell(*level_, player->coordinate);
+    const Cell* const destination_cell = find_cell(*level_, *destination);
+    if (source_cell == nullptr || destination_cell == nullptr
+        || !std::holds_alternative<FlatCell>(source_cell->geometry)
+        || !std::holds_alternative<FlatCell>(destination_cell->geometry)) {
+        return rejected_move(MoveStatus::unsupported_geometry, direction, current);
+    }
+
+    const auto fixture = std::find_if(level_->fixtures.begin(), level_->fixtures.end(),
+                                      [destination](const Fixture& value) {
+                                          return value.coordinate == *destination;
+                                      });
+    if (fixture != level_->fixtures.end()) {
+        return rejected_move(MoveStatus::unsupported_fixture, direction, current);
+    }
+
+    Height destination_support = Height::from_elevation(std::get<FlatCell>(destination_cell->geometry).elevation);
+    bool destination_occupied = false;
+    for (const Entity& entity : current.entities) {
+        if (entity.coordinate != *destination) {
+            continue;
+        }
+        destination_occupied = true;
+        const auto top_half_steps = static_cast<std::int64_t>(entity.bottom.half_steps) + 2;
+        if (top_half_steps > destination_support.half_steps
+            && top_half_steps <= std::numeric_limits<std::int32_t>::max()) {
+            destination_support.half_steps = static_cast<std::int32_t>(top_half_steps);
+        }
+    }
+
+    if (destination_support != player->bottom) {
+        const MoveStatus status = destination_occupied ? MoveStatus::occupied : MoveStatus::ledge;
+        return rejected_move(status, direction, current);
+    }
+
+    ResolvedState next = current;
+    const auto next_player = std::find_if(next.entities.begin(), next.entities.end(), [player](const Entity& entity) {
+        return entity.id == player->id;
+    });
+    next_player->coordinate = *destination;
+    std::sort(next.entities.begin(), next.entities.end(), [](const Entity& lhs, const Entity& rhs) {
+        return std::tuple{lhs.coordinate.y, lhs.coordinate.x, lhs.bottom.half_steps, lhs.id}
+            < std::tuple{rhs.coordinate.y, rhs.coordinate.x, rhs.bottom.half_steps, rhs.id};
+    });
+
+    const EntityMovedEvent moved{
+        player->id,
+        player->coordinate,
+        *destination,
+        player->bottom,
+        player->bottom,
+        MovementCause::player,
+    };
+    const ResolvedState initial = current;
+    const TickResult tick{0, {GameplayEvent{moved}}, next};
+    if (!history_.commit(next)) {
+        return rejected_move(MoveStatus::no_level, direction, history_.current());
+    }
+
+    return MoveResult{
+        MoveStatus::moved,
+        direction,
+        {},
+        initial,
+        {tick},
+        history_.current(),
+        history_.current()->outcome,
+    };
+}
+
 RewindResult Engine::rewind()
 {
     const bool accepted = history_.rewind();
+    std::vector<GameplayEvent> events;
+    if (accepted) {
+        events.emplace_back(StateRewoundEvent{});
+    }
     return RewindResult{
         accepted ? RewindStatus::rewound : RewindStatus::history_empty,
         history_.current(),
+        std::move(events),
+        history_.current().has_value() ? std::optional{history_.current()->outcome} : std::nullopt,
     };
 }
 

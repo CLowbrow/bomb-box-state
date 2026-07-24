@@ -41,3 +41,14 @@ bomb_box_set_runtime_options(bomb_box_history_tests)
 
 add_test(NAME bomb_box.behavior.resolved_state_history COMMAND bomb_box_history_tests)
 set_tests_properties(bomb_box.behavior.resolved_state_history PROPERTIES LABELS "behavior;native;history")
+
+add_executable(bomb_box_flat_walking_tests behavior/flat_walking_test.cpp)
+target_link_libraries(bomb_box_flat_walking_tests PRIVATE BombBox::State)
+target_compile_features(bomb_box_flat_walking_tests PRIVATE cxx_std_20)
+set_target_properties(bomb_box_flat_walking_tests PROPERTIES CXX_EXTENSIONS OFF)
+
+bomb_box_set_project_warnings(bomb_box_flat_walking_tests)
+bomb_box_set_runtime_options(bomb_box_flat_walking_tests)
+
+add_test(NAME bomb_box.behavior.flat_walking COMMAND bomb_box_flat_walking_tests)
+set_tests_properties(bomb_box.behavior.flat_walking PROPERTIES LABELS "behavior;native;movement;history")

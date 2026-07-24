@@ -52,6 +52,8 @@ void initialized_engine_boundary()
     expect(before_load.status == RewindStatus::history_empty,
            "rewind before load uses the history_empty reason");
     expect(!before_load.state.has_value(), "rewind before load has no state to return");
+    expect(before_load.events.empty() && !before_load.outcome.has_value(),
+           "rewind before load has no presentation event or invented outcome");
 
     const LevelDefinition level = flat_level();
     expect(engine.load_level(level).accepted(), "a valid level establishes an initialized state");
@@ -70,6 +72,8 @@ void initialized_engine_boundary()
     expect(empty.status == RewindStatus::history_empty,
            "the initialized boundary reports history_empty");
     expect(empty.state == std::optional{expected}, "a rejected rewind returns the unchanged current state");
+    expect(empty.events.empty() && empty.outcome == std::optional{Outcome::ongoing},
+           "a rejected rewind returns the current outcome without a success event");
     expect(to_string(empty.status) == "history_empty", "rewind rejection has a stable string code");
     expect(to_string(RewindStatus::rewound) == "rewound", "rewind success has a stable string code");
 }

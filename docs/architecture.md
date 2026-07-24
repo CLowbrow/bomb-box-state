@@ -53,10 +53,12 @@ The current `Engine` owns a canonical, validated `LevelDefinition`, the current 
 `ResolvedState`, and an undo-only stack of earlier resolved states. Loading validates and prepares a
 candidate before replacing the prior definition and resetting history. Snapshots are returned by
 value so callers cannot retain a mutable view into engine-owned storage. History transitions are an
-internal orchestration mechanism rather than a host state-injection API. Flat walking and its
-authoritative output are the next native layer; the primitive stateful C API and WebAssembly
-adapter immediately follow so the create/load/input/state loop is exercised before advanced
-physics. Initialization physics and the remaining movement systems are introduced afterward.
+internal orchestration mechanism rather than a host state-injection API. Flat walking commits from
+an immutable command-boundary snapshot and returns the initial state, zero-based ordered ticks with
+semantic events and per-tick states, the final authoritative state, and outcome. Rejections return
+the unchanged state without entering history. The primitive stateful C API and WebAssembly adapter
+are the next layer so the same create/load/input/state loop is exercised before advanced physics.
+Initialization physics and the remaining movement systems are introduced afterward.
 
 `decode_level_json()` produces that same canonical `LevelDefinition` only after strict format and
 structural validation. JSON decoding is deliberately separate from `Engine::load_level()` so an

@@ -23,6 +23,32 @@ Build artifacts stay under `out/` and are ignored by Git.
 See the [implementation status](implementation-status.md) for current feature coverage, verification
 results, and known toolchain limitations.
 
+## Native gameplay loop
+
+`bomb_box::Engine` accepts cardinal movement after a valid level load. An
+accepted `MoveResult` contains the complete initial state, ordered tick events
+and states, final state, and outcome. A rejected result contains a stable
+`MoveStatus`, a presentation-only `MoveBlockedEvent` for gameplay rejections,
+and the unchanged authoritative state when one exists.
+
+```cpp
+const bomb_box::MoveResult moved = engine.move(bomb_box::Direction::east);
+if (moved.accepted()) {
+    for (const bomb_box::TickResult& tick : moved.ticks) {
+        // Render tick.events, then use tick.state_after as authoritative.
+    }
+}
+
+const bomb_box::RewindResult rewound = engine.rewind();
+if (rewound.accepted()) {
+    // rewound.state is the restored authoritative command-boundary state.
+}
+```
+
+The current movement scope is flat walking. Pushes, initialization gravity,
+ramp traversal, and fixture effects remain later phases; their boundaries are
+reported explicitly instead of partially resolving a turn.
+
 ## Level JSON
 
 The public in-memory representation is in `bomb_box/world.hpp`; the portable JSON codec is
