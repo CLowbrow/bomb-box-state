@@ -19,3 +19,14 @@ bomb_box_set_runtime_options(bomb_box_behavior_tests)
 
 add_test(NAME bomb_box.behavior.world_schema COMMAND bomb_box_behavior_tests)
 set_tests_properties(bomb_box.behavior.world_schema PROPERTIES LABELS "behavior;native")
+
+add_executable(bomb_box_level_json_tests behavior/level_json_test.cpp)
+target_link_libraries(bomb_box_level_json_tests PRIVATE BombBox::State)
+target_compile_features(bomb_box_level_json_tests PRIVATE cxx_std_20)
+set_target_properties(bomb_box_level_json_tests PROPERTIES CXX_EXTENSIONS OFF)
+
+bomb_box_set_project_warnings(bomb_box_level_json_tests)
+bomb_box_set_runtime_options(bomb_box_level_json_tests)
+
+add_test(NAME bomb_box.behavior.level_json COMMAND bomb_box_level_json_tests)
+set_tests_properties(bomb_box.behavior.level_json PROPERTIES LABELS "behavior;native;serialization")

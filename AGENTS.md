@@ -68,6 +68,11 @@ These instructions apply to the entire repository.
   collections, serialization, or ABI code when the required toolchain is
   available. Run applicable WebAssembly or integration tests when changing
   those surfaces. Report any test suite that could not be run and why.
+- Do not run `ctest --preset native-sanitized` inside the Codex workspace
+  sandbox. In this environment the sanitizer runtime stalls during process
+  startup and can leave test processes running in the background consuming
+  CPU. The preset may be configured and built, but execute its tests only
+  outside the sandbox; record the sandbox limitation in verification results.
 - Documentation-only edits do not require a new executable test unless they
   introduce or change specified behavior that already has an implementation.
 
@@ -76,7 +81,10 @@ These instructions apply to the entire repository.
 - Treat `bomb_box_state` as a headless rules library embedded inside a larger
   game, not as an application. The host owns presentation, animation, audio,
   input mapping, persistence, and scheduling.
-- Keep the core portable, dependency-free C++20. It must not depend on Unreal,
+- Keep the core portable C++20 with no platform or runtime dependencies. The
+  one approved source dependency is the pinned, vendored C99 yyjson parser;
+  keep it private, unmodified, license-attributed, and symbol-isolated as
+  documented under `vendor/yyjson/`. The core must not depend on Unreal,
   Emscripten, a renderer, an input device, a filesystem, environment variables,
   wall-clock time, threads, or random-number sources. Platform-specific code
   belongs under `integrations/`.

@@ -48,7 +48,9 @@ The engine distinguishes three kinds of world data:
 - A **fixture** is attached to a cell: a switch, door, or exit teleporter.
   Fixtures are not members of entity stacks.
 - An **entity** occupies physical space: the player, a box, or an explosive
-  barrel. Every entity must have a stable unique ID.
+  barrel. Every entity must have a stable unique ID in the unsigned 64-bit
+  range `1` through `18446744073709551615`. ID `0` is reserved to mean "no
+  entity" at API boundaries.
 
 This distinction permits an entity to occupy the same cell as a switch or an
 open door without treating the fixture as part of the entity stack.
@@ -708,6 +710,12 @@ new heights, and the cause: player, blast, fall, or slide.
 
 ## Level validation
 
+The rule-relevant supplied level data is represented by `LevelDefinition` and
+its versioned JSON form. The normative wire contract, compatibility policy, and
+machine-readable schema are in [the level format specification](docs/level-format.md).
+Serialization contains the supplied initial state only; effective door state
+and other initialization results are derived and must not be authored into it.
+
 At minimum, level validation should eventually check:
 
 - Exactly one player exists.
@@ -751,11 +759,15 @@ the next phase.
 
 ## Project scaffold
 
-The implementation uses dependency-free C++20 with CMake, CTest, native and WebAssembly presets, a
-primitive C ABI, and a future Unreal plugin wrapper. See the
+The implementation uses portable C++20 with CMake, CTest, native and WebAssembly presets, a
+primitive C ABI, and a future Unreal plugin wrapper. JSON syntax parsing uses a private,
+symbol-isolated copy of the MIT-licensed yyjson 0.12.0; see the
+[third-party notices](THIRD_PARTY_NOTICES.md). See the
 [implementation status](docs/implementation-status.md) for current feature coverage.
 
 - [Development setup](docs/development.md)
 - [Architecture and portability constraints](docs/architecture.md)
+- [Version 1 level JSON format](docs/level-format.md)
+- [Level format JSON Schema](docs/level-format.schema.json)
 - [Implementation status](docs/implementation-status.md)
 - [Unreal integration scaffold](integrations/unreal/README.md)

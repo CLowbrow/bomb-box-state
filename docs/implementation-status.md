@@ -17,7 +17,7 @@ normative source for gameplay and state-transition behavior.
 
 | Phase | Status | Current coverage |
 | --- | --- | --- |
-| 1. World schema and level lifetime | **Implemented** | Typed coordinates, explicit axis conventions, flat and ramp cells, fixtures, stable entity IDs, half-step heights, stacks, structural validation, deterministic canonical storage, owned snapshots, and atomic valid/invalid level replacement. |
+| 1. World schema and level lifetime | **Implemented** | Typed coordinates, explicit axis conventions, flat and ramp cells, fixtures, stable entity IDs, half-step heights, stacks, structural validation, deterministic canonical storage and JSON, owned snapshots, and atomic valid/invalid level replacement. |
 | 2. Resolved-state history and rewind | **Not started** | No resolved-state history, rewind command, branching-after-rewind behavior, or load-time history reset exists yet. |
 | 3. Flat walking and player pushes | **Not started** | No gameplay movement command API or flat-cell movement rules exist yet. |
 | 4. Falling and crushing | **Not started** | Unsupported initial entities are structurally accepted but are not stabilized. |
@@ -32,6 +32,14 @@ normative source for gameplay and state-transition behavior.
 - `bomb_box/world.hpp` defines `LevelDefinition`, cells, fixtures, entities,
   coordinate conventions, validation errors, `validate_level()`, and
   `canonicalize_level()`.
+- `bomb_box/level_json.hpp` defines the strict version 1 JSON decoder and
+  canonical encoder. It distinguishes syntax/shape errors from shared
+  structural validation errors and applies configurable untrusted-input size
+  and nesting limits. Generic syntax parsing uses the pinned yyjson 0.12.0
+  source behind a private, symbol-isolated C bridge.
+- `docs/level-format.md` is the normative wire-format specification, accompanied
+  by a JSON Schema for editor-side shape validation. Entity IDs are decimal
+  strings so every `uint64` value round-trips through browser tooling.
 - `bomb_box/engine.hpp` provides per-instance level ownership, `load_level()`,
   `has_level()`, and caller-owned `loaded_level()` snapshots.
 - A valid load is canonicalized before replacing the current level. An invalid
@@ -47,13 +55,17 @@ that gameplay initialization has reached a resolved state.
 
 ## Verification record
 
-Most recently recorded on 2026-07-22:
+Most recently recorded on 2026-07-23:
 
 | Surface | Commands | Result |
 | --- | --- | --- |
-| Native debug | `cmake --preset native-debug`; `cmake --build --preset native-debug`; `ctest --preset native-debug` | Passed: 2 of 2 tests. |
+| Native debug | `cmake --preset native-debug`; `cmake --build --preset native-debug`; `ctest --preset native-debug` | Passed: 3 of 3 tests, including the world-schema and level-JSON behavior suites. |
+| Native release | `cmake --preset native-release`; `cmake --build --preset native-release`; `ctest --preset native-release` | Passed: 3 of 3 tests. |
 | WebAssembly debug | `emcmake cmake --preset wasm-debug`; `cmake --build --preset wasm-debug`; `ctest --preset wasm-debug` | Passed: 1 of 1 Node smoke test. |
-| Native sanitized | `cmake --preset native-sanitized`; `cmake --build --preset native-sanitized`; `ctest --preset native-sanitized` | Configure and build passed. The AddressSanitizer runtime stalled during startup of the pre-existing C-ABI-only unit test, both inside and outside the workspace sandbox, so the test suite did not complete. |
+| Native sanitized | `cmake --preset native-sanitized`; `cmake --build --preset native-sanitized` | Configure and build passed. Test execution was stopped at startup because the sanitizer runtime is known to stall in the Codex workspace sandbox and leave CPU-consuming processes; `AGENTS.md` now prohibits running this preset's tests inside that sandbox. |
+| JSON Schema syntax | `jq empty docs/level-format.schema.json` | Passed. |
+| Vendored yyjson | `shasum -a 256 vendor/yyjson/yyjson.c vendor/yyjson/yyjson.h vendor/yyjson/LICENSE`; global-symbol inspection with `nm` | All files match the recorded 0.12.0 import checksums. Only the two Bomb Box-prefixed bridge symbols are global; no upstream `yyjson_*` implementation symbol is exported. |
+| Install package | `cmake --install out/build/native-debug --prefix <temporary-directory>` | Passed. The static archive is self-contained and the package includes the yyjson MIT license, third-party notice, and provenance README. |
 | Unreal | Not run. | The Unreal wrapper remains a scaffold and no Unreal toolchain verification has been recorded. |
 
 ## Known limitations
@@ -64,8 +76,10 @@ Most recently recorded on 2026-07-22:
   turn/tick orchestration.
 - Fixture, gravity, ramp, and explosion behavior is schema-only.
 - The stateful C ABI and cross-adapter behavior corpus remain unimplemented.
-- The native sanitizer runtime startup stall needs investigation before memory
-  and undefined-behavior verification can be considered complete.
+- The level JSON codec is C++-only today; the C ABI and WebAssembly adapter do
+  not yet expose stateful decode/load calls.
+- Sanitized tests must be run outside the Codex workspace sandbox; the runtime
+  stalls at test startup inside it.
 
 ## Recommended next task
 

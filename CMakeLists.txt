@@ -4,7 +4,7 @@ project(
     BombBoxState
     VERSION 0.1.0
     DESCRIPTION "Deterministic state and rules engine for Bomb Box"
-    LANGUAGES CXX
+    LANGUAGES C CXX
 )
 
 include(CTest)
@@ -18,14 +18,37 @@ option(BOMB_BOX_ENABLE_RTTI "Enable RTTI in the portable core" OFF)
 option(BOMB_BOX_ENABLE_SANITIZERS "Enable AddressSanitizer and UndefinedBehaviorSanitizer" OFF)
 option(BOMB_BOX_WARNINGS_AS_ERRORS "Treat compiler warnings as errors" OFF)
 
+# yyjson 0.12.0 is vendored unmodified under vendor/yyjson. Keep it isolated
+# from project warning flags and out of the public API; see its provenance README.
+add_library(bomb_box_yyjson OBJECT src/level_json_yyjson.c)
+target_compile_features(bomb_box_yyjson PRIVATE c_std_99)
+set_target_properties(
+    bomb_box_yyjson
+    PROPERTIES
+        C_EXTENSIONS OFF
+        POSITION_INDEPENDENT_CODE ON
+)
+target_compile_definitions(
+    bomb_box_yyjson
+    PRIVATE
+        YYJSON_DISABLE_INCR_READER=1
+        YYJSON_DISABLE_NON_STANDARD=1
+        YYJSON_DISABLE_UTILS=1
+        YYJSON_DISABLE_WRITER=1
+)
+target_include_directories(bomb_box_yyjson PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/vendor/yyjson")
+bomb_box_set_runtime_options(bomb_box_yyjson)
+
 add_library(bomb_box_state STATIC)
 add_library(BombBox::State ALIAS bomb_box_state)
 
 target_sources(
     bomb_box_state
     PRIVATE
+        $<TARGET_OBJECTS:bomb_box_yyjson>
         src/c_api.cpp
         src/engine.cpp
+        src/level_json.cpp
         src/world.cpp
     PUBLIC
         FILE_SET public_headers
@@ -34,6 +57,7 @@ target_sources(
         FILES
             include/bomb_box/c_api.h
             include/bomb_box/engine.hpp
+            include/bomb_box/level_json.hpp
             include/bomb_box/types.hpp
             include/bomb_box/world.hpp
 )
@@ -49,9 +73,20 @@ set_target_properties(
 
 target_include_directories(
     bomb_box_state
+    PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/vendor/yyjson"
     PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
         $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
+)
+
+target_compile_definitions(
+    bomb_box_state
+    PRIVATE
+        YYJSON_DISABLE_INCR_READER=1
+        YYJSON_DISABLE_NON_STANDARD=1
+        YYJSON_DISABLE_UTILS=1
+        YYJSON_DISABLE_WRITER=1
 )
 
 bomb_box_set_project_warnings(bomb_box_state)
@@ -101,4 +136,17 @@ install(
         "${CMAKE_CURRENT_BINARY_DIR}/BombBoxStateConfig.cmake"
         "${CMAKE_CURRENT_BINARY_DIR}/BombBoxStateConfigVersion.cmake"
     DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/BombBoxState
+)
+
+install(
+    FILES vendor/yyjson/LICENSE
+    DESTINATION ${CMAKE_INSTALL_DATADIR}/BombBoxState/licenses
+    RENAME yyjson-LICENSE
+)
+
+install(
+    FILES
+        THIRD_PARTY_NOTICES.md
+        vendor/yyjson/README.bomb-box.md
+    DESTINATION ${CMAKE_INSTALL_DATADIR}/BombBoxState/licenses
 )

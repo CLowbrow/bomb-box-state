@@ -2,7 +2,7 @@
 
 ## Native build
 
-Prerequisites are CMake 3.25 or newer, Ninja, and a C++20 compiler.
+Prerequisites are CMake 3.25 or newer, Ninja, and a toolchain with C99 and C++20 compilers.
 
 ```sh
 cmake --preset native-debug
@@ -22,6 +22,38 @@ Build artifacts stay under `out/` and are ignored by Git.
 
 See the [implementation status](implementation-status.md) for current feature coverage, verification
 results, and known toolchain limitations.
+
+## Level JSON
+
+The public in-memory representation is in `bomb_box/world.hpp`; the portable JSON codec is
+in `bomb_box/level_json.hpp`. Generic JSON syntax parsing is provided by the pinned yyjson 0.12.0
+source under `vendor/yyjson`; the public Bomb Box API and rule-specific decoding do not expose
+yyjson. Decode untrusted bytes, check `accepted()`, and then pass the returned definition through the
+normal engine load boundary:
+
+```cpp
+const bomb_box::DecodeLevelJsonResult decoded = bomb_box::decode_level_json(bytes);
+if (decoded.accepted()) {
+    const bomb_box::LoadResult loaded = engine.load_level(*decoded.level);
+}
+```
+
+Format errors have a `LevelJsonErrorCode`. Syntax failures have a byte offset; shape failures have a
+JSON Pointer path and use offset zero because the parsed DOM does not retain source positions.
+Structurally invalid levels instead return the shared `ValidationError` list. Encoding also
+validates and emits no bytes for an invalid definition.
+
+See the [version 1 format specification](level-format.md) and its
+[JSON Schema](level-format.schema.json). The schema can be used by a web editor for immediate shape
+feedback, but authoritative acceptance must use the core decoder/validator because ramp endpoints,
+complete cell coverage, stacks, and other cross-entry rules are semantic checks.
+
+## Vendored dependencies
+
+yyjson is the only approved source dependency in the portable core. Its upstream files must remain
+unmodified. Provenance, checksums, license, isolation details, and the update procedure are recorded
+in `vendor/yyjson/README.bomb-box.md`; the repository-level attribution is in
+`THIRD_PARTY_NOTICES.md`. The installed package includes the upstream MIT license.
 
 ## WebAssembly build
 
@@ -51,4 +83,3 @@ version in CI and release builds once the engine moves beyond initial developmen
 
 See `integrations/unreal/README.md`. Unreal integration is a separate consumer build; the standalone
 CMake build intentionally does not require an Unreal installation.
-

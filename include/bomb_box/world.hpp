@@ -132,6 +132,7 @@ enum class ValidationErrorCode : std::uint8_t {
     player_not_top_of_stack,
     player_count_not_one,
     invalid_teleporter_occupancy,
+    invalid_entity_id,
 };
 
 struct ValidationError final {

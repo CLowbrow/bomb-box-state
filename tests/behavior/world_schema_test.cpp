@@ -116,6 +116,12 @@ void schema_rejections()
     }
     {
         LevelDefinition level = flat_level();
+        level.entities.front().id = 0;
+        expect(contains(validate_level(level), ValidationErrorCode::invalid_entity_id),
+               "entity ID zero is reserved for API no-entity sentinels");
+    }
+    {
+        LevelDefinition level = flat_level();
         level.entities.push_back(Entity{1, EntityKind::box, Coordinate{1, 0}, Height{0}});
         expect(contains(validate_level(level), ValidationErrorCode::duplicate_entity_id),
                "entity IDs must be unique");
@@ -143,6 +149,12 @@ void schema_rejections()
         level.cells[0].geometry = FlatCell{1};
         expect(contains(validate_level(level), ValidationErrorCode::entity_below_surface),
                "entities cannot intersect a cell surface");
+    }
+    {
+        LevelDefinition level = ramp_level();
+        level.cells[2].geometry = RampCell{Direction::east, -1'073'741'825};
+        expect(contains(validate_level(level), ValidationErrorCode::invalid_cell_height),
+               "a ramp center below the representable half-step range is rejected");
     }
     {
         LevelDefinition level = ramp_level();

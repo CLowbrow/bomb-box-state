@@ -2,9 +2,10 @@
 
 ## Portability boundary
 
-`bomb_box_state` is the authoritative rules library. It may use portable C++20 and the standard
-library internally, but it must not depend on Unreal headers, Emscripten headers, browser APIs,
-rendering, audio, input devices, wall-clock time, threads, or random-number sources.
+`bomb_box_state` is the authoritative rules library. It may use portable C++20, the standard
+library, and the pinned private yyjson C99 source internally, but it must not depend on Unreal
+headers, Emscripten headers, browser APIs, rendering, audio, input devices, wall-clock time,
+threads, or random-number sources.
 
 Platform code belongs in `integrations/`:
 
@@ -13,6 +14,15 @@ Platform code belongs in `integrations/`:
 
 The C API uses fixed-width integers, opaque handles (when stateful calls are added), caller-owned
 buffers, and explicit error codes. Do not pass C++ standard-library objects across that ABI.
+
+The versioned level JSON codec is part of the portable core but lives in separate translation units.
+It accepts and returns in-memory strings and has no filesystem or platform dependency. Generic JSON
+syntax is parsed by the pinned, unmodified yyjson 0.12.0 source. A private C bridge gives upstream
+functions internal linkage and exports only Bomb Box-prefixed bridge symbols, avoiding collisions
+when an embedding host uses another yyjson build. yyjson types do not enter a public header. Static
+library consumers that construct `LevelDefinition` directly do not pull the codec objects into their
+final binary unless they reference it. See the [level format specification](level-format.md) and
+[third-party notices](../THIRD_PARTY_NOTICES.md).
 
 ## Determinism guardrails
 
@@ -28,11 +38,11 @@ buffers, and explicit error codes. Do not pass C++ standard-library objects acro
 
 ## Intended implementation layers
 
-1. Value types and validated level schema.
+1. Value types, validated level schema, and versioned level JSON encoding.
 2. Immutable world snapshots and deterministic queries.
 3. Tick planners for movement, gravity, ramps, fixtures, and blast waves.
 4. Turn orchestration and terminal handling.
-5. Serialization and the primitive C API.
+5. Primitive stateful C API and integration-facing level-loading entry points.
 6. Thin JavaScript and Unreal-facing adapters.
 
 The current `Engine` owns a canonical, validated `LevelDefinition`. Loading validates a candidate
@@ -41,3 +51,7 @@ cannot retain a mutable view into engine-owned storage. Gameplay state, initiali
 stabilization, command history, and the primitive stateful C API are introduced by their later
 implementation phases.
 
+`decode_level_json()` produces that same canonical `LevelDefinition` only after strict format and
+structural validation. JSON decoding is deliberately separate from `Engine::load_level()` so an
+invalid document cannot create partially committed engine state, and so integrations can attach
+their own distribution metadata outside the rule-relevant document.

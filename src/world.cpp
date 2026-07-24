@@ -60,10 +60,12 @@ struct CoordinateLess final {
 [[nodiscard]] bool representable_cell_height(const std::int32_t elevation,
                                              const bool needs_high_endpoint = false) noexcept
 {
-    const auto high = static_cast<std::int64_t>(elevation) + (needs_high_endpoint ? 1 : 0);
-    const auto half_steps = high * 2;
-    return half_steps >= std::numeric_limits<std::int32_t>::min()
-        && half_steps <= std::numeric_limits<std::int32_t>::max();
+    const auto low_half_steps = static_cast<std::int64_t>(elevation) * 2;
+    const auto highest_half_steps = low_half_steps + (needs_high_endpoint ? 2 : 0);
+    const auto ramp_center_half_steps = low_half_steps + (needs_high_endpoint ? 1 : 0);
+    return low_half_steps >= std::numeric_limits<std::int32_t>::min()
+        && ramp_center_half_steps >= std::numeric_limits<std::int32_t>::min()
+        && highest_half_steps <= std::numeric_limits<std::int32_t>::max();
 }
 
 [[nodiscard]] bool valid_extent(const LevelDefinition& level) noexcept
@@ -185,6 +187,7 @@ std::string_view to_string(const ValidationErrorCode code) noexcept
     case ValidationErrorCode::player_not_top_of_stack: return "player_not_top_of_stack";
     case ValidationErrorCode::player_count_not_one: return "player_count_not_one";
     case ValidationErrorCode::invalid_teleporter_occupancy: return "invalid_teleporter_occupancy";
+    case ValidationErrorCode::invalid_entity_id: return "invalid_entity_id";
     }
     return "unknown";
 }
@@ -291,6 +294,9 @@ ValidationResult validate_level(const LevelDefinition& level)
         }
         if (!valid(entity.kind)) {
             add_error(result, ValidationErrorCode::invalid_entity_kind, entity.coordinate, entity.id);
+        }
+        if (entity.id == 0) {
+            add_error(result, ValidationErrorCode::invalid_entity_id, entity.coordinate, entity.id);
         }
         if (!entity_ids.insert(entity.id).second) {
             add_error(result, ValidationErrorCode::duplicate_entity_id, entity.coordinate, entity.id);
