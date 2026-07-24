@@ -12,8 +12,10 @@ Platform code belongs in `integrations/`:
 - `integrations/wasm` links the core and exports its C ABI to JavaScript.
 - `integrations/unreal` wraps a platform-specific core build in an Unreal runtime plugin.
 
-The C API uses fixed-width integers, opaque handles (when stateful calls are added), caller-owned
-buffers, and explicit error codes. Do not pass C++ standard-library objects across that ABI.
+The C API uses fixed-width integers, opaque per-instance engine handles, caller-owned JSON result
+buffers, and explicit status/error strings. Do not pass C++ standard-library objects across that
+ABI. The WebAssembly adapter adds only JavaScript ownership and JSON parsing; its response contract
+is documented in [the embedding API](embedding-api.md).
 
 The versioned level JSON codec is part of the portable core but lives in separate translation units.
 It accepts and returns in-memory strings and has no filesystem or platform dependency. Generic JSON
@@ -78,8 +80,8 @@ internal orchestration mechanism rather than a host state-injection API. Flat wa
 an immutable command-boundary snapshot and returns the initial state, zero-based ordered ticks with
 semantic events and per-tick states, the final authoritative state, and outcome. Rejections return
 the unchanged state without entering history. The primitive stateful C API and WebAssembly adapter
-are the next layer so the same create/load/input/state loop is exercised before advanced physics.
-Initialization physics and the remaining movement systems are introduced afterward.
+carry that same create/load/input/state/rewind loop across the embedding boundary. Initialization
+physics and the remaining movement systems are introduced afterward.
 
 `decode_level_json()` produces that same canonical `LevelDefinition` only after strict format and
 structural validation. JSON decoding is deliberately separate from `Engine::load_level()` so an

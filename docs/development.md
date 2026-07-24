@@ -145,6 +145,13 @@ ctest --preset wasm-debug
 The generated ES module and `.wasm` binary are placed in `out/build/wasm-debug/wasm/`. Pin an SDK
 version in CI and release builds once the engine moves beyond initial development.
 
+The generated module exposes the browser-facing `module.gameRules` interface documented in the
+[embedding API](embedding-api.md). The Wasm CTest runs the same authored vertical-slice contract as
+the native C ABI runner. The vendored yyjson object is compiled at `-O1` in Emscripten builds even
+for the debug preset: at `-O0`, current Emscripten releases lower `yyjson_read_opts` beyond
+WebAssembly's per-function local limit. The game-rules core and adapter otherwise retain the debug
+preset's settings.
+
 ## Unreal build
 
 See `integrations/unreal/README.md`. Unreal integration is a separate consumer build; the standalone

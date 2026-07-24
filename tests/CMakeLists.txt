@@ -51,6 +51,33 @@ game_rules_add_gtest(
     behavior/flat_walking_test.cpp
 )
 
+game_rules_add_gtest(
+    game_rules_c_api_tests
+    integration
+    adapter/c_api_test.cpp
+)
+
+add_executable(
+    game_rules_c_api_contract
+    contracts/browser_vertical_slice/v1/native_runner.cpp
+)
+target_link_libraries(game_rules_c_api_contract PRIVATE GameRules::State)
+target_compile_features(game_rules_c_api_contract PRIVATE cxx_std_20)
+set_target_properties(game_rules_c_api_contract PROPERTIES CXX_EXTENSIONS OFF)
+game_rules_set_project_warnings(game_rules_c_api_contract)
+game_rules_enable_sanitizers(game_rules_c_api_contract)
+
+add_test(
+    NAME game_rules.contract.browser_vertical_slice.v1.native
+    COMMAND
+        game_rules_c_api_contract
+        "${CMAKE_CURRENT_SOURCE_DIR}/contracts/browser_vertical_slice/v1"
+)
+set_tests_properties(
+    game_rules.contract.browser_vertical_slice.v1.native
+    PROPERTIES LABELS "contract;integration;native"
+)
+
 # This small consumer stays framework-free and is compiled with the same
 # no-exceptions/no-RTTI policy as the core. It proves that the public C++ and C
 # headers remain usable under the engine's production compilation constraints.
@@ -63,3 +90,14 @@ game_rules_set_runtime_options(game_rules_production_mode_smoke)
 
 add_test(NAME game_rules.consumer.production_mode COMMAND game_rules_production_mode_smoke)
 set_tests_properties(game_rules.consumer.production_mode PROPERTIES LABELS "consumer;native")
+
+# Compile the public boundary as C (not C++) while using the C++ linker for the implementation.
+add_executable(game_rules_c_header_smoke consumer/c_api_header_smoke.c)
+target_link_libraries(game_rules_c_header_smoke PRIVATE GameRules::State)
+target_compile_features(game_rules_c_header_smoke PRIVATE c_std_99)
+set_target_properties(game_rules_c_header_smoke PROPERTIES C_EXTENSIONS OFF LINKER_LANGUAGE CXX)
+game_rules_set_project_warnings(game_rules_c_header_smoke)
+game_rules_enable_sanitizers(game_rules_c_header_smoke)
+
+add_test(NAME game_rules.consumer.c_header COMMAND game_rules_c_header_smoke)
+set_tests_properties(game_rules.consumer.c_header PROPERTIES LABELS "consumer;integration;native")

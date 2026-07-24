@@ -38,6 +38,11 @@ target_compile_definitions(
 )
 target_include_directories(game_rules_yyjson PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/vendor/yyjson")
 game_rules_set_runtime_options(game_rules_yyjson)
+if(EMSCRIPTEN)
+    # At -O0 yyjson_read_opts exceeds WebAssembly's per-function local limit in current
+    # Emscripten releases. Keep the project debug build while lowering this vendored parser object.
+    target_compile_options(game_rules_yyjson PRIVATE -O1)
+endif()
 
 add_library(game_rules_state STATIC)
 add_library(GameRules::State ALIAS game_rules_state)

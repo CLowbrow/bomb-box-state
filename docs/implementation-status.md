@@ -25,7 +25,7 @@ follow only after that loop works through WebAssembly.
 | 1. World schema and level lifetime | **Implemented** | Typed coordinates, explicit axis conventions, flat and ramp cells, fixtures, stable entity IDs, half-step heights, stacks, structural validation, deterministic canonical storage and JSON, owned snapshots, and atomic valid/invalid level replacement. |
 | 2. Resolved-state history and rewind | **Implemented** | Caller-owned resolved-state snapshots, engine-owned undo-only history, rewind results, initialized `history_empty` behavior, repeated rewind, branching after rewind, and atomic load-time history replacement are covered. |
 | 3. Flat walking and authoritative turn output | **Implemented** | Cardinal movement honors declared axes, walks one cell between compatible flat supports, returns complete tick/event/state/outcome results, rejects boundaries, ledges, blocking occupied destinations, malformed input, terminal states, and deferred geometry/fixtures explicitly, and preserves history only for accepted turns. |
-| 4. Stateful C ABI and browser vertical slice | **Not started** | The C ABI and WebAssembly module cannot yet create an engine, load a level, submit movement or rewind, or publish host-readable state and turn results. |
+| 4. Stateful C ABI and browser vertical slice | **Implemented** | Opaque per-instance engines, versioned JSON loading, renderable snapshots, movement, complete tick/event results, rewind, caller-owned result memory, and a thin JavaScript ownership layer are exercised by one authored contract through native C and Node/WebAssembly. |
 | 5. Single-entity player pushes | **Not started** | Boxes and barrels exist in the schema, but player push behavior is not implemented. |
 | 6. Falling and crushing | **Not started** | Unsupported initial entities are structurally accepted but are not stabilized. |
 | 7. Fixtures and terminal outcomes | **Not started** | Fixture data is validated, but switches, effective door state, teleporters, and win/loss behavior are not resolved. |
@@ -109,8 +109,16 @@ later rules rather than replaced after each phase.
   flat walks preserve their exact predecessor; rejected moves do not enter
   history. Repeated rewind and branching discard abandoned later states without
   redo storage.
-- The C ABI currently exposes only its API version and `schema_ready` status.
-  A stateful primitive C boundary remains future work.
+- `game_rules/c_api.h` provides an opaque per-instance engine, stable cardinal
+  constants, versioned JSON level loading, complete state/move/rewind JSON
+  responses, and explicit caller-owned result memory. Renderable snapshots
+  include canonical cells, fixtures, entities, coordinates, and outcome;
+  64-bit entity IDs remain decimal strings.
+- The generated WebAssembly ES module exposes a JavaScript-shaped
+  `module.gameRules` interface whose engine objects hide numeric handles, own
+  conversion and freeing of C response strings, accept cardinal strings, and
+  guard destruction locally. Its API and version-1 response contract are
+  documented in `docs/embedding-api.md`.
 
 The loader still performs structural validation and canonical storage without
 physics stabilization. It deliberately permits unsupported initial entities
@@ -137,9 +145,10 @@ derivation. `loaded_level()` remains the supplied definition snapshot, while
 - GoogleTest discovery occurs at CTest time. This prevents a sanitized build
   from starting the sanitizer runtime merely to enumerate cases inside the
   Codex workspace sandbox.
-- The adapter-neutral phase-4 corpus and its native C ABI and Node/WebAssembly
-  runners remain future work; internal C++ unit tests will not be duplicated
-  under Emscripten.
+- The versioned adapter-neutral corpus under
+  `tests/contracts/browser_vertical_slice/v1/` runs through both native C ABI
+  and Node/WebAssembly runners. Both compare against authored expectations;
+  internal C++ unit tests are not duplicated under Emscripten.
 
 ## Verification record
 
@@ -147,9 +156,9 @@ Most recently recorded on 2026-07-23:
 
 | Surface | Commands | Result |
 | --- | --- | --- |
-| Native debug | `cmake --preset native-debug`; `cmake --build --preset native-debug`; `ctest --preset native-debug --output-on-failure` | Passed: 28 of 28 individually discovered tests: 25 behavior cases, 2 focused unit cases, and 1 production-mode consumer smoke. |
-| Native release | `cmake --preset native-release`; `cmake --build --preset native-release`; `ctest --preset native-release --output-on-failure` | Passed: 28 of 28 tests. |
-| WebAssembly debug | `cmake --preset wasm-debug`; `cmake --build --preset wasm-debug`; `ctest --preset wasm-debug --output-on-failure` | Passed: portable core and adapter build; 1 of 1 Node smoke test. |
+| Native debug | `cmake --preset native-debug`; `cmake --build --preset native-debug`; `ctest --preset native-debug --output-on-failure` | Passed: 33 of 33 tests: 25 behavior cases, 3 C ABI boundary cases, 2 focused unit cases, 1 cross-adapter contract runner, and 2 production consumer/header smokes. |
+| Native release | `cmake --preset native-release`; `cmake --build --preset native-release`; `ctest --preset native-release --output-on-failure` | Passed: 33 of 33 tests. |
+| WebAssembly debug | `cmake --preset wasm-debug`; `cmake --build --preset wasm-debug`; `ctest --preset wasm-debug --output-on-failure` | Passed: portable core and stateful adapter build; 1 of 1 Node tests ran the authored browser vertical-slice contract. |
 | Native sanitized | `cmake --preset native-sanitized`; `cmake --build --preset native-sanitized` | Configure and build passed with deferred GoogleTest discovery. Tests were not executed because `AGENTS.md` prohibits running the sanitizer preset inside the Codex workspace sandbox, where the runtime stalls at test startup and can leave CPU-consuming processes. CI now has an outside-sandbox sanitizer job. |
 | JSON Schema syntax | `jq empty docs/level-format.schema.json` | Passed. |
 | Vendored yyjson | `shasum -a 256 vendor/yyjson/yyjson.c vendor/yyjson/yyjson.h vendor/yyjson/LICENSE`; global-symbol inspection with `nm` | All files match the recorded 0.12.0 import checksums. Only the two `game_rules_*` bridge symbols are global; no upstream `yyjson_*` implementation symbol is exported. |
@@ -168,21 +177,13 @@ Most recently recorded on 2026-07-23:
   explicitly as `unsupported_geometry` and `unsupported_fixture` until their
   rule phases are implemented.
 - Fixture, gravity, ramp, and explosion behavior is schema-only.
-- The stateful C ABI and cross-adapter behavior corpus remain unimplemented.
-- The level JSON codec is C++-only today; the C ABI and WebAssembly adapter do
-  not yet expose stateful decode/load calls.
 - Sanitized tests must be run outside the Codex workspace sandbox; the runtime
   stalls at test startup inside it.
 
 ## Recommended next task
 
-Implement phase 4 as the next browser-facing vertical slice. Add opaque engine
-creation and destruction, JSON level loading, movement, rewind, and
-caller-owned state/result access to the primitive C ABI. Wrap those operations
-in a thin WebAssembly ES module and introduce the versioned, adapter-neutral
-contract corpus described above. Its first scenario should run through native
-C ABI and Node/WebAssembly runners, load a simple flat world, read renderable
-cells and entities, move the player, compare the complete authoritative tick
-and final state, rewind, and destroy the engine. Extend the phase-3 result
-types across the boundary rather than inventing a parallel rules model; do not
-begin pushes, gravity, fixtures, ramps, or explosions first.
+Implement phase 5 single-entity player pushes next. Extend the existing
+authoritative move/tick/event model and the version-1 cross-adapter contract
+where the new behavior reaches the public boundary. Do not begin gravity,
+fixtures, ramps, or explosions before push legality and atomicity have complete
+specification-level coverage.
