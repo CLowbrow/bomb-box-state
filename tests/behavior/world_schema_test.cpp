@@ -1,6 +1,6 @@
-#include "bomb_box/engine.hpp"
-#include "bomb_box/world.hpp"
-#include "support/bomb_box_printers.hpp"
+#include "game_rules/engine.hpp"
+#include "game_rules/world.hpp"
+#include "support/game_rules_printers.hpp"
 
 #include <gtest/gtest.h>
 
@@ -9,7 +9,7 @@
 
 namespace {
 
-using namespace bomb_box;
+using namespace game_rules;
 
 [[nodiscard]] bool contains(const ValidationResult& result, const ValidationErrorCode code)
 {

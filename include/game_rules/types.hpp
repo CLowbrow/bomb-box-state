@@ -2,7 +2,7 @@
 
 #include <cstdint>
 
-namespace bomb_box {
+namespace game_rules {
 
 using EntityId = std::uint64_t;
 
@@ -39,5 +39,5 @@ struct Height final {
     [[nodiscard]] friend constexpr bool operator==(Height, Height) noexcept = default;
 };
 
-} // namespace bomb_box
+} // namespace game_rules
 

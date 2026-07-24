@@ -1,6 +1,6 @@
 #pragma once
 
-#include "bomb_box/world.hpp"
+#include "game_rules/world.hpp"
 
 #include <cstddef>
 #include <optional>
@@ -8,7 +8,7 @@
 #include <variant>
 #include <vector>
 
-namespace bomb_box {
+namespace game_rules {
 
 inline constexpr std::uint32_t api_version = 1;
 
@@ -171,4 +171,4 @@ class Engine final {
     detail::ResolvedStateHistory history_{};
 };
 
-} // namespace bomb_box
+} // namespace game_rules

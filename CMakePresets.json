@@ -13,7 +13,7 @@
       "binaryDir": "${sourceDir}/out/build/${presetName}",
       "cacheVariables": {
         "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
-        "BOMB_BOX_WARNINGS_AS_ERRORS": "OFF"
+        "GAME_RULES_WARNINGS_AS_ERRORS": "OFF"
       }
     },
     {
@@ -23,7 +23,7 @@
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
         "BUILD_TESTING": "ON",
-        "BOMB_BOX_BUILD_WASM": "OFF"
+        "GAME_RULES_BUILD_WASM": "OFF"
       }
     },
     {
@@ -33,7 +33,7 @@
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
         "BUILD_TESTING": "ON",
-        "BOMB_BOX_BUILD_WASM": "OFF"
+        "GAME_RULES_BUILD_WASM": "OFF"
       }
     },
     {
@@ -41,7 +41,7 @@
       "displayName": "Native debug with sanitizers",
       "inherits": "native-debug",
       "cacheVariables": {
-        "BOMB_BOX_ENABLE_SANITIZERS": "ON"
+        "GAME_RULES_ENABLE_SANITIZERS": "ON"
       }
     },
     {
@@ -51,7 +51,7 @@
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
         "BUILD_TESTING": "ON",
-        "BOMB_BOX_BUILD_WASM": "ON"
+        "GAME_RULES_BUILD_WASM": "ON"
       }
     },
     {

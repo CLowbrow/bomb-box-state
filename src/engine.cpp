@@ -1,4 +1,4 @@
-#include "bomb_box/engine.hpp"
+#include "game_rules/engine.hpp"
 
 #include <algorithm>
 #include <cstdint>
@@ -6,7 +6,7 @@
 #include <tuple>
 #include <utility>
 
-namespace bomb_box {
+namespace game_rules {
 namespace {
 
 [[nodiscard]] bool valid(const Direction direction) noexcept
@@ -339,4 +339,4 @@ RewindResult Engine::rewind()
     };
 }
 
-} // namespace bomb_box
+} // namespace game_rules

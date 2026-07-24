@@ -10,7 +10,7 @@ Prefer whole-value equality when the public result type defines it; add or impro
 `tests/support` when a failure would otherwise hide the meaningful difference. Shared builders
 should keep complete rule-relevant state visible rather than growing into a second rules language.
 
-Keep white-box checks of `bomb_box::detail` algorithms under `tests/unit`. A behavior scenario may
+Keep white-box checks of `game_rules::detail` algorithms under `tests/unit`. A behavior scenario may
 exercise the same concern through `Engine`, but it must not depend on the internal representation.
 Do not add mocks or production test hooks where a complete deterministic state and public operation
 can express the behavior directly.

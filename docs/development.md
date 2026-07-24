@@ -22,7 +22,7 @@ Build artifacts stay under `out/` and are ignored by Git.
 
 When native tests are enabled, the first configure downloads GoogleTest 1.17.0 from its exact
 release commit and verifies its archive hash through CMake `FetchContent`. GoogleTest is a
-build-only dependency: it is not linked into `BombBox::State`, exported, installed, or required by
+build-only dependency: it is not linked into `GameRules::State`, exported, installed, or required by
 an embedding host. Configure with `-DBUILD_TESTING=OFF` when only the library or an install package
 is needed.
 
@@ -62,21 +62,21 @@ and platform facilities; the engine remains headless and filesystem-independent.
 
 ## Native gameplay loop
 
-`bomb_box::Engine` accepts cardinal movement after a valid level load. An
+`game_rules::Engine` accepts cardinal movement after a valid level load. An
 accepted `MoveResult` contains the complete initial state, ordered tick events
 and states, final state, and outcome. A rejected result contains a stable
 `MoveStatus`, a presentation-only `MoveBlockedEvent` for gameplay rejections,
 and the unchanged authoritative state when one exists.
 
 ```cpp
-const bomb_box::MoveResult moved = engine.move(bomb_box::Direction::east);
+const game_rules::MoveResult moved = engine.move(game_rules::Direction::east);
 if (moved.accepted()) {
-    for (const bomb_box::TickResult& tick : moved.ticks) {
+    for (const game_rules::TickResult& tick : moved.ticks) {
         // Render tick.events, then use tick.state_after as authoritative.
     }
 }
 
-const bomb_box::RewindResult rewound = engine.rewind();
+const game_rules::RewindResult rewound = engine.rewind();
 if (rewound.accepted()) {
     // rewound.state is the restored authoritative command-boundary state.
 }
@@ -88,16 +88,16 @@ reported explicitly instead of partially resolving a turn.
 
 ## Level JSON
 
-The public in-memory representation is in `bomb_box/world.hpp`; the portable JSON codec is
-in `bomb_box/level_json.hpp`. Generic JSON syntax parsing is provided by the pinned yyjson 0.12.0
-source under `vendor/yyjson`; the public Bomb Box API and rule-specific decoding do not expose
+The public in-memory representation is in `game_rules/world.hpp`; the portable JSON codec is
+in `game_rules/level_json.hpp`. Generic JSON syntax parsing is provided by the pinned yyjson 0.12.0
+source under `vendor/yyjson`; the public game-rules API and rule-specific decoding do not expose
 yyjson. Decode untrusted bytes, check `accepted()`, and then pass the returned definition through the
 normal engine load boundary:
 
 ```cpp
-const bomb_box::DecodeLevelJsonResult decoded = bomb_box::decode_level_json(bytes);
+const game_rules::DecodeLevelJsonResult decoded = game_rules::decode_level_json(bytes);
 if (decoded.accepted()) {
-    const bomb_box::LoadResult loaded = engine.load_level(*decoded.level);
+    const game_rules::LoadResult loaded = engine.load_level(*decoded.level);
 }
 ```
 
@@ -115,7 +115,7 @@ complete cell coverage, stacks, and other cross-entry rules are semantic checks.
 
 yyjson is the only approved source dependency in the portable core. Its upstream files must remain
 unmodified. Provenance, checksums, license, isolation details, and the update procedure are recorded
-in `vendor/yyjson/README.bomb-box.md`; the repository-level attribution is in
+in `vendor/yyjson/README.game-rules.md`; the repository-level attribution is in
 `THIRD_PARTY_NOTICES.md`. The installed package includes the upstream MIT license.
 
 GoogleTest is fetched only while building native tests and is intentionally not vendored into or

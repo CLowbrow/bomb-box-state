@@ -15,35 +15,35 @@ FetchContent_MakeAvailable(googletest)
 
 include(GoogleTest)
 
-function(bomb_box_add_gtest target label)
+function(game_rules_add_gtest target label)
     add_executable(${target} ${ARGN})
-    target_link_libraries(${target} PRIVATE BombBox::State GTest::gtest_main)
+    target_link_libraries(${target} PRIVATE GameRules::State GTest::gtest_main)
     target_compile_features(${target} PRIVATE cxx_std_20)
     set_target_properties(${target} PROPERTIES CXX_EXTENSIONS OFF)
     target_include_directories(${target} PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
 
-    bomb_box_set_project_warnings(${target})
+    game_rules_set_project_warnings(${target})
     # The engine target retains the production no-exceptions/no-RTTI policy.
     # Test runners use the framework's normal runtime and share sanitizer
     # instrumentation with the engine when the sanitized preset is selected.
-    bomb_box_enable_sanitizers(${target})
+    game_rules_enable_sanitizers(${target})
 
     gtest_discover_tests(
         ${target}
-        TEST_PREFIX "bomb_box.${label}."
+        TEST_PREFIX "game_rules.${label}."
         PROPERTIES LABELS "${label}\;native"
         DISCOVERY_MODE PRE_TEST
     )
 endfunction()
 
-bomb_box_add_gtest(
-    bomb_box_unit_tests
+game_rules_add_gtest(
+    game_rules_unit_tests
     unit
     unit/resolved_state_history_test.cpp
 )
 
-bomb_box_add_gtest(
-    bomb_box_behavior_tests
+game_rules_add_gtest(
+    game_rules_behavior_tests
     behavior
     behavior/world_schema_test.cpp
     behavior/level_json_test.cpp
@@ -54,12 +54,12 @@ bomb_box_add_gtest(
 # This small consumer stays framework-free and is compiled with the same
 # no-exceptions/no-RTTI policy as the core. It proves that the public C++ and C
 # headers remain usable under the engine's production compilation constraints.
-add_executable(bomb_box_production_mode_smoke consumer/production_mode_smoke.cpp)
-target_link_libraries(bomb_box_production_mode_smoke PRIVATE BombBox::State)
-target_compile_features(bomb_box_production_mode_smoke PRIVATE cxx_std_20)
-set_target_properties(bomb_box_production_mode_smoke PROPERTIES CXX_EXTENSIONS OFF)
-bomb_box_set_project_warnings(bomb_box_production_mode_smoke)
-bomb_box_set_runtime_options(bomb_box_production_mode_smoke)
+add_executable(game_rules_production_mode_smoke consumer/production_mode_smoke.cpp)
+target_link_libraries(game_rules_production_mode_smoke PRIVATE GameRules::State)
+target_compile_features(game_rules_production_mode_smoke PRIVATE cxx_std_20)
+set_target_properties(game_rules_production_mode_smoke PROPERTIES CXX_EXTENSIONS OFF)
+game_rules_set_project_warnings(game_rules_production_mode_smoke)
+game_rules_set_runtime_options(game_rules_production_mode_smoke)
 
-add_test(NAME bomb_box.consumer.production_mode COMMAND bomb_box_production_mode_smoke)
-set_tests_properties(bomb_box.consumer.production_mode PROPERTIES LABELS "consumer;native")
+add_test(NAME game_rules.consumer.production_mode COMMAND game_rules_production_mode_smoke)
+set_tests_properties(game_rules.consumer.production_mode PROPERTIES LABELS "consumer;native")

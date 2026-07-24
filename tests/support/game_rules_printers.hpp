@@ -1,14 +1,14 @@
 #pragma once
 
-#include "bomb_box/engine.hpp"
-#include "bomb_box/world.hpp"
+#include "game_rules/engine.hpp"
+#include "game_rules/world.hpp"
 
 #include <gtest/gtest-printers.h>
 
 #include <ostream>
 #include <string_view>
 
-namespace bomb_box {
+namespace game_rules {
 
 namespace test_detail {
 
@@ -330,4 +330,4 @@ inline void PrintTo(const LevelDefinition& value, std::ostream* const output)
     *output << '}';
 }
 
-} // namespace bomb_box
+} // namespace game_rules

@@ -74,10 +74,16 @@ later rules rather than replaced after each phase.
 
 ## Implemented public surface
 
-- `bomb_box/world.hpp` defines `LevelDefinition`, cells, fixtures, entities,
+- Project-owned technical identifiers are title-independent and use the
+  descriptive `game_rules` family: C++ namespace and include directory,
+  C ABI and private bridge symbols, CMake package/targets/options, WebAssembly
+  module, Unreal modules, test targets, and the `game-rules-level` format
+  discriminator. The earlier working-title-derived identifiers were removed
+  without compatibility aliases as a deliberate pre-release breaking change.
+- `game_rules/world.hpp` defines `LevelDefinition`, cells, fixtures, entities,
   coordinate conventions, validation errors, `validate_level()`, and
   `canonicalize_level()`.
-- `bomb_box/level_json.hpp` defines the strict version 1 JSON decoder and
+- `game_rules/level_json.hpp` defines the strict version 1 JSON decoder and
   canonical encoder. It distinguishes syntax/shape errors from shared
   structural validation errors and applies configurable untrusted-input size
   and nesting limits. Generic syntax parsing uses the pinned yyjson 0.12.0
@@ -85,7 +91,7 @@ later rules rather than replaced after each phase.
 - `docs/level-format.md` is the normative wire-format specification, accompanied
   by a JSON Schema for editor-side shape validation. Entity IDs are decimal
   strings so every `uint64` value round-trips through browser tooling.
-- `bomb_box/engine.hpp` provides per-instance level ownership, `load_level()`,
+- `game_rules/engine.hpp` provides per-instance level ownership, `load_level()`,
   `has_level()`, and caller-owned `loaded_level()` snapshots. It also defines
   the dynamic `ResolvedState`, caller-owned `resolved_state()` snapshots, and
   `rewind()` results with stable `rewound` and `history_empty` status strings.
@@ -141,12 +147,12 @@ Most recently recorded on 2026-07-23:
 
 | Surface | Commands | Result |
 | --- | --- | --- |
-| Native debug | `cmake --preset native-debug`; `cmake --build --preset native-debug`; `ctest --preset native-debug --output-on-failure` | Passed: 27 of 27 individually discovered tests: 24 behavior cases, 2 focused unit cases, and 1 production-mode consumer smoke. |
-| Native release | `cmake --preset native-release`; `cmake --build --preset native-release`; `ctest --preset native-release --output-on-failure` | Passed: 27 of 27 tests. |
-| WebAssembly debug | `cmake --build --preset wasm-debug`; `ctest --preset wasm-debug --output-on-failure` | Passed: portable core and adapter build; 1 of 1 Node smoke test. The existing preset was already configured with Emscripten; linking required access to its Homebrew compiler cache outside the workspace sandbox. |
+| Native debug | `cmake --preset native-debug`; `cmake --build --preset native-debug`; `ctest --preset native-debug --output-on-failure` | Passed: 28 of 28 individually discovered tests: 25 behavior cases, 2 focused unit cases, and 1 production-mode consumer smoke. |
+| Native release | `cmake --preset native-release`; `cmake --build --preset native-release`; `ctest --preset native-release --output-on-failure` | Passed: 28 of 28 tests. |
+| WebAssembly debug | `cmake --preset wasm-debug`; `cmake --build --preset wasm-debug`; `ctest --preset wasm-debug --output-on-failure` | Passed: portable core and adapter build; 1 of 1 Node smoke test. |
 | Native sanitized | `cmake --preset native-sanitized`; `cmake --build --preset native-sanitized` | Configure and build passed with deferred GoogleTest discovery. Tests were not executed because `AGENTS.md` prohibits running the sanitizer preset inside the Codex workspace sandbox, where the runtime stalls at test startup and can leave CPU-consuming processes. CI now has an outside-sandbox sanitizer job. |
 | JSON Schema syntax | `jq empty docs/level-format.schema.json` | Passed. |
-| Vendored yyjson | `shasum -a 256 vendor/yyjson/yyjson.c vendor/yyjson/yyjson.h vendor/yyjson/LICENSE`; global-symbol inspection with `nm` | All files match the recorded 0.12.0 import checksums. Only the two Bomb Box-prefixed bridge symbols are global; no upstream `yyjson_*` implementation symbol is exported. |
+| Vendored yyjson | `shasum -a 256 vendor/yyjson/yyjson.c vendor/yyjson/yyjson.h vendor/yyjson/LICENSE`; global-symbol inspection with `nm` | All files match the recorded 0.12.0 import checksums. Only the two `game_rules_*` bridge symbols are global; no upstream `yyjson_*` implementation symbol is exported. |
 | Install package | `cmake --install out/build/native-debug --prefix <temporary-directory>` | Passed. The static archive is self-contained, no GoogleTest artifact or dependency is installed, and the package includes the yyjson MIT license, third-party notice, and provenance README. |
 | Unreal | Not run. | The Unreal wrapper remains a scaffold and no Unreal toolchain verification has been recorded. |
 

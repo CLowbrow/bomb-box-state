@@ -1,13 +1,13 @@
 #pragma once
 
-#include "bomb_box/types.hpp"
+#include "game_rules/types.hpp"
 
 #include <cstdint>
 #include <string_view>
 #include <variant>
 #include <vector>
 
-namespace bomb_box {
+namespace game_rules {
 
 enum class HorizontalAxisDirection : std::uint8_t {
     east,
@@ -158,4 +158,4 @@ struct ValidationResult final {
 // members bottom-to-top.
 [[nodiscard]] LevelDefinition canonicalize_level(LevelDefinition level);
 
-} // namespace bomb_box
+} // namespace game_rules

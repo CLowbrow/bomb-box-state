@@ -1,13 +1,13 @@
-#include "bomb_box/c_api.h"
+#include "game_rules/c_api.h"
 
-#include "bomb_box/engine.hpp"
+#include "game_rules/engine.hpp"
 
-uint32_t bomb_box_api_version(void)
+uint32_t game_rules_api_version(void)
 {
-    return bomb_box::api_version;
+    return game_rules::api_version;
 }
 
-const char* bomb_box_engine_status(void)
+const char* game_rules_engine_status(void)
 {
     return "schema_ready";
 }

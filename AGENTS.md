@@ -76,9 +76,19 @@ These instructions apply to the entire repository.
 - Documentation-only edits do not require a new executable test unless they
   introduce or change specified behavior that already has an implementation.
 
+## Title-independent naming
+
+- Treat every working or final game title as presentation metadata, not as a
+  source-code identity.
+- Do not derive namespaces, classes or other types, functions, C ABI symbols,
+  build targets or options, integration modules, filenames, directory names,
+  or serialized identifiers from the game's title.
+- Name code and technical artifacts for their stable domain role instead, so a
+  game-title change does not require an API, ABI, build, or data-format rename.
+
 ## Design for embedding in a game
 
-- Treat `bomb_box_state` as a headless rules library embedded inside a larger
+- Treat `game_rules_state` as a headless rules library embedded inside a larger
   game, not as an application. The host owns presentation, animation, audio,
   input mapping, persistence, and scheduling.
 - Keep the core portable C++20 with no platform or runtime dependencies. The

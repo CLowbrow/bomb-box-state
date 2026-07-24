@@ -2,7 +2,7 @@
 
 ## Portability boundary
 
-`bomb_box_state` is the authoritative rules library. It may use portable C++20, the standard
+`game_rules_state` is the authoritative rules library. It may use portable C++20, the standard
 library, and the pinned private yyjson C99 source internally, but it must not depend on Unreal
 headers, Emscripten headers, browser APIs, rendering, audio, input devices, wall-clock time,
 threads, or random-number sources.
@@ -18,7 +18,7 @@ buffers, and explicit error codes. Do not pass C++ standard-library objects acro
 The versioned level JSON codec is part of the portable core but lives in separate translation units.
 It accepts and returns in-memory strings and has no filesystem or platform dependency. Generic JSON
 syntax is parsed by the pinned, unmodified yyjson 0.12.0 source. A private C bridge gives upstream
-functions internal linkage and exports only Bomb Box-prefixed bridge symbols, avoiding collisions
+functions internal linkage and exports only `game_rules_*` bridge symbols, avoiding collisions
 when an embedding host uses another yyjson build. yyjson types do not enter a public header. Static
 library consumers that construct `LevelDefinition` directly do not pull the codec objects into their
 final binary unless they reference it. See the [level format specification](level-format.md) and
@@ -40,7 +40,7 @@ final binary unless they reference it. See the [level format specification](leve
 
 The installed engine and its public package must not acquire dependencies from the test system.
 Native unit and behavior tests may use a test-only framework, filesystem fixtures, and richer
-diagnostic support because those facilities are excluded from the `BombBox::State` target and its
+diagnostic support because those facilities are excluded from the `GameRules::State` target and its
 install/export surface. The core itself is still compiled with its production no-exceptions,
 no-RTTI, portability, and sanitizer settings when tests link it.
 

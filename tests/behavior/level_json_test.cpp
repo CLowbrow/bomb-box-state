@@ -1,6 +1,6 @@
-#include "bomb_box/engine.hpp"
-#include "bomb_box/level_json.hpp"
-#include "support/bomb_box_printers.hpp"
+#include "game_rules/engine.hpp"
+#include "game_rules/level_json.hpp"
+#include "support/game_rules_printers.hpp"
 
 #include <gtest/gtest.h>
 
@@ -12,7 +12,7 @@
 
 namespace {
 
-using namespace bomb_box;
+using namespace game_rules;
 
 [[nodiscard]] LevelDefinition representative_level()
 {
@@ -48,7 +48,7 @@ using namespace bomb_box;
 [[nodiscard]] std::string minimal_json(const std::string_view extra_root = {})
 {
     return std::string{R"({
-  "format":"bomb-box-level",
+  "format":"game-rules-level",
   "version":1,
   "coordinateSystem":{"origin":{"x":0,"y":0},"positiveX":"east","positiveY":"north"},
   "width":1,
@@ -132,6 +132,18 @@ TEST(LevelJson, RejectsUnsupportedVersion)
     ASSERT_TRUE(result.json_error.has_value());
     EXPECT_EQ(result.json_error->code, LevelJsonErrorCode::unsupported_version);
     EXPECT_EQ(result.json_error->path, "/version");
+}
+
+TEST(LevelJson, RejectsWrongFormatDiscriminator)
+{
+    std::string input = minimal_json();
+    const auto position = input.find("game-rules-level");
+    input.replace(position, std::string{"game-rules-level"}.size(),
+                  "unrelated-level-format");
+    const DecodeLevelJsonResult result = decode_level_json(input);
+    ASSERT_TRUE(result.json_error.has_value());
+    EXPECT_EQ(result.json_error->code, LevelJsonErrorCode::invalid_format);
+    EXPECT_EQ(result.json_error->path, "/format");
 }
 
 TEST(LevelJson, RejectsReservedEntityId)

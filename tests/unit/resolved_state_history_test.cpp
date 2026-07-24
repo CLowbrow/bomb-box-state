@@ -1,5 +1,5 @@
-#include "bomb_box/engine.hpp"
-#include "support/bomb_box_printers.hpp"
+#include "game_rules/engine.hpp"
+#include "support/game_rules_printers.hpp"
 
 #include <gtest/gtest.h>
 
@@ -8,7 +8,7 @@
 
 namespace {
 
-using namespace bomb_box;
+using namespace game_rules;
 
 [[nodiscard]] ResolvedState state_at(const std::int32_t x, const Outcome outcome = Outcome::ongoing)
 {

@@ -1,15 +1,15 @@
 using UnrealBuildTool;
 
-public class BombBoxState : ModuleRules
+public class GameRulesState : ModuleRules
 {
-    public BombBoxState(ReadOnlyTargetRules Target) : base(Target)
+    public GameRulesState(ReadOnlyTargetRules Target) : base(Target)
     {
         PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
         CppStandard = CppStandardVersion.Cpp20;
         bEnableExceptions = false;
         bUseRTTI = false;
 
-        PublicDependencyModuleNames.AddRange(new[] { "Core", "BombBoxCore" });
+        PublicDependencyModuleNames.AddRange(new[] { "Core", "GameRulesCore" });
     }
 }
 

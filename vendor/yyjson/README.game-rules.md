@@ -17,10 +17,10 @@ ac2e9bbb2e2d9149d90878d40506a1d624fa0b33c979a11b61075c54782c6d6a  yyjson.c
 45e384d3d52c73cba3a64d6e6c25d47cd738cd8a55c30629e3201046eda62947  LICENSE
 ```
 
-Bomb Box includes the source through `src/level_json_yyjson.c` as an isolated C99 object. That
-private bridge gives upstream functions internal linkage and exports only Bomb Box-prefixed bridge
+The engine includes the source through `src/level_json_yyjson.c` as an isolated C99 object. That
+private bridge gives upstream functions internal linkage and exports only `game_rules_*` bridge
 symbols, preventing collisions if an embedding host links another yyjson version. No yyjson symbol
-or type appears in public Bomb Box headers. Compile-time options are set in the root
+or type appears in public engine headers. Compile-time options are set in the root
 `CMakeLists.txt`; the generic parser is used only behind `src/level_json.cpp`.
 
 To update yyjson, choose a released tag, review its release notes and license, replace all three

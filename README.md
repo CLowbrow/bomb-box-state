@@ -1,12 +1,13 @@
-# Bomb Box state/rules engine
+# State/rules engine
 
-Bomb Box is a deterministic state and rules engine for a turn-based,
-Sokoban-like puzzle game. The engine owns the authoritative world state and an
-undo-only history of resolved states for the currently loaded level. A UI may
-submit a cardinal movement command or rewind to the preceding resolved state.
-For a movement command, it receives the complete, tick-by-tick result,
-including every fall, slide, explosion, door change, and terminal event caused
-by it.
+**Bomb Box is a temporary working title and will not be the game's final
+title.** This repository contains a deterministic state and rules engine for a
+turn-based, Sokoban-like puzzle game. The engine owns the authoritative world
+state and an undo-only history of resolved states for the currently loaded
+level. A UI may submit a cardinal movement command or rewind to the preceding
+resolved state. For a movement command, it receives the complete, tick-by-tick
+result, including every fall, slide, explosion, door change, and terminal
+event caused by it.
 
 This document is the normative behavior specification for the engine. Any
 future unresolved behavior must be called out explicitly rather than left for

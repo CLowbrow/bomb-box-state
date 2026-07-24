@@ -1,5 +1,5 @@
-#include "bomb_box/engine.hpp"
-#include "support/bomb_box_printers.hpp"
+#include "game_rules/engine.hpp"
+#include "support/game_rules_printers.hpp"
 
 #include <gtest/gtest.h>
 
@@ -7,7 +7,7 @@
 
 namespace {
 
-using namespace bomb_box;
+using namespace game_rules;
 
 [[nodiscard]] LevelDefinition flat_level(const Coordinate origin = {}, const EntityId player_id = 1)
 {

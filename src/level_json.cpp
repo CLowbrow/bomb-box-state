@@ -1,4 +1,4 @@
-#include "bomb_box/level_json.hpp"
+#include "game_rules/level_json.hpp"
 
 #include "level_json_yyjson.h"
 
@@ -14,7 +14,7 @@
 #include <utility>
 #include <vector>
 
-namespace bomb_box {
+namespace game_rules {
 namespace {
 
 [[nodiscard]] std::string_view string_value(yyjson_val* value) noexcept
@@ -25,7 +25,7 @@ namespace {
 class YyjsonDocument final {
   public:
     explicit YyjsonDocument(yyjson_doc* document) noexcept : document_(document) {}
-    ~YyjsonDocument() { bomb_box_internal_yyjson_free(document_); }
+    ~YyjsonDocument() { game_rules_internal_yyjson_free(document_); }
 
     YyjsonDocument(const YyjsonDocument&) = delete;
     YyjsonDocument& operator=(const YyjsonDocument&) = delete;
@@ -92,7 +92,7 @@ class LevelDecoder final {
 
         if (!yyjson_is_str(format)) {
             fail(LevelJsonErrorCode::invalid_member_type, "/format");
-        } else if (string_value(format) != "bomb-box-level") {
+        } else if (string_value(format) != "game-rules-level") {
             fail(LevelJsonErrorCode::invalid_format, "/format");
         }
         std::uint32_t decoded_version = 0;
@@ -587,7 +587,7 @@ DecodeLevelJsonResult decode_level_json(const std::string_view json,
 
     yyjson_read_err read_error{};
     YyjsonDocument document{
-        bomb_box_internal_yyjson_read(json.data(), json.size(), &read_error)};
+        game_rules_internal_yyjson_read(json.data(), json.size(), &read_error)};
     if (document.get() == nullptr) {
         result.json_error =
             LevelJsonError{LevelJsonErrorCode::invalid_json, read_error.pos, {}};
@@ -627,7 +627,7 @@ EncodeLevelJsonResult encode_level_json(const LevelDefinition& level)
     std::string output;
     output.reserve(512 + canonical.cells.size() * 80 + canonical.fixtures.size() * 80
                    + canonical.entities.size() * 100);
-    output += "{\n  \"format\": \"bomb-box-level\",\n  \"version\": 1,\n";
+    output += "{\n  \"format\": \"game-rules-level\",\n  \"version\": 1,\n";
     output += "  \"coordinateSystem\": {\"origin\":";
     append_coordinate(output, canonical.coordinates.origin);
     output += ",\"positiveX\":\"";
@@ -702,4 +702,4 @@ EncodeLevelJsonResult encode_level_json(const LevelDefinition& level)
     return result;
 }
 
-} // namespace bomb_box
+} // namespace game_rules

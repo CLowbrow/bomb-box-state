@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "Bomb Box level format version 1",
+  "title": "Game-rules level format version 1",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -14,7 +14,7 @@
     "entities"
   ],
   "properties": {
-    "format": {"const": "bomb-box-level"},
+    "format": {"const": "game-rules-level"},
     "version": {"const": 1},
     "coordinateSystem": {"$ref": "#/$defs/coordinateSystem"},
     "width": {"type": "integer", "minimum": 1, "maximum": 4294967295},

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "bomb_box/world.hpp"
+#include "game_rules/world.hpp"
 
 #include <cstddef>
 #include <cstdint>
@@ -9,7 +9,7 @@
 #include <string_view>
 #include <vector>
 
-namespace bomb_box {
+namespace game_rules {
 
 inline constexpr std::uint32_t level_json_format_version = 1;
 
@@ -66,7 +66,7 @@ struct EncodeLevelJsonResult final {
     [[nodiscard]] bool accepted() const noexcept { return json.has_value(); }
 };
 
-// Decodes the strict, versioned Bomb Box level JSON format and then runs the
+// Decodes the strict, versioned game-rules level JSON format and then runs the
 // same structural validation used by Engine::load_level(). Unknown members are
 // rejected so misspellings and unsupported newer data are never ignored.
 [[nodiscard]] DecodeLevelJsonResult
@@ -76,4 +76,4 @@ decode_level_json(std::string_view json, LevelJsonReadOptions options = {});
 // the output ends with one newline, so equivalent levels serialize identically.
 [[nodiscard]] EncodeLevelJsonResult encode_level_json(const LevelDefinition& level);
 
-} // namespace bomb_box
+} // namespace game_rules

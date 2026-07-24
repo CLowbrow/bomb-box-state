@@ -1,4 +1,4 @@
-#include "bomb_box/world.hpp"
+#include "game_rules/world.hpp"
 
 #include <algorithm>
 #include <cstdint>
@@ -8,7 +8,7 @@
 #include <set>
 #include <tuple>
 
-namespace bomb_box {
+namespace game_rules {
 namespace {
 
 struct CoordinateLess final {
@@ -375,4 +375,4 @@ LevelDefinition canonicalize_level(LevelDefinition level)
     return level;
 }
 
-} // namespace bomb_box
+} // namespace game_rules

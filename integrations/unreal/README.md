@@ -2,13 +2,13 @@
 
 This directory is a plugin scaffold, not a staged binary plugin yet. Keep the rules implementation
 in the portable core and keep Unreal-specific types, reflection, Blueprint exposure, and animation
-translation in the `BombBoxState` runtime module.
+translation in the `GameRulesState` runtime module.
 
 ## Why the core is external
 
 Unreal Build Tool needs libraries built for the exact target platform and a compatible compiler and
 runtime. A macOS archive built on this machine cannot be reused for Win64, Linux, consoles, or a
-different architecture. The `BombBoxCore` external module therefore expects one archive per Unreal
+different architecture. The `GameRulesCore` external module therefore expects one archive per Unreal
 target rather than committing a host-only binary.
 
 The core defaults to no RTTI and no exceptions, matching the plugin module settings and avoiding the
@@ -28,10 +28,10 @@ Unreal toolchain you ship.
    cmake --install out/build/native-release --prefix out/install/unreal
    ```
 
-3. Copy `out/install/unreal/include/bomb_box` into
-   `BombBoxState/Source/ThirdParty/BombBoxCore/include/bomb_box`.
+3. Copy `out/install/unreal/include/game_rules` into
+   `GameRulesState/Source/ThirdParty/GameRulesCore/include/game_rules`.
 4. Copy the installed library into the matching `lib/Mac`, `lib/Win64`, or `lib/Linux` directory.
-5. Copy or link the `BombBoxState` plugin directory into an Unreal project's `Plugins` directory,
+5. Copy or link the `GameRulesState` plugin directory into an Unreal project's `Plugins` directory,
    regenerate project files, and build the project.
 
 Before shipping, automate step 3 and 4 in a per-platform packaging job and test a packaged Unreal

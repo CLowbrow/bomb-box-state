@@ -1,6 +1,7 @@
-# Bomb Box level format, version 1
+# Game-rules level format, version 1
 
-This document is the normative serialization specification for a Bomb Box level. `README.md`
+This document is the normative serialization specification for a game-rules
+engine level. `README.md`
 remains normative for gameplay and state transitions; this document defines how a level's supplied
 initial data is represented and exchanged.
 
@@ -26,7 +27,7 @@ identical across hosts and avoids making the rules engine an owner of presentati
 
 ```json
 {
-  "format": "bomb-box-level",
+  "format": "game-rules-level",
   "version": 1,
   "coordinateSystem": {"origin":{"x":10,"y":-4},"positiveX":"west","positiveY":"south"},
   "width": 3,
@@ -62,7 +63,7 @@ number.
 
 | Member | Type | Meaning |
 | --- | --- | --- |
-| `format` | string | Must be exactly `bomb-box-level`. |
+| `format` | string | Must be exactly `game-rules-level`. |
 | `version` | integer | Must be exactly `1`. |
 | `coordinateSystem` | object | Declares the numeric origin and how increasing axes map to cardinal directions. |
 | `width` | integer | Positive `uint32` board width. |
