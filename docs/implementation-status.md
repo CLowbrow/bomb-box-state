@@ -187,7 +187,7 @@ Most recently recorded on 2026-07-23:
 | Native debug | `cmake --preset native-debug`; `cmake --build --preset native-debug`; `ctest --preset native-debug --output-on-failure` | Passed: 59 of 59 tests: 47 behavior cases, 5 C ABI boundary cases, 4 focused unit cases, 1 cross-adapter contract runner, and 2 production consumer/header smokes. |
 | Native release | `cmake --preset native-release`; `cmake --build --preset native-release`; `ctest --preset native-release --output-on-failure` | Passed: 59 of 59 tests. |
 | WebAssembly debug | `cmake --preset wasm-debug`; `cmake --build --preset wasm-debug`; `ctest --preset wasm-debug --output-on-failure` | Passed: portable core and stateful adapter build; 1 of 1 Node tests ran the authored browser vertical-slice contract. |
-| Native sanitized | `cmake --preset native-sanitized`; `cmake --build --preset native-sanitized` | Configure and build passed with deferred GoogleTest discovery. Tests were not executed because `AGENTS.md` prohibits running the sanitizer preset inside the Codex workspace sandbox, where the runtime stalls at test startup and can leave CPU-consuming processes. CI now has an outside-sandbox sanitizer job. |
+| Native sanitized | `cmake --preset native-sanitized`; `cmake --build --preset native-sanitized` | Configure and build passed with deferred GoogleTest discovery. On this Apple Silicon/macOS host, test discovery timed out before cases ran because the Apple sanitizer runtime stalled at process startup; the same behavior was reproduced in a normal terminal, so execution is delegated to the Ubuntu sanitizer CI job. |
 | JSON Schema syntax | `jq empty docs/level-format.schema.json` | Passed. |
 | Vendored yyjson | `shasum -a 256 vendor/yyjson/yyjson.c vendor/yyjson/yyjson.h vendor/yyjson/LICENSE`; global-symbol inspection with `nm` | All files match the recorded 0.12.0 import checksums. Only the two `game_rules_*` bridge symbols are global; no upstream `yyjson_*` implementation symbol is exported. |
 | Install package | `cmake --install out/build/native-debug --prefix <temporary-directory>` | Passed after the Phase 7 public-state/event additions. The static archive is self-contained, no GoogleTest artifact or dependency is installed, and the package includes the yyjson MIT license, third-party notice, and provenance README. |
@@ -210,8 +210,10 @@ Most recently recorded on 2026-07-23:
   player action can create an entity above the player; ramps and blasts will
   exercise that path through public behavior scenarios in later phases.
 - Ramp traversal and sliding, and explosions remain schema-only.
-- Sanitized tests must be run outside the Codex workspace sandbox; the runtime
-  stalls at test startup inside it.
+- Sanitized tests must run in the Ubuntu CI job or another known-working Linux
+  environment. On the current Apple Silicon/macOS host, the Apple sanitizer
+  runtime stalls during GoogleTest discovery in both normal terminals and the
+  Codex sandbox.
 
 ## Recommended next task
 

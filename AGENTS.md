@@ -68,11 +68,13 @@ These instructions apply to the entire repository.
   collections, serialization, or ABI code when the required toolchain is
   available. Run applicable WebAssembly or integration tests when changing
   those surfaces. Report any test suite that could not be run and why.
-- Do not run `ctest --preset native-sanitized` inside the Codex workspace
-  sandbox. In this environment the sanitizer runtime stalls during process
-  startup and can leave test processes running in the background consuming
-  CPU. The preset may be configured and built, but execute its tests only
-  outside the sandbox; record the sandbox limitation in verification results.
+- Do not run `ctest --preset native-sanitized` on the current Apple
+  Silicon/macOS development host, whether from the Codex workspace sandbox or
+  a normal terminal. The Apple sanitizer runtime stalls during GoogleTest
+  discovery before cases run and may leave test processes consuming CPU. The
+  preset may be configured and built locally, but execute its tests through
+  the Ubuntu sanitizer CI job or another known-working Linux environment;
+  record this host-toolchain limitation in verification results.
 - Documentation-only edits do not require a new executable test unless they
   introduce or change specified behavior that already has an implementation.
 

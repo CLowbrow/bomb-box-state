@@ -18,6 +18,15 @@ cmake --build --preset native-sanitized
 ctest --preset native-sanitized
 ```
 
+On the current Apple Silicon/macOS development host, configure and build work,
+but the Apple sanitizer runtime hangs while CTest performs GoogleTest discovery
+before any case runs. This occurs in a normal terminal as well as in the Codex
+sandbox, so do not run the final `ctest` command on this host. Use the Ubuntu
+`native sanitizers` GitHub Actions job, or another known-working Linux
+environment, to execute the sanitized suite. A local sanitized configure/build
+remains useful for proving that all targets compile and link with the
+instrumentation enabled.
+
 Build artifacts stay under `out/` and are ignored by Git.
 
 When native tests are enabled, the first configure downloads GoogleTest 1.17.0 from its exact
