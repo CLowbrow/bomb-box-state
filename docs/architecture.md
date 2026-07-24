@@ -80,13 +80,17 @@ internal orchestration mechanism rather than a host state-injection API. Flat wa
 single-entity player pushes, and gravity commit from immutable pre-tick snapshots and return
 zero-based ordered ticks with semantic events and per-tick states. Gravity is an independent column
 planner: it calculates final landing heights bottom-up, commits every possible fall in one tick,
-preserves spatial event order, and records armed barrel IDs in resolved state. Loading uses the same
-planner before installing the first history state and returns the supplied initial state,
-initialization ticks, stabilized or terminal state, and outcome. An accepted push commits the
-player and pushed entity together before any required fall tick; any failed source, target, or
-destination check leaves state and history unchanged. The primitive stateful C API and WebAssembly
-adapter carry that same create/load/input/state/rewind loop across the embedding boundary. Fixtures,
-ramp sliding, and explosions remain later movement systems.
+preserves spatial event order, and records armed barrel IDs in resolved state. Fixture resolution
+derives palette-ordered active switch colors and row-major effectively open doors after each
+physical tick, appending deterministic semantic changes to that tick. Teleporter contact finalizes
+the tick before fixture or later derived work and gives a win precedence over a same-tick loss.
+Loading runs initial fixture derivation followed by the same gravity/post-tick path before installing
+the first history state and returns the supplied initial state, initialization ticks, stabilized or
+terminal state, and outcome. An accepted push commits the player and pushed entity together before
+any required fall tick; any failed source, target, or destination check leaves state and history
+unchanged. The primitive stateful C API and WebAssembly adapter carry that same
+create/load/input/state/rewind loop across the embedding boundary. Ramp sliding and explosions
+remain later movement systems.
 
 `decode_level_json()` produces that same canonical `LevelDefinition` only after strict format and
 structural validation. JSON decoding is deliberately separate from `Engine::load_level()` so an

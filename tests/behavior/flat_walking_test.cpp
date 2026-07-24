@@ -219,7 +219,7 @@ TEST(FlatWalking, ValidatesInputAndReportsUnsupportedPhaseBoundaries)
     };
     Engine fixture_engine;
     ASSERT_TRUE(fixture_engine.load_level(fixture).accepted());
-    EXPECT_EQ(fixture_engine.move(Direction::east).status, MoveStatus::unsupported_fixture);
+    EXPECT_EQ(fixture_engine.move(Direction::east).status, MoveStatus::moved);
 
     EXPECT_EQ(to_string(MoveStatus::world_boundary), "world_boundary");
     EXPECT_EQ(to_string(MovementCause::player), "player");

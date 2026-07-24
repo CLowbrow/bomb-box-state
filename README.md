@@ -503,6 +503,15 @@ barrel, it would remain in place, become armed, and explode after settling.
 - A door must never close onto, crush, or divide a stack.
 - Door state is recomputed after each tick. An open/close event is emitted only
   when effective passability changes.
+- Resolved state records active switch colors in palette order and effectively
+  open door coordinates in canonical row-major order. These derived values are
+  authoritative and rewind with the rest of the resolved state.
+- Switch and door changes caused by a physical tick are appended to that
+  tick's events after movement or arming events and before crushing or terminal
+  events. `SwitchChanged` events are ordered by palette order, followed by
+  `DoorOpened` and `DoorClosed` events in canonical door-coordinate order. A
+  switch event identifies its color and new active value; a door event
+  identifies its coordinate and color.
 
 Level validation must not require switch colors and door colors to correspond.
 
@@ -560,6 +569,11 @@ may return a `LoadResult` containing the supplied state, initialization ticks,
 resolved state, and outcome. This allows a UI to animate a level settling into
 place before control is given to the player. A successful `LoadResult` begins a
 new history even when initialization immediately produces a terminal state.
+
+Initial fixture derivation produces one zero-based initialization tick when it
+changes any switch color, changes effective door passability, or detects an
+immediate teleporter win. Inactive colors and closed, empty doors are the
+baseline and do not emit initialization events merely because they exist.
 
 ## Turns, ticks, and causal resolution
 

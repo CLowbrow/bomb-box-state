@@ -1,5 +1,6 @@
 #include "game_rules/engine.hpp"
 
+#include "fixtures.hpp"
 #include "gravity.hpp"
 
 #include <algorithm>
@@ -139,8 +140,9 @@ std::string_view to_string(const MoveStatus status) noexcept
     case MoveStatus::ledge: return "ledge";
     case MoveStatus::occupied: return "occupied";
     case MoveStatus::stacked_push_target: return "stacked_push_target";
+    case MoveStatus::closed_door: return "closed_door";
+    case MoveStatus::teleporter_restriction: return "teleporter_restriction";
     case MoveStatus::unsupported_geometry: return "unsupported_geometry";
-    case MoveStatus::unsupported_fixture: return "unsupported_fixture";
     case MoveStatus::level_terminal: return "level_terminal";
     }
     return "unknown";
@@ -226,13 +228,22 @@ LoadResult Engine::load_level(const LevelDefinition& level)
     const ResolvedState initial{replacement.entities, Outcome::ongoing};
     ResolvedState stabilized = initial;
     std::vector<TickResult> ticks;
-    while (const std::optional<TickResult> falling =
-               detail::resolve_falling_tick(replacement, stabilized,
-                                            static_cast<std::uint32_t>(ticks.size()))) {
-        stabilized = falling->state_after;
-        ticks.push_back(*falling);
-        if (stabilized.outcome != Outcome::ongoing) {
-            break;
+    if (const std::optional<TickResult> fixtures =
+            detail::resolve_initial_fixture_tick(replacement, stabilized, 0)) {
+        stabilized = fixtures->state_after;
+        ticks.push_back(*fixtures);
+    }
+    if (stabilized.outcome == Outcome::ongoing) {
+        while (const std::optional<TickResult> falling =
+                   detail::resolve_falling_tick(replacement, stabilized,
+                                                static_cast<std::uint32_t>(ticks.size()))) {
+            TickResult completed = *falling;
+            detail::resolve_fixtures_after_tick(replacement, completed);
+            stabilized = completed.state_after;
+            ticks.push_back(std::move(completed));
+            if (stabilized.outcome != Outcome::ongoing) {
+                break;
+            }
         }
     }
 
@@ -286,11 +297,14 @@ MoveResult Engine::move(const Direction direction)
     }
 
     const auto fixture = std::find_if(level_->fixtures.begin(), level_->fixtures.end(),
-                                      [destination](const Fixture& value) {
-                                          return value.coordinate == *destination;
-                                      });
-    if (fixture != level_->fixtures.end()) {
-        return rejected_move(MoveStatus::unsupported_fixture, direction, current);
+                                     [destination](const Fixture& value) {
+                                         return value.coordinate == *destination;
+                                     });
+    const bool destination_is_exit = fixture != level_->fixtures.end()
+        && std::holds_alternative<ExitTeleporter>(fixture->kind);
+    if (fixture != level_->fixtures.end() && std::holds_alternative<Door>(fixture->kind)
+        && !detail::is_effectively_open_door(*level_, current, *destination)) {
+        return rejected_move(MoveStatus::closed_door, direction, current);
     }
 
     Height destination_support =
@@ -310,6 +324,14 @@ MoveResult Engine::move(const Direction direction)
         if (top_half_steps > destination_support.half_steps
             && top_half_steps <= std::numeric_limits<std::int32_t>::max()) {
             destination_support.half_steps = static_cast<std::int32_t>(top_half_steps);
+        }
+    }
+
+    if (destination_is_exit) {
+        const Height teleporter_floor = Height::from_elevation(
+            std::get<FlatCell>(destination_cell->geometry).elevation);
+        if (destination_entity_count != 0 || player->bottom != teleporter_floor) {
+            return rejected_move(MoveStatus::teleporter_restriction, direction, current);
         }
     }
 
@@ -336,7 +358,14 @@ MoveResult Engine::move(const Direction direction)
                              return value.coordinate == *pushed_destination;
                          });
         if (pushed_destination_fixture != level_->fixtures.end()) {
-            return rejected_move(MoveStatus::unsupported_fixture, direction, current);
+            if (std::holds_alternative<ExitTeleporter>(pushed_destination_fixture->kind)) {
+                return rejected_move(MoveStatus::teleporter_restriction, direction, current);
+            }
+            if (std::holds_alternative<Door>(pushed_destination_fixture->kind)
+                && !detail::is_effectively_open_door(*level_, current,
+                                                     *pushed_destination)) {
+                return rejected_move(MoveStatus::closed_door, direction, current);
+            }
         }
 
         const bool pushed_destination_occupied =
@@ -390,20 +419,25 @@ MoveResult Engine::move(const Direction direction)
             push_target->bottom,
             MovementCause::player,
         };
-        const TickResult movement_tick{
+        TickResult movement_tick{
             0,
             {GameplayEvent{player_moved}, GameplayEvent{entity_moved}},
             next,
         };
+        detail::resolve_fixtures_after_tick(*level_, movement_tick);
         std::vector<TickResult> ticks{movement_tick};
-        ResolvedState resolved = next;
-        while (const std::optional<TickResult> falling =
-                   detail::resolve_falling_tick(*level_, resolved,
-                                                static_cast<std::uint32_t>(ticks.size()))) {
-            resolved = falling->state_after;
-            ticks.push_back(*falling);
-            if (resolved.outcome != Outcome::ongoing) {
-                break;
+        ResolvedState resolved = movement_tick.state_after;
+        if (resolved.outcome == Outcome::ongoing) {
+            while (const std::optional<TickResult> falling =
+                       detail::resolve_falling_tick(*level_, resolved,
+                                                    static_cast<std::uint32_t>(ticks.size()))) {
+                TickResult completed = *falling;
+                detail::resolve_fixtures_after_tick(*level_, completed);
+                resolved = completed.state_after;
+                ticks.push_back(std::move(completed));
+                if (resolved.outcome != Outcome::ongoing) {
+                    break;
+                }
             }
         }
         if (!history_.commit(std::move(resolved))) {
@@ -446,8 +480,9 @@ MoveResult Engine::move(const Direction direction)
         MovementCause::player,
     };
     const ResolvedState initial = current;
-    const TickResult tick{0, {GameplayEvent{moved}}, next};
-    if (!history_.commit(next)) {
+    TickResult tick{0, {GameplayEvent{moved}}, next};
+    detail::resolve_fixtures_after_tick(*level_, tick);
+    if (!history_.commit(tick.state_after)) {
         return rejected_move(MoveStatus::no_level, direction, history_.current());
     }
 

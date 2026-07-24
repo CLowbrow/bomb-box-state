@@ -235,23 +235,6 @@ TEST(PlayerPush, RejectsWorldAndDeferredRuleBoundariesWithoutPartialMovement)
               expected_rejection(MoveStatus::unsupported_geometry, Direction::east,
                                  ramp_target));
 
-    LevelDefinition fixture = flat_grid(3, 1, {0, 0});
-    fixture.entities.push_back(Entity{4, EntityKind::box, {1, 0}, Height::from_elevation(0)});
-    fixture.fixtures.push_back(Fixture{{2, 0}, Switch{SwitchColor::red}});
-    Engine fixture_engine;
-    ASSERT_TRUE(fixture_engine.load_level(fixture).accepted());
-    EXPECT_EQ(fixture_engine.move(Direction::east),
-              expected_rejection(MoveStatus::unsupported_fixture, Direction::east, fixture));
-
-    LevelDefinition target_fixture = flat_grid(3, 1, {0, 0});
-    target_fixture.entities.push_back(
-        Entity{4, EntityKind::box, {1, 0}, Height::from_elevation(0)});
-    target_fixture.fixtures.push_back(Fixture{{1, 0}, Switch{SwitchColor::red}});
-    Engine target_fixture_engine;
-    ASSERT_TRUE(target_fixture_engine.load_level(target_fixture).accepted());
-    EXPECT_EQ(target_fixture_engine.move(Direction::east),
-              expected_rejection(MoveStatus::unsupported_fixture, Direction::east,
-                                 target_fixture));
 }
 
 TEST(PlayerPush, PushesAtThePlayersCurrentHeight)

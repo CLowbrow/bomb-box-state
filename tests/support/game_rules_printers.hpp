@@ -207,6 +207,10 @@ inline void PrintTo(const ResolvedState& value, std::ostream* const output)
     test_detail::print_field(output, "outcome", value.outcome);
     *output << ", ";
     test_detail::print_field(output, "armed_barrels", value.armed_barrels);
+    *output << ", ";
+    test_detail::print_field(output, "active_switch_colors", value.active_switch_colors);
+    *output << ", ";
+    test_detail::print_field(output, "open_doors", value.open_doors);
     *output << '}';
 }
 
@@ -270,6 +274,36 @@ inline void PrintTo(const PlayerCrushedEvent& value, std::ostream* const output)
     *output << ", ";
     test_detail::print_field(output, "crushing_entity_id", value.crushing_entity_id);
     *output << '}';
+}
+
+inline void PrintTo(const SwitchChangedEvent& value, std::ostream* const output)
+{
+    *output << "SwitchChanged{";
+    test_detail::print_field(output, "color", value.color);
+    *output << ", active=" << value.active << '}';
+}
+
+inline void PrintTo(const DoorOpenedEvent& value, std::ostream* const output)
+{
+    *output << "DoorOpened{";
+    test_detail::print_field(output, "coordinate", value.coordinate);
+    *output << ", ";
+    test_detail::print_field(output, "color", value.color);
+    *output << '}';
+}
+
+inline void PrintTo(const DoorClosedEvent& value, std::ostream* const output)
+{
+    *output << "DoorClosed{";
+    test_detail::print_field(output, "coordinate", value.coordinate);
+    *output << ", ";
+    test_detail::print_field(output, "color", value.color);
+    *output << '}';
+}
+
+inline void PrintTo(const LevelWonEvent&, std::ostream* const output)
+{
+    *output << "LevelWon{}";
 }
 
 inline void PrintTo(const LevelLostEvent&, std::ostream* const output)

@@ -56,6 +56,25 @@ constexpr char falling_level[] = R"({
   ]
 })";
 
+constexpr char fixture_level[] = R"({
+  "format":"game-rules-level",
+  "version":1,
+  "coordinateSystem":{"origin":{"x":0,"y":0},"positiveX":"east","positiveY":"north"},
+  "width":3,
+  "height":1,
+  "cells":[
+    {"coordinate":{"x":0,"y":0},"type":"flat","elevation":0},
+    {"coordinate":{"x":1,"y":0},"type":"flat","elevation":0},
+    {"coordinate":{"x":2,"y":0},"type":"flat","elevation":0}
+  ],
+  "fixtures":[
+    {"coordinate":{"x":0,"y":0},"type":"switch","color":"red"},
+    {"coordinate":{"x":1,"y":0},"type":"door","color":"red"},
+    {"coordinate":{"x":2,"y":0},"type":"exit"}
+  ],
+  "entities":[{"id":"1","type":"player","coordinate":{"x":0,"y":0},"bottomHalfSteps":0}]
+})";
+
 TEST(CApi, HandlesLifecycleNullsAndCallerOwnedResults)
 {
     EnginePointer engine{game_rules_engine_create()};
@@ -140,6 +159,34 @@ TEST(CApi, ReturnsInitializationFallsAndAuthoritativeBarrelArming)
               std::string::npos);
     EXPECT_NE(loaded.find(R"("armedBarrelIds":["8"])"), std::string::npos);
     EXPECT_NE(loaded.find(R"("newBottomHalfSteps":0)"), std::string::npos);
+}
+
+TEST(CApi, ReturnsFixtureStateEventsStatusesAndTerminalOutcome)
+{
+    EnginePointer engine{game_rules_engine_create()};
+    ASSERT_NE(engine, nullptr);
+
+    const std::string loaded = take(game_rules_engine_load_level(
+        engine.get(), fixture_level,
+        static_cast<std::uint32_t>(sizeof(fixture_level) - 1U)));
+    EXPECT_NE(loaded.find(R"("activeSwitchColors":["red"])"), std::string::npos);
+    EXPECT_NE(loaded.find(R"("openDoorCoordinates":[{"x":1,"y":0}])"),
+              std::string::npos);
+    EXPECT_NE(loaded.find(R"({"type":"switchChanged","color":"red","active":true})"),
+              std::string::npos);
+    EXPECT_NE(loaded.find(R"({"type":"doorOpened","coordinate":{"x":1,"y":0},"color":"red"})"),
+              std::string::npos);
+
+    ASSERT_NE(take(game_rules_engine_move(engine.get(), GAME_RULES_DIRECTION_EAST))
+                  .find(R"("status":"moved")"),
+              std::string::npos);
+    const std::string won =
+        take(game_rules_engine_move(engine.get(), GAME_RULES_DIRECTION_EAST));
+    EXPECT_NE(won.find(R"({"type":"levelWon"})"), std::string::npos);
+    EXPECT_NE(won.find(R"("outcome":"won")"), std::string::npos);
+    EXPECT_NE(take(game_rules_engine_move(engine.get(), GAME_RULES_DIRECTION_WEST))
+                  .find(R"("status":"level_terminal")"),
+              std::string::npos);
 }
 
 } // namespace

@@ -39,6 +39,7 @@ endfunction()
 game_rules_add_gtest(
     game_rules_unit_tests
     unit
+    unit/fixtures_test.cpp
     unit/gravity_test.cpp
     unit/resolved_state_history_test.cpp
 )
@@ -51,6 +52,7 @@ game_rules_add_gtest(
     behavior/resolved_state_history_test.cpp
     behavior/flat_walking_test.cpp
     behavior/falling_test.cpp
+    behavior/fixtures_test.cpp
     behavior/player_push_test.cpp
 )
 

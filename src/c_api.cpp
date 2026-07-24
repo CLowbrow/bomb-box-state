@@ -149,12 +149,40 @@ void append_entity_ids(std::string& output, const std::vector<EntityId>& ids)
     output.push_back(']');
 }
 
+void append_colors(std::string& output, const std::vector<SwitchColor>& colors)
+{
+    output.push_back('[');
+    for (std::size_t index = 0; index < colors.size(); ++index) {
+        if (index != 0) {
+            output.push_back(',');
+        }
+        append_string(output, color_name(colors[index]));
+    }
+    output.push_back(']');
+}
+
+void append_coordinates(std::string& output, const std::vector<Coordinate>& coordinates)
+{
+    output.push_back('[');
+    for (std::size_t index = 0; index < coordinates.size(); ++index) {
+        if (index != 0) {
+            output.push_back(',');
+        }
+        append_coordinate(output, coordinates[index]);
+    }
+    output.push_back(']');
+}
+
 void append_resolved_state(std::string& output, const ResolvedState& state)
 {
     output += "{\"entities\":";
     append_entities(output, state.entities);
     output += ",\"armedBarrelIds\":";
     append_entity_ids(output, state.armed_barrels);
+    output += ",\"activeSwitchColors\":";
+    append_colors(output, state.active_switch_colors);
+    output += ",\"openDoorCoordinates\":";
+    append_coordinates(output, state.open_doors);
     output += ",\"outcome\":\"";
     output += outcome_name(state.outcome);
     output += "\"}";
@@ -226,6 +254,10 @@ void append_renderable_state(std::string& output,
     append_entities(output, state.entities);
     output += ",\"armedBarrelIds\":";
     append_entity_ids(output, state.armed_barrels);
+    output += ",\"activeSwitchColors\":";
+    append_colors(output, state.active_switch_colors);
+    output += ",\"openDoorCoordinates\":";
+    append_coordinates(output, state.open_doors);
     output += ",\"outcome\":\"";
     output += outcome_name(state.outcome);
     output += "\"}";
@@ -283,7 +315,27 @@ void append_event(std::string& output, const GameplayEvent& event)
                 output += "\",\"crushingEntityId\":\"";
                 append_integer(output, value.crushing_entity_id);
                 output += "\"}";
-            } else {
+            } else if constexpr (std::is_same_v<Event, SwitchChangedEvent>) {
+                output += "{\"type\":\"switchChanged\",\"color\":\"";
+                output += color_name(value.color);
+                output += "\",\"active\":";
+                output += value.active ? "true" : "false";
+                output.push_back('}');
+            } else if constexpr (std::is_same_v<Event, DoorOpenedEvent>) {
+                output += "{\"type\":\"doorOpened\",\"coordinate\":";
+                append_coordinate(output, value.coordinate);
+                output += ",\"color\":\"";
+                output += color_name(value.color);
+                output += "\"}";
+            } else if constexpr (std::is_same_v<Event, DoorClosedEvent>) {
+                output += "{\"type\":\"doorClosed\",\"coordinate\":";
+                append_coordinate(output, value.coordinate);
+                output += ",\"color\":\"";
+                output += color_name(value.color);
+                output += "\"}";
+            } else if constexpr (std::is_same_v<Event, LevelWonEvent>) {
+                output += "{\"type\":\"levelWon\"}";
+            } else if constexpr (std::is_same_v<Event, LevelLostEvent>) {
                 output += "{\"type\":\"levelLost\"}";
             }
         },

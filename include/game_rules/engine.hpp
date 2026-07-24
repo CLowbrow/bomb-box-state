@@ -33,6 +33,11 @@ struct ResolvedState final {
     // Canonical ascending IDs. Arming is dynamic state rather than authored
     // level data, and therefore survives rewind but not level replacement.
     std::vector<EntityId> armed_barrels{};
+    // Active colors follow SwitchColor declaration order. Effectively open
+    // door coordinates are canonical row-major. Both are derived state and
+    // are restored exactly by rewind.
+    std::vector<SwitchColor> active_switch_colors{};
+    std::vector<Coordinate> open_doors{};
 
     [[nodiscard]] friend bool operator==(const ResolvedState&, const ResolvedState&) = default;
 };
@@ -45,8 +50,9 @@ enum class MoveStatus : std::uint8_t {
     ledge,
     occupied,
     stacked_push_target,
+    closed_door,
+    teleporter_restriction,
     unsupported_geometry,
-    unsupported_fixture,
     level_terminal,
 };
 
@@ -99,6 +105,34 @@ struct PlayerCrushedEvent final {
                                                    PlayerCrushedEvent) noexcept = default;
 };
 
+struct SwitchChangedEvent final {
+    SwitchColor color{SwitchColor::red};
+    bool active{};
+
+    [[nodiscard]] friend constexpr bool operator==(SwitchChangedEvent,
+                                                   SwitchChangedEvent) noexcept = default;
+};
+
+struct DoorOpenedEvent final {
+    Coordinate coordinate{};
+    SwitchColor color{SwitchColor::red};
+
+    [[nodiscard]] friend constexpr bool operator==(DoorOpenedEvent,
+                                                   DoorOpenedEvent) noexcept = default;
+};
+
+struct DoorClosedEvent final {
+    Coordinate coordinate{};
+    SwitchColor color{SwitchColor::red};
+
+    [[nodiscard]] friend constexpr bool operator==(DoorClosedEvent,
+                                                   DoorClosedEvent) noexcept = default;
+};
+
+struct LevelWonEvent final {
+    [[nodiscard]] friend constexpr bool operator==(LevelWonEvent, LevelWonEvent) noexcept = default;
+};
+
 struct LevelLostEvent final {
     [[nodiscard]] friend constexpr bool operator==(LevelLostEvent, LevelLostEvent) noexcept = default;
 };
@@ -108,6 +142,10 @@ using GameplayEvent = std::variant<MoveBlockedEvent,
                                    EntityMovedEvent,
                                    BarrelArmedEvent,
                                    PlayerCrushedEvent,
+                                   SwitchChangedEvent,
+                                   DoorOpenedEvent,
+                                   DoorClosedEvent,
+                                   LevelWonEvent,
                                    LevelLostEvent>;
 
 struct TickResult final {
