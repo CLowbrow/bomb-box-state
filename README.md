@@ -319,7 +319,9 @@ to match one of its endpoints.
   barrel.
 - A box or barrel on a ramp automatically tries to slide toward the low
   endpoint.
-- If the low destination is blocked, the entity remains on the ramp.
+- If the low destination contains any entity, has a closed door, or has an
+  exit teleporter, it is blocked and the ramp entity remains in place. A
+  switch or effectively open door does not block the slide.
 - If the blockage later clears, the entity automatically tries again during
   the next derived tick.
 - An entity may fall onto a ramp from somewhere other than the ramp's high
@@ -331,6 +333,12 @@ to match one of its endpoints.
   time.
 - Moving a whole ramp stack is automatic ramp behavior, not a player pushing a
   stack.
+- Independent ramp stacks slide simultaneously from one pre-tick snapshot. If
+  two or more stacks would enter the same low endpoint, all of those
+  conflicting slides fail and the stacks remain on their ramps.
+- Successful slide events are ordered by source ramp coordinate in canonical
+  row-major order, then by the entities' pre-tick bottom-to-top order within
+  each ramp stack.
 - Because the world has no overhang geometry, there is no separate overhead
   obstruction that can block only an upper member of a ramp stack. The move is
   legal or blocked for the stack as a whole.

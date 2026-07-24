@@ -91,21 +91,23 @@ if (rewound.accepted()) {
 }
 ```
 
-The current movement scope is flat walking, atomic single-entity pushes,
-derived falling, switches, doors, and exit teleporters. A push emits the
+The current movement scope is flat and oriented ramp walking, atomic
+single-entity pushes including downhill ramp entry, derived falling and
+whole-stack sliding, switches, doors, and exit teleporters. A push emits the
 player's movement event followed by the box or barrel movement event in the
-same tick; fixture changes follow the physical events, and a push over a lower
-flat support is then completed by a derived fall tick. Stacked targets,
-recursive pushes, closed doors, teleporter restrictions, and other blocked
-destinations reject without entering history. Ramp traversal remains deferred
-and is reported at its explicit geometry boundary.
+same tick; fixture changes follow physical events. A push over a lower flat
+support is completed by a derived fall tick, while a downhill ramp push is
+completed by a later slide tick. Stacked targets, recursive pushes, closed
+doors, teleporter restrictions, perpendicular ramp traversal, and other
+blocked destinations reject without entering history.
 
-`Engine::load_level()` runs initial fixture derivation and the same gravity
-planner before establishing the new history boundary. Its `LoadResult` exposes
-the canonical supplied dynamic state as `initial_state`, every initialization
-tick, the final authoritative state, and outcome. Initialization derives active
-switch colors and effectively open doors, recognizes an immediate teleporter
-win, and stabilizes gravity.
+`Engine::load_level()` runs initial fixture derivation and the same gravity and
+ramp-slide planners before establishing the new history boundary. Its
+`LoadResult` exposes the canonical supplied dynamic state as `initial_state`,
+every initialization tick, the final authoritative state, and outcome.
+Initialization derives active switch colors and effectively open doors,
+recognizes an immediate teleporter win, and stabilizes gravity and ramp
+movement.
 Newly armed barrels are retained in the resolved state's canonical
 `armed_barrels` IDs for the later explosion phase.
 

@@ -84,13 +84,19 @@ preserves spatial event order, and records armed barrel IDs in resolved state. F
 derives palette-ordered active switch colors and row-major effectively open doors after each
 physical tick, appending deterministic semantic changes to that tick. Teleporter contact finalizes
 the tick before fixture or later derived work and gives a win precedence over a same-tick loss.
-Loading runs initial fixture derivation followed by the same gravity/post-tick path before installing
+Ramp traversal changes player height by one half-step between oriented endpoints and the ramp
+center. Downhill pushes enter the ramp center atomically, then a separate immutable slide planner
+moves every unblocked ramp stack to its low endpoint, rejects shared-destination conflicts, and
+retries blocked stacks after later physical or fixture changes. Derived stabilization always runs
+gravity before sliding so entities falling onto a ramp settle and arm before the complete stack can
+slide in a later tick.
+Loading runs initial fixture derivation followed by the same derived/post-tick path before installing
 the first history state and returns the supplied initial state, initialization ticks, stabilized or
 terminal state, and outcome. An accepted push commits the player and pushed entity together before
 any required fall tick; any failed source, target, or destination check leaves state and history
 unchanged. The primitive stateful C API and WebAssembly adapter carry that same
-create/load/input/state/rewind loop across the embedding boundary. Ramp sliding and explosions
-remain later movement systems.
+create/load/input/state/rewind loop across the embedding boundary. Explosions remain the next
+movement system.
 
 `decode_level_json()` produces that same canonical `LevelDefinition` only after strict format and
 structural validation. JSON decoding is deliberately separate from `Engine::load_level()` so an

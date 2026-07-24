@@ -56,6 +56,7 @@ target_sources(
         src/fixtures.cpp
         src/gravity.cpp
         src/level_json.cpp
+        src/ramps.cpp
         src/world.cpp
     PUBLIC
         FILE_SET public_headers

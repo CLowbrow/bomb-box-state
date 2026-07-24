@@ -180,7 +180,7 @@ TEST(FlatWalking, WalksOntoCompatibleStackSupport)
     EXPECT_EQ(result.final_state->entities[1].bottom, Height::from_elevation(1));
 }
 
-TEST(FlatWalking, ValidatesInputAndReportsUnsupportedPhaseBoundaries)
+TEST(FlatWalking, ValidatesInputAndRecognizesImplementedGeometry)
 {
     Engine empty;
     const MoveResult no_level = empty.move(Direction::north);
@@ -211,7 +211,7 @@ TEST(FlatWalking, ValidatesInputAndReportsUnsupportedPhaseBoundaries)
     };
     Engine ramp_engine;
     ASSERT_TRUE(ramp_engine.load_level(ramp).accepted());
-    EXPECT_EQ(ramp_engine.move(Direction::east).status, MoveStatus::unsupported_geometry);
+    EXPECT_EQ(ramp_engine.move(Direction::east).status, MoveStatus::moved);
 
     LevelDefinition fixture = grid_level();
     fixture.fixtures = {

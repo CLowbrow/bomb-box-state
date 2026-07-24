@@ -54,6 +54,7 @@ game_rules_add_gtest(
     behavior/falling_test.cpp
     behavior/fixtures_test.cpp
     behavior/player_push_test.cpp
+    behavior/ramps_test.cpp
 )
 
 game_rules_add_gtest(

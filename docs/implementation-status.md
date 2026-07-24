@@ -29,7 +29,7 @@ follow only after that loop works through WebAssembly.
 | 5. Single-entity player pushes | **Implemented** | Atomic one-cell box and barrel pushes work in every cardinal direction across compatible flat supports, with unstacked-target enforcement, non-recursive destination checks, deterministic events, exact rewind, and native C/WebAssembly contract coverage. |
 | 6. Falling and crushing | **Implemented** | Initial and post-push gravity compacts independent columns bottom-up in deterministic derived ticks, including stacks and ramp-center landings; player fall loss, latent crushing, barrel arming, complete load output, exact rewind, and replacement isolation are covered. |
 | 7. Fixtures and terminal outcomes | **Implemented** | Color-wide AND switches, rewindable effective door state, safe occupied-door hold-open behavior, fixture-aware walking and pushes, teleporter restrictions and wins, terminal gating/history, initialization, and win-before-loss precedence are covered. |
-| 8. Ramps and sliding | **Not started** | Ramp geometry and endpoints are validated, but traversal and automatic sliding are not implemented. |
+| 8. Ramps and sliding | **Implemented** | Oriented half-step player traversal, downhill box/barrel pushes, deterministic automatic whole-stack slides, blocked retries, fixture-aware destinations, fall-before-slide ordering, and slide conflicts are covered. |
 | 9. Single explosions | **Not started** | Falling barrels become authoritatively armed, but detonation and height-aware blast behavior do not exist. |
 | 10. Explosion waves and chains | **Not started** | Simultaneous impulses, conflicts, waves, and chain reactions are not implemented. |
 | 11. Lifecycle, conflict, and cross-adapter hardening | **Not started** | Phase-one loading behavior has native tests, but the complete lifecycle/conflict corpus and cross-adapter parity coverage do not exist. |
@@ -113,8 +113,15 @@ later rules rather than replaced after each phase.
 - Gravity plans each cell independently from one immutable pre-tick snapshot,
   compacts separated groups bottom-up without using entity IDs to choose
   behavior, and emits events in canonical coordinate and pre-tick height order.
-  Falls onto ramp centers settle before the deferred slide phase. Fatal player
-  falls and would-be landings on the player produce terminal loss output.
+  Falls onto ramp centers settle before the slide phase. Fatal player falls
+  and would-be landings on the player produce terminal loss output.
+- Players traverse oriented ramps through half-step endpoint/center movements.
+  A box or barrel can be pushed from the high endpoint into the ramp center,
+  after which the automatic slide planner moves the complete ramp stack to an
+  unblocked low endpoint in a separate derived tick. Slides use an immutable
+  pre-tick snapshot, reject shared-destination conflicts, retry after later
+  state changes, honor doors and teleporters, and emit source-row-major,
+  bottom-to-top events without arming barrels.
 - Fixture resolution runs after each physical tick. Switch colors use
   color-wide AND behavior, inactive occupied doors stay effectively open until
   vacated, and switch/door events follow physical events in deterministic
@@ -150,12 +157,12 @@ later rules rather than replaced after each phase.
 
 The loader permits physically unstable authored entities, preserves that
 canonical supplied snapshot in `loaded_level()`, derives initial fixture state,
-and runs gravity with post-tick fixture and teleporter resolution before
-installing `resolved_state()` as the first command boundary. Initialization can
-therefore produce switch/door transitions, falling, barrel-arming, and terminal
-win/loss ticks. Ramp sliding and barrel detonation remain deferred to their
-later phases, so initialization is not yet stabilization under the complete
-specification.
+and runs gravity and ramp sliding with post-tick fixture and teleporter
+resolution before installing `resolved_state()` as the first command boundary.
+Initialization can therefore produce switch/door transitions, falling,
+barrel-arming, whole-stack slides, and terminal win/loss ticks. Barrel
+detonation remains deferred to its later phase, so initialization is not yet
+stabilization under the complete specification.
 
 ## Test infrastructure
 
@@ -184,8 +191,8 @@ Most recently recorded on 2026-07-23:
 
 | Surface | Commands | Result |
 | --- | --- | --- |
-| Native debug | `cmake --preset native-debug`; `cmake --build --preset native-debug`; `ctest --preset native-debug --output-on-failure` | Passed: 59 of 59 tests: 47 behavior cases, 5 C ABI boundary cases, 4 focused unit cases, 1 cross-adapter contract runner, and 2 production consumer/header smokes. |
-| Native release | `cmake --preset native-release`; `cmake --build --preset native-release`; `ctest --preset native-release --output-on-failure` | Passed: 59 of 59 tests. |
+| Native debug | `cmake --preset native-debug`; `cmake --build --preset native-debug`; `ctest --preset native-debug --output-on-failure` | Passed: 69 of 69 tests: 57 behavior cases, 5 C ABI boundary cases, 4 focused unit cases, 1 cross-adapter contract runner, and 2 production consumer/header smokes. |
+| Native release | `cmake --preset native-release`; `cmake --build --preset native-release`; `ctest --preset native-release --output-on-failure` | Passed: 69 of 69 tests. |
 | WebAssembly debug | `cmake --preset wasm-debug`; `cmake --build --preset wasm-debug`; `ctest --preset wasm-debug --output-on-failure` | Passed: portable core and stateful adapter build; 1 of 1 Node tests ran the authored browser vertical-slice contract. |
 | Native sanitized | `cmake --preset native-sanitized`; `cmake --build --preset native-sanitized` | Configure and build passed with deferred GoogleTest discovery. On this Apple Silicon/macOS host, test discovery timed out before cases ran because the Apple sanitizer runtime stalled at process startup; the same behavior was reproduced in a normal terminal, so execution is delegated to the Ubuntu sanitizer CI job. |
 | JSON Schema syntax | `jq empty docs/level-format.schema.json` | Passed. |
@@ -195,21 +202,21 @@ Most recently recorded on 2026-07-23:
 
 ## Known limitations
 
-- Initialization derives fixture state and stabilizes gravity, but it does not
-  yet slide ramp occupants or detonate armed barrels.
-- Movement resolves player walking, single-entity pushes, and derived falling.
-  Switches, doors, and teleporters participate fully. Ramp traversal is
-  rejected explicitly as `unsupported_geometry` until its rule phase is
-  implemented.
+- Initialization derives fixture state and stabilizes gravity and ramp slides,
+  but it does not yet detonate armed barrels.
+- Movement resolves flat and ramp walking, single-entity pushes, derived
+  falling, and automatic whole-stack ramp slides. Switches, doors, and
+  teleporters participate fully.
 - A falling barrel becomes authoritatively armed, but detonation is deferred to
   phase 9. Until that phase, an armed barrel can remain at a command boundary
   even though complete-spec resolution will eventually explode it before more
   input is accepted.
 - Falling-on-player crushing is implemented in the gravity planner and covered
-  through its focused internal rule seam. No currently implemented public
-  player action can create an entity above the player; ramps and blasts will
-  exercise that path through public behavior scenarios in later phases.
-- Ramp traversal and sliding, and explosions remain schema-only.
+  through its focused internal rule seam. Ramp initialization now covers legal
+  player-topped stack movement, but no currently implemented public action can
+  create a falling entity above the player; blasts will exercise that path
+  through public behavior scenarios in a later phase.
+- Explosions remain schema-only.
 - Sanitized tests must run in the Ubuntu CI job or another known-working Linux
   environment. On the current Apple Silicon/macOS host, the Apple sanitizer
   runtime stalls during GoogleTest discovery in both normal terminals and the
@@ -217,7 +224,7 @@ Most recently recorded on 2026-07-23:
 
 ## Recommended next task
 
-Implement phase 8 ramp traversal and sliding next. Add oriented player
-traversal, downhill box/barrel entry, automatic whole-stack sliding, blocked
-ramp retry behavior, and interactions with fixture-aware destinations before
-beginning explosions.
+Implement phase 9 single explosions next. Add settled armed-barrel detonation,
+height-aware same-cell and adjacent-cell effects, blast-driven movement and
+fall/ramp follow-up, fixture interactions, terminal precedence, and exact
+rewind behavior before introducing simultaneous explosion waves and chains.

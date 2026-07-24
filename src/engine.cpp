@@ -2,6 +2,7 @@
 
 #include "fixtures.hpp"
 #include "gravity.hpp"
+#include "ramps.hpp"
 
 #include <algorithm>
 #include <cstdint>
@@ -71,6 +72,56 @@ namespace {
         return value.coordinate == coordinate;
     });
     return cell == level.cells.end() ? nullptr : &*cell;
+}
+
+[[nodiscard]] Direction opposite(const Direction direction) noexcept
+{
+    switch (direction) {
+    case Direction::north: return Direction::south;
+    case Direction::east: return Direction::west;
+    case Direction::south: return Direction::north;
+    case Direction::west: return Direction::east;
+    }
+    return direction;
+}
+
+[[nodiscard]] Height surface_height(const Cell& cell) noexcept
+{
+    if (const auto* const flat = std::get_if<FlatCell>(&cell.geometry)) {
+        return Height::from_elevation(flat->elevation);
+    }
+    const RampCell& ramp = std::get<RampCell>(cell.geometry);
+    return Height{static_cast<std::int32_t>(
+        static_cast<std::int64_t>(ramp.low_elevation) * 2 + 1)};
+}
+
+void canonicalize_entities(std::vector<Entity>& entities)
+{
+    std::sort(entities.begin(), entities.end(), [](const Entity& lhs, const Entity& rhs) {
+        return std::tuple{lhs.coordinate.y, lhs.coordinate.x, lhs.bottom.half_steps, lhs.id}
+            < std::tuple{rhs.coordinate.y, rhs.coordinate.x, rhs.bottom.half_steps, rhs.id};
+    });
+}
+
+void resolve_derived_ticks(const LevelDefinition& level,
+                           ResolvedState& state,
+                           std::vector<TickResult>& ticks)
+{
+    while (state.outcome == Outcome::ongoing) {
+        std::optional<TickResult> derived = detail::resolve_falling_tick(
+            level, state, static_cast<std::uint32_t>(ticks.size()));
+        if (!derived.has_value()) {
+            derived = detail::resolve_sliding_tick(
+                level, state, static_cast<std::uint32_t>(ticks.size()));
+        }
+        if (!derived.has_value()) {
+            break;
+        }
+
+        detail::resolve_fixtures_after_tick(level, *derived);
+        state = derived->state_after;
+        ticks.push_back(std::move(*derived));
+    }
 }
 
 [[nodiscard]] MoveResult rejected_move(const MoveStatus status,
@@ -233,19 +284,7 @@ LoadResult Engine::load_level(const LevelDefinition& level)
         stabilized = fixtures->state_after;
         ticks.push_back(*fixtures);
     }
-    if (stabilized.outcome == Outcome::ongoing) {
-        while (const std::optional<TickResult> falling =
-                   detail::resolve_falling_tick(replacement, stabilized,
-                                                static_cast<std::uint32_t>(ticks.size()))) {
-            TickResult completed = *falling;
-            detail::resolve_fixtures_after_tick(replacement, completed);
-            stabilized = completed.state_after;
-            ticks.push_back(std::move(completed));
-            if (stabilized.outcome != Outcome::ongoing) {
-                break;
-            }
-        }
-    }
+    resolve_derived_ticks(replacement, stabilized, ticks);
 
     detail::ResolvedStateHistory replacement_history;
     replacement_history.reset(stabilized);
@@ -290,9 +329,7 @@ MoveResult Engine::move(const Direction direction)
 
     const Cell* const source_cell = find_cell(*level_, player->coordinate);
     const Cell* const destination_cell = find_cell(*level_, *destination);
-    if (source_cell == nullptr || destination_cell == nullptr
-        || !std::holds_alternative<FlatCell>(source_cell->geometry)
-        || !std::holds_alternative<FlatCell>(destination_cell->geometry)) {
+    if (source_cell == nullptr || destination_cell == nullptr) {
         return rejected_move(MoveStatus::unsupported_geometry, direction, current);
     }
 
@@ -307,8 +344,7 @@ MoveResult Engine::move(const Direction direction)
         return rejected_move(MoveStatus::closed_door, direction, current);
     }
 
-    Height destination_support =
-        Height::from_elevation(std::get<FlatCell>(destination_cell->geometry).elevation);
+    Height destination_support = surface_height(*destination_cell);
     std::size_t destination_entity_count = 0;
     const Entity* push_target = nullptr;
     for (const Entity& entity : current.entities) {
@@ -327,17 +363,16 @@ MoveResult Engine::move(const Direction direction)
         }
     }
 
-    if (destination_is_exit) {
-        const Height teleporter_floor = Height::from_elevation(
-            std::get<FlatCell>(destination_cell->geometry).elevation);
-        if (destination_entity_count != 0 || player->bottom != teleporter_floor) {
-            return rejected_move(MoveStatus::teleporter_restriction, direction, current);
-        }
-    }
-
     if (push_target != nullptr) {
+        if (!std::holds_alternative<FlatCell>(destination_cell->geometry)) {
+            return rejected_move(MoveStatus::unsupported_geometry, direction, current);
+        }
         if (destination_entity_count != 1) {
             return rejected_move(MoveStatus::stacked_push_target, direction, current);
+        }
+
+        if (destination_is_exit) {
+            return rejected_move(MoveStatus::teleporter_restriction, direction, current);
         }
 
         const std::optional<Coordinate> pushed_destination =
@@ -347,9 +382,20 @@ MoveResult Engine::move(const Direction direction)
         }
 
         const Cell* const pushed_destination_cell = find_cell(*level_, *pushed_destination);
-        if (pushed_destination_cell == nullptr
-            || !std::holds_alternative<FlatCell>(pushed_destination_cell->geometry)) {
+        if (pushed_destination_cell == nullptr) {
             return rejected_move(MoveStatus::unsupported_geometry, direction, current);
+        }
+
+        Height pushed_new_bottom = push_target->bottom;
+        if (const auto* const ramp =
+                std::get_if<RampCell>(&pushed_destination_cell->geometry)) {
+            const Height high_endpoint{
+                static_cast<std::int32_t>(
+                    static_cast<std::int64_t>(ramp->low_elevation) * 2 + 2)};
+            if (direction != ramp->low_direction || push_target->bottom != high_endpoint) {
+                return rejected_move(MoveStatus::unsupported_geometry, direction, current);
+            }
+            pushed_new_bottom = surface_height(*pushed_destination_cell);
         }
 
         const auto pushed_destination_fixture =
@@ -377,8 +423,7 @@ MoveResult Engine::move(const Direction direction)
             return rejected_move(MoveStatus::occupied, direction, current);
         }
 
-        const Height pushed_destination_support = Height::from_elevation(
-            std::get<FlatCell>(pushed_destination_cell->geometry).elevation);
+        const Height pushed_destination_support = surface_height(*pushed_destination_cell);
         if (pushed_destination_support.half_steps > push_target->bottom.half_steps) {
             return rejected_move(MoveStatus::ledge, direction, current);
         }
@@ -395,13 +440,8 @@ MoveResult Engine::move(const Direction direction)
             });
         next_player->coordinate = *destination;
         next_pushed->coordinate = *pushed_destination;
-        std::sort(next.entities.begin(), next.entities.end(),
-                  [](const Entity& lhs, const Entity& rhs) {
-                      return std::tuple{lhs.coordinate.y, lhs.coordinate.x,
-                                        lhs.bottom.half_steps, lhs.id}
-                          < std::tuple{rhs.coordinate.y, rhs.coordinate.x,
-                                       rhs.bottom.half_steps, rhs.id};
-                  });
+        next_pushed->bottom = pushed_new_bottom;
+        canonicalize_entities(next.entities);
 
         const EntityMovedEvent player_moved{
             player->id,
@@ -416,7 +456,7 @@ MoveResult Engine::move(const Direction direction)
             push_target->coordinate,
             *pushed_destination,
             push_target->bottom,
-            push_target->bottom,
+            pushed_new_bottom,
             MovementCause::player,
         };
         TickResult movement_tick{
@@ -427,19 +467,7 @@ MoveResult Engine::move(const Direction direction)
         detail::resolve_fixtures_after_tick(*level_, movement_tick);
         std::vector<TickResult> ticks{movement_tick};
         ResolvedState resolved = movement_tick.state_after;
-        if (resolved.outcome == Outcome::ongoing) {
-            while (const std::optional<TickResult> falling =
-                       detail::resolve_falling_tick(*level_, resolved,
-                                                    static_cast<std::uint32_t>(ticks.size()))) {
-                TickResult completed = *falling;
-                detail::resolve_fixtures_after_tick(*level_, completed);
-                resolved = completed.state_after;
-                ticks.push_back(std::move(completed));
-                if (resolved.outcome != Outcome::ongoing) {
-                    break;
-                }
-            }
-        }
+        resolve_derived_ticks(*level_, resolved, ticks);
         if (!history_.commit(std::move(resolved))) {
             return rejected_move(MoveStatus::no_level, direction, history_.current());
         }
@@ -455,10 +483,50 @@ MoveResult Engine::move(const Direction direction)
         };
     }
 
-    if (destination_support != player->bottom) {
-        const MoveStatus status =
-            destination_entity_count != 0 ? MoveStatus::occupied : MoveStatus::ledge;
-        return rejected_move(status, direction, current);
+    Height player_new_bottom = player->bottom;
+    const auto* const source_flat = std::get_if<FlatCell>(&source_cell->geometry);
+    const auto* const source_ramp = std::get_if<RampCell>(&source_cell->geometry);
+    const auto* const destination_flat =
+        std::get_if<FlatCell>(&destination_cell->geometry);
+    const auto* const destination_ramp =
+        std::get_if<RampCell>(&destination_cell->geometry);
+
+    if (source_flat != nullptr && destination_flat != nullptr) {
+        if (destination_is_exit
+            && (destination_entity_count != 0
+                || player->bottom != Height::from_elevation(destination_flat->elevation))) {
+            return rejected_move(MoveStatus::teleporter_restriction, direction, current);
+        }
+        if (destination_support != player->bottom) {
+            const MoveStatus status =
+                destination_entity_count != 0 ? MoveStatus::occupied : MoveStatus::ledge;
+            return rejected_move(status, direction, current);
+        }
+    } else if (source_flat != nullptr && destination_ramp != nullptr) {
+        if (destination_entity_count != 0
+            || player->bottom != Height::from_elevation(source_flat->elevation)
+            || (direction != destination_ramp->low_direction
+                && direction != opposite(destination_ramp->low_direction))) {
+            return rejected_move(MoveStatus::unsupported_geometry, direction, current);
+        }
+        player_new_bottom = surface_height(*destination_cell);
+    } else if (source_ramp != nullptr && destination_flat != nullptr) {
+        if (destination_entity_count != 0
+            || player->bottom != surface_height(*source_cell)
+            || (direction != source_ramp->low_direction
+                && direction != opposite(source_ramp->low_direction))) {
+            return rejected_move(MoveStatus::unsupported_geometry, direction, current);
+        }
+        player_new_bottom = Height::from_elevation(destination_flat->elevation);
+    } else {
+        return rejected_move(MoveStatus::unsupported_geometry, direction, current);
+    }
+
+    if (destination_is_exit) {
+        const Height teleporter_floor = Height::from_elevation(destination_flat->elevation);
+        if (destination_entity_count != 0 || player_new_bottom != teleporter_floor) {
+            return rejected_move(MoveStatus::teleporter_restriction, direction, current);
+        }
     }
 
     ResolvedState next = current;
@@ -466,23 +534,24 @@ MoveResult Engine::move(const Direction direction)
         return entity.id == player->id;
     });
     next_player->coordinate = *destination;
-    std::sort(next.entities.begin(), next.entities.end(), [](const Entity& lhs, const Entity& rhs) {
-        return std::tuple{lhs.coordinate.y, lhs.coordinate.x, lhs.bottom.half_steps, lhs.id}
-            < std::tuple{rhs.coordinate.y, rhs.coordinate.x, rhs.bottom.half_steps, rhs.id};
-    });
+    next_player->bottom = player_new_bottom;
+    canonicalize_entities(next.entities);
 
     const EntityMovedEvent moved{
         player->id,
         player->coordinate,
         *destination,
         player->bottom,
-        player->bottom,
+        player_new_bottom,
         MovementCause::player,
     };
     const ResolvedState initial = current;
     TickResult tick{0, {GameplayEvent{moved}}, next};
     detail::resolve_fixtures_after_tick(*level_, tick);
-    if (!history_.commit(tick.state_after)) {
+    std::vector<TickResult> ticks{tick};
+    ResolvedState resolved = tick.state_after;
+    resolve_derived_ticks(*level_, resolved, ticks);
+    if (!history_.commit(std::move(resolved))) {
         return rejected_move(MoveStatus::no_level, direction, history_.current());
     }
 
@@ -491,7 +560,7 @@ MoveResult Engine::move(const Direction direction)
         direction,
         {},
         initial,
-        {tick},
+        std::move(ticks),
         history_.current(),
         history_.current()->outcome,
     };
