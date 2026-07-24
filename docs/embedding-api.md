@@ -65,7 +65,9 @@ Move status strings are the same stable strings as `MoveStatus`, including `move
 `teleporter_restriction`, and the current `unsupported_geometry` phase boundary. An accepted player
 push places the player's `entityMoved` event before the pushed box or barrel's event in the same
 tick. A derived fall uses `entityMoved` with cause `fall`; newly armed barrels emit `barrelArmed`.
-Fixture changes emit `switchChanged`, `doorOpened`, and `doorClosed`; wins emit `levelWon`.
+Single-source blasts emit `barrelExploded` with the removed barrel's decimal-string `entityId`,
+`coordinate`, and integer `bottomHalfSteps`; successful blast pops use `entityMoved` with cause
+`blast`. Fixture changes emit `switchChanged`, `doorOpened`, and `doorClosed`; wins emit `levelWon`.
 Crushing and terminal fall ticks may emit `playerCrushed` and `levelLost`. `rewind` returns
 `accepted`, semantic events, the complete restored state, and outcome with status `rewound` or
 `history_empty`.

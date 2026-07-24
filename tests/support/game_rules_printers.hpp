@@ -267,6 +267,17 @@ inline void PrintTo(const BarrelArmedEvent& value, std::ostream* const output)
     *output << '}';
 }
 
+inline void PrintTo(const BarrelExplodedEvent& value, std::ostream* const output)
+{
+    *output << "BarrelExploded{";
+    test_detail::print_field(output, "entity_id", value.entity_id);
+    *output << ", ";
+    test_detail::print_field(output, "coordinate", value.coordinate);
+    *output << ", ";
+    test_detail::print_field(output, "bottom", value.bottom);
+    *output << '}';
+}
+
 inline void PrintTo(const PlayerCrushedEvent& value, std::ostream* const output)
 {
     *output << "PlayerCrushed{";

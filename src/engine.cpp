@@ -1,5 +1,6 @@
 #include "game_rules/engine.hpp"
 
+#include "explosions.hpp"
 #include "fixtures.hpp"
 #include "gravity.hpp"
 #include "ramps.hpp"
@@ -107,12 +108,18 @@ void resolve_derived_ticks(const LevelDefinition& level,
                            ResolvedState& state,
                            std::vector<TickResult>& ticks)
 {
+    bool explosion_resolved = false;
     while (state.outcome == Outcome::ongoing) {
         std::optional<TickResult> derived = detail::resolve_falling_tick(
             level, state, static_cast<std::uint32_t>(ticks.size()));
         if (!derived.has_value()) {
             derived = detail::resolve_sliding_tick(
                 level, state, static_cast<std::uint32_t>(ticks.size()));
+        }
+        if (!derived.has_value() && !explosion_resolved) {
+            derived = detail::resolve_single_explosion_tick(
+                level, state, static_cast<std::uint32_t>(ticks.size()));
+            explosion_resolved = derived.has_value();
         }
         if (!derived.has_value()) {
             break;

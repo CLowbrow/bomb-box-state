@@ -30,7 +30,7 @@ follow only after that loop works through WebAssembly.
 | 6. Falling and crushing | **Implemented** | Initial and post-push gravity compacts independent columns bottom-up in deterministic derived ticks, including stacks and ramp-center landings; player fall loss, latent crushing, barrel arming, complete load output, exact rewind, and replacement isolation are covered. |
 | 7. Fixtures and terminal outcomes | **Implemented** | Color-wide AND switches, rewindable effective door state, safe occupied-door hold-open behavior, fixture-aware walking and pushes, teleporter restrictions and wins, terminal gating/history, initialization, and win-before-loss precedence are covered. |
 | 8. Ramps and sliding | **Implemented** | Oriented half-step player traversal, downhill box/barrel pushes, deterministic automatic whole-stack slides, blocked retries, fixture-aware destinations, fall-before-slide ordering, and slide conflicts are covered. |
-| 9. Single explosions | **Not started** | Falling barrels become authoritatively armed, but detonation and height-aware blast behavior do not exist. |
+| 9. Single explosions | **Implemented** | One settled armed source detonates atomically after fall/slide settlement, with source removal, flat/ramp height targeting, same-cell effects, legal adjacent pops, barrel arming, player loss, fixture changes, follow-up physics, deterministic events, initialization, and exact rewind. |
 | 10. Explosion waves and chains | **Not started** | Simultaneous impulses, conflicts, waves, and chain reactions are not implemented. |
 | 11. Lifecycle, conflict, and cross-adapter hardening | **Not started** | Phase-one loading behavior has native tests, but the complete lifecycle/conflict corpus and cross-adapter parity coverage do not exist. |
 
@@ -102,8 +102,9 @@ later rules rather than replaced after each phase.
   stable status, attempted direction, rejection events, initial state,
   zero-based ordered tick results, final authoritative state, and outcome.
   Semantic event payloads cover blocked movement, rewind, entity movement,
-  barrel arming, switch changes, door transitions, player crushing, and level
-  win/loss without asking a host to reconstruct authoritative state from them.
+  barrel arming and explosion, switch changes, door transitions, player
+  crushing, and level win/loss without asking a host to reconstruct
+  authoritative state from them.
 - The movement planner recognizes an unstacked box or barrel intersecting the
   player's movement height as a push target. It validates the target and next
   cell from the immutable pre-tick state, then atomically commits both moves in
@@ -122,6 +123,12 @@ later rules rather than replaced after each phase.
   pre-tick snapshot, reject shared-destination conflicts, retry after later
   state changes, honor doors and teleporters, and emit source-row-major,
   bottom-to-top events without arming barrels.
+- A single-explosion planner runs only after gravity and ramp movement settle.
+  From one immutable pre-blast state it removes the source, targets flat and
+  oriented-ramp stack heights, pops legal adjacent boxes and barrels, arms hit
+  barrels even when blocked, handles direct same-cell effects and player loss,
+  and leaves unsupported entities for later gravity/slide ticks. Explosion
+  events retain the removed source's ID, coordinate, and bottom height.
 - Fixture resolution runs after each physical tick. Switch colors use
   color-wide AND behavior, inactive occupied doors stay effectively open until
   vacated, and switch/door events follow physical events in deterministic
@@ -147,8 +154,8 @@ later rules rather than replaced after each phase.
   responses, and explicit caller-owned result memory. Renderable snapshots
   include canonical cells, fixtures, entities, active switch colors,
   effectively open doors, coordinates, and outcome; 64-bit entity IDs remain
-  decimal strings. Fixture and terminal events are serialized at the same
-  boundary.
+  decimal strings. Explosion, fixture, and terminal events are serialized at
+  the same boundary.
 - The generated WebAssembly ES module exposes a JavaScript-shaped
   `module.gameRules` interface whose engine objects hide numeric handles, own
   conversion and freeing of C response strings, accept cardinal strings, and
@@ -160,9 +167,10 @@ canonical supplied snapshot in `loaded_level()`, derives initial fixture state,
 and runs gravity and ramp sliding with post-tick fixture and teleporter
 resolution before installing `resolved_state()` as the first command boundary.
 Initialization can therefore produce switch/door transitions, falling,
-barrel-arming, whole-stack slides, and terminal win/loss ticks. Barrel
-detonation remains deferred to its later phase, so initialization is not yet
-stabilization under the complete specification.
+barrel-arming, whole-stack slides, one single-source explosion with follow-up
+physics, and terminal win/loss ticks. Multiple simultaneous sources and later
+chain waves remain deferred to Phase 10, so those cases are not yet stable
+under the complete specification.
 
 ## Test infrastructure
 
@@ -187,36 +195,31 @@ stabilization under the complete specification.
 
 ## Verification record
 
-Most recently recorded on 2026-07-23:
+Most recently recorded on 2026-07-24:
 
 | Surface | Commands | Result |
 | --- | --- | --- |
-| Native debug | `cmake --preset native-debug`; `cmake --build --preset native-debug`; `ctest --preset native-debug --output-on-failure` | Passed: 69 of 69 tests: 57 behavior cases, 5 C ABI boundary cases, 4 focused unit cases, 1 cross-adapter contract runner, and 2 production consumer/header smokes. |
-| Native release | `cmake --preset native-release`; `cmake --build --preset native-release`; `ctest --preset native-release --output-on-failure` | Passed: 69 of 69 tests. |
+| Native debug | `cmake --preset native-debug`; `cmake --build --preset native-debug`; `ctest --preset native-debug --output-on-failure` | Passed: 78 of 78 tests: 65 behavior cases, 5 C ABI boundary cases, 5 focused unit cases, 1 cross-adapter contract runner, and 2 production consumer/header smokes. |
+| Native release | `cmake --preset native-release`; `cmake --build --preset native-release`; `ctest --preset native-release --output-on-failure` | Passed: 78 of 78 tests. |
 | WebAssembly debug | `cmake --preset wasm-debug`; `cmake --build --preset wasm-debug`; `ctest --preset wasm-debug --output-on-failure` | Passed: portable core and stateful adapter build; 1 of 1 Node tests ran the authored browser vertical-slice contract. |
-| Native sanitized | `cmake --preset native-sanitized`; `cmake --build --preset native-sanitized` | Configure and build passed with deferred GoogleTest discovery. On this Apple Silicon/macOS host, test discovery timed out before cases ran because the Apple sanitizer runtime stalled at process startup; the same behavior was reproduced in a normal terminal, so execution is delegated to the Ubuntu sanitizer CI job. |
+| Native sanitized | `cmake --preset native-sanitized`; `cmake --build --preset native-sanitized` | Configure and build passed with deferred GoogleTest discovery. Tests were not executed, as required on this Apple Silicon/macOS host because the Apple sanitizer runtime stalls during GoogleTest discovery; execution remains delegated to the Ubuntu sanitizer CI job. |
 | JSON Schema syntax | `jq empty docs/level-format.schema.json` | Passed. |
 | Vendored yyjson | `shasum -a 256 vendor/yyjson/yyjson.c vendor/yyjson/yyjson.h vendor/yyjson/LICENSE`; global-symbol inspection with `nm` | All files match the recorded 0.12.0 import checksums. Only the two `game_rules_*` bridge symbols are global; no upstream `yyjson_*` implementation symbol is exported. |
-| Install package | `cmake --install out/build/native-debug --prefix <temporary-directory>` | Passed after the Phase 7 public-state/event additions. The static archive is self-contained, no GoogleTest artifact or dependency is installed, and the package includes the yyjson MIT license, third-party notice, and provenance README. |
+| Install package | `cmake --install out/build/native-debug --prefix <temporary-directory>` | Passed after the Phase 9 public event addition. The static archive is self-contained, no GoogleTest artifact or dependency is installed, and the package includes the yyjson MIT license, third-party notice, and provenance README. |
 | Unreal | Not run. | The Unreal wrapper remains a scaffold and no Unreal toolchain verification has been recorded. |
 
 ## Known limitations
 
-- Initialization derives fixture state and stabilizes gravity and ramp slides,
-  but it does not yet detonate armed barrels.
 - Movement resolves flat and ramp walking, single-entity pushes, derived
-  falling, and automatic whole-stack ramp slides. Switches, doors, and
-  teleporters participate fully.
-- A falling barrel becomes authoritatively armed, but detonation is deferred to
-  phase 9. Until that phase, an armed barrel can remain at a command boundary
-  even though complete-spec resolution will eventually explode it before more
-  input is accepted.
-- Falling-on-player crushing is implemented in the gravity planner and covered
-  through its focused internal rule seam. Ramp initialization now covers legal
-  player-topped stack movement, but no currently implemented public action can
-  create a falling entity above the player; blasts will exercise that path
-  through public behavior scenarios in a later phase.
-- Explosions remain schema-only.
+  falling, automatic whole-stack ramp slides, and one single-source explosion
+  pass. Switches, doors, and teleporters participate fully.
+- Simultaneously ready barrels are not yet detonated because selecting one
+  sequentially would violate the shared pre-wave rules. A barrel armed by a
+  Phase 9 blast is recorded authoritatively but its later chain wave is not yet
+  scheduled, so these Phase 10 cases can still leave armed barrels at a command
+  boundary.
+- Falling-on-player crushing is covered both through its focused internal rule
+  seam and through a public blast-pop scenario that removes middle support.
 - Sanitized tests must run in the Ubuntu CI job or another known-working Linux
   environment. On the current Apple Silicon/macOS host, the Apple sanitizer
   runtime stalls during GoogleTest discovery in both normal terminals and the
@@ -224,7 +227,7 @@ Most recently recorded on 2026-07-23:
 
 ## Recommended next task
 
-Implement phase 9 single explosions next. Add settled armed-barrel detonation,
-height-aware same-cell and adjacent-cell effects, blast-driven movement and
-fall/ramp follow-up, fixture interactions, terminal precedence, and exact
-rewind behavior before introducing simultaneous explosion waves and chains.
+Implement phase 10 explosion waves and chains next. Plan all simultaneously
+ready sources from one pre-wave snapshot, combine and cancel impulses without
+ID-based priority, resolve destination conflicts, then schedule later waves
+only after blast-driven falls and ramp slides settle.

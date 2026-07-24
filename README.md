@@ -375,13 +375,17 @@ before it explodes. In particular:
 - Cell elevation matters. Across two flat cells, the blast acts at the
   exploding barrel's bottom height and can select only the entity whose bottom
   height is the same. Merely touching at a top/bottom boundary does not count.
-- For blast targeting, a ramp occupant is considered connected to the low
-  endpoint at height `X` and the high endpoint at height `X + 1`. A blast may
-  cross either oriented ramp edge at that endpoint's height. Perpendicular ramp
-  edges do not carry a blast between levels.
+- For blast targeting, a ramp occupant whose bottom is at ramp-center height
+  `H` is considered connected to the low endpoint at height `H - 0.5` and the
+  high endpoint at height `H + 0.5`. This offset applies independently to each
+  member of a ramp stack. A blast may cross either oriented ramp edge at that
+  member's corresponding endpoint height. Perpendicular ramp edges do not
+  carry a blast between levels.
 - Doors, switches, teleporters, and cell geometry are not damaged or moved by a
   blast.
 - The exploding barrel is removed from the world as part of its explosion.
+- `BarrelExploded` identifies the removed barrel's entity ID, source
+  coordinate, and bottom height from the pre-explosion state.
 
 ### Adjacent-cell effects
 
@@ -440,6 +444,18 @@ different from adjacent-cell blast pushes:
 - A box in the source cell receives no horizontal impulse because there is no
   unique away direction. A box above the source may nevertheless fall when the
   source disappears.
+
+### Explosion-tick event order
+
+- `BarrelExploded` events for a wave precede that wave's target effects.
+- Target effects are ordered by affected cell in canonical row-major order,
+  then by pre-wave bottom-to-top order within a cell.
+- A successful blast pop emits `EntityMoved` with cause `blast`. If the moved
+  entity is newly armed, its `BarrelArmed` event immediately follows that
+  movement event. A newly armed barrel whose movement is blocked emits its
+  `BarrelArmed` event at its normal target position in the same ordering.
+- Fixture changes follow the wave's physical and arming events under the
+  general fixture ordering rules. `LevelLost`, when produced, is last.
 
 ### Simultaneous blast impulses
 

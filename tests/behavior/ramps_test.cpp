@@ -337,7 +337,7 @@ TEST(Ramps, PlayerCanTraverseOntoAnEligibleExitAndRewindFromTheWin)
     EXPECT_EQ(engine.move(Direction::west), won);
 }
 
-TEST(Ramps, FallsOntoARampBeforeSlidingAndPreservesBarrelArming)
+TEST(Ramps, FallsOntoARampThenSlidesBeforeExploding)
 {
     LevelDefinition level = west_low_ramp_line(
         Entity{1, EntityKind::player, {2, 0}, Height{2}});
@@ -347,7 +347,7 @@ TEST(Ramps, FallsOntoARampBeforeSlidingAndPreservesBarrelArming)
     const LoadResult loaded = engine.load_level(level);
 
     ASSERT_TRUE(loaded.accepted());
-    ASSERT_EQ(loaded.ticks.size(), 2U);
+    ASSERT_EQ(loaded.ticks.size(), 3U);
     EXPECT_EQ(loaded.ticks[0].events,
               (std::vector<GameplayEvent>{
                   EntityMovedEvent{8, {1, 0}, {1, 0}, Height{5}, Height{1},
@@ -357,7 +357,13 @@ TEST(Ramps, FallsOntoARampBeforeSlidingAndPreservesBarrelArming)
     EXPECT_EQ(loaded.ticks[1].events,
               (std::vector<GameplayEvent>{EntityMovedEvent{
                   8, {1, 0}, {0, 0}, Height{1}, Height{0}, MovementCause::slide}}));
-    EXPECT_EQ(loaded.final_state->armed_barrels, (std::vector<EntityId>{8}));
+    EXPECT_EQ(loaded.ticks[2].events,
+              (std::vector<GameplayEvent>{BarrelExplodedEvent{
+                  8, {0, 0}, Height{0}}}));
+    EXPECT_TRUE(loaded.final_state->armed_barrels.empty());
+    EXPECT_FALSE(std::any_of(loaded.final_state->entities.begin(),
+                             loaded.final_state->entities.end(),
+                             [](const Entity& value) { return value.id == 8; }));
 }
 
 TEST(Ramps, ConflictingSlidesIntoOneEndpointRemainBlocked)

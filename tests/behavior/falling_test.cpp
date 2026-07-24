@@ -123,7 +123,7 @@ TEST(Falling, AppliesThePlayerFallThresholdAndTerminalGating)
     EXPECT_EQ(casualty.rewind().status, RewindStatus::history_empty);
 }
 
-TEST(Falling, PushesOverALedgeThenFallsAndArmsABarrel)
+TEST(Falling, PushesOverALedgeThenFallsArmsAndExplodesABarrel)
 {
     LevelDefinition level =
         flat_line({2, 2, 0}, Entity{1, EntityKind::player, {0, 0}, Height{4}});
@@ -134,7 +134,7 @@ TEST(Falling, PushesOverALedgeThenFallsAndArmsABarrel)
     const MoveResult moved = engine.move(Direction::east);
 
     ASSERT_TRUE(moved.accepted());
-    ASSERT_EQ(moved.ticks.size(), 2U);
+    ASSERT_EQ(moved.ticks.size(), 3U);
     EXPECT_EQ(moved.ticks[0].events,
               (std::vector<GameplayEvent>{
                   EntityMovedEvent{1, {0, 0}, {1, 0}, Height{4}, Height{4}, MovementCause::player},
@@ -145,9 +145,15 @@ TEST(Falling, PushesOverALedgeThenFallsAndArmsABarrel)
                   EntityMovedEvent{8, {2, 0}, {2, 0}, Height{4}, Height{0}, MovementCause::fall},
                   BarrelArmedEvent{8},
               }));
+    EXPECT_EQ(moved.ticks[2].events,
+              (std::vector<GameplayEvent>{
+                  BarrelExplodedEvent{8, {2, 0}, Height{0}},
+              }));
     ASSERT_TRUE(moved.final_state.has_value());
-    EXPECT_EQ(moved.final_state->armed_barrels, std::vector<EntityId>{8});
-    EXPECT_EQ(entity(*moved.final_state, 8).bottom, Height{0});
+    EXPECT_TRUE(moved.final_state->armed_barrels.empty());
+    EXPECT_FALSE(std::any_of(moved.final_state->entities.begin(),
+                             moved.final_state->entities.end(),
+                             [](const Entity& value) { return value.id == 8; }));
 
     const MoveResult first = moved;
     ASSERT_EQ(engine.rewind().status, RewindStatus::rewound);

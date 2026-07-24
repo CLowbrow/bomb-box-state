@@ -97,6 +97,15 @@ struct BarrelArmedEvent final {
                                                    BarrelArmedEvent) noexcept = default;
 };
 
+struct BarrelExplodedEvent final {
+    EntityId entity_id{};
+    Coordinate coordinate{};
+    Height bottom{};
+
+    [[nodiscard]] friend constexpr bool operator==(const BarrelExplodedEvent&,
+                                                   const BarrelExplodedEvent&) noexcept = default;
+};
+
 struct PlayerCrushedEvent final {
     EntityId player_id{};
     EntityId crushing_entity_id{};
@@ -141,6 +150,7 @@ using GameplayEvent = std::variant<MoveBlockedEvent,
                                    StateRewoundEvent,
                                    EntityMovedEvent,
                                    BarrelArmedEvent,
+                                   BarrelExplodedEvent,
                                    PlayerCrushedEvent,
                                    SwitchChangedEvent,
                                    DoorOpenedEvent,

@@ -309,6 +309,14 @@ void append_event(std::string& output, const GameplayEvent& event)
                 output += "{\"type\":\"barrelArmed\",\"entityId\":\"";
                 append_integer(output, value.entity_id);
                 output += "\"}";
+            } else if constexpr (std::is_same_v<Event, BarrelExplodedEvent>) {
+                output += "{\"type\":\"barrelExploded\",\"entityId\":\"";
+                append_integer(output, value.entity_id);
+                output += "\",\"coordinate\":";
+                append_coordinate(output, value.coordinate);
+                output += ",\"bottomHalfSteps\":";
+                append_integer(output, value.bottom.half_steps);
+                output.push_back('}');
             } else if constexpr (std::is_same_v<Event, PlayerCrushedEvent>) {
                 output += "{\"type\":\"playerCrushed\",\"playerId\":\"";
                 append_integer(output, value.player_id);

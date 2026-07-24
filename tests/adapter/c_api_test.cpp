@@ -47,12 +47,12 @@ constexpr char falling_level[] = R"({
   "height":1,
   "cells":[
     {"coordinate":{"x":0,"y":0},"type":"flat","elevation":0},
-    {"coordinate":{"x":1,"y":0},"type":"flat","elevation":0}
+    {"coordinate":{"x":1,"y":0},"type":"flat","elevation":1}
   ],
   "fixtures":[],
   "entities":[
     {"id":"8","type":"barrel","coordinate":{"x":0,"y":0},"bottomHalfSteps":4},
-    {"id":"1","type":"player","coordinate":{"x":1,"y":0},"bottomHalfSteps":0}
+    {"id":"1","type":"player","coordinate":{"x":1,"y":0},"bottomHalfSteps":2}
   ]
 })";
 
@@ -143,7 +143,7 @@ TEST(CApi, RejectsMalformedInputAndDirectionWithoutReplacingState)
               std::string::npos);
 }
 
-TEST(CApi, ReturnsInitializationFallsAndAuthoritativeBarrelArming)
+TEST(CApi, ReturnsInitializationFallsArmingAndExplosion)
 {
     EnginePointer engine{game_rules_engine_create()};
     ASSERT_NE(engine, nullptr);
@@ -157,7 +157,9 @@ TEST(CApi, ReturnsInitializationFallsAndAuthoritativeBarrelArming)
     EXPECT_NE(loaded.find(R"("cause":"fall")"), std::string::npos);
     EXPECT_NE(loaded.find(R"({"type":"barrelArmed","entityId":"8"})"),
               std::string::npos);
-    EXPECT_NE(loaded.find(R"("armedBarrelIds":["8"])"), std::string::npos);
+    EXPECT_NE(loaded.find(R"({"type":"barrelExploded","entityId":"8","coordinate":{"x":0,"y":0},"bottomHalfSteps":0})"),
+              std::string::npos);
+    EXPECT_NE(loaded.find(R"("armedBarrelIds":[])"), std::string::npos);
     EXPECT_NE(loaded.find(R"("newBottomHalfSteps":0)"), std::string::npos);
 }
 
