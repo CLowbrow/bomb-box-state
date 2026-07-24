@@ -612,6 +612,8 @@ or selects an intermediate tick snapshot.
 - If earlier history exists, rewind succeeds and returns the restored current
   state. The discarded later state is not retained for redo.
 - If no earlier history exists, rewind is rejected as `history_empty`.
+- Before any level has been loaded, rewind is also rejected as `history_empty`;
+  there is no current state to return.
 - Rewind produces no world tick. A result may include a `StateRewound`
   presentation event outside the tick list so a UI can animate or announce the
   jump.

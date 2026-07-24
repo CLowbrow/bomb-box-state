@@ -45,11 +45,12 @@ final binary unless they reference it. See the [level format specification](leve
 5. Primitive stateful C API and integration-facing level-loading entry points.
 6. Thin JavaScript and Unreal-facing adapters.
 
-The current `Engine` owns a canonical, validated `LevelDefinition`. Loading validates a candidate
-before atomically replacing the prior definition, and snapshots are returned by value so callers
-cannot retain a mutable view into engine-owned storage. Gameplay state, initialization
-stabilization, command history, and the primitive stateful C API are introduced by their later
-implementation phases.
+The current `Engine` owns a canonical, validated `LevelDefinition`, the current dynamic
+`ResolvedState`, and an undo-only stack of earlier resolved states. Loading validates and prepares a
+candidate before replacing the prior definition and resetting history. Snapshots are returned by
+value so callers cannot retain a mutable view into engine-owned storage. History transitions are an
+internal orchestration mechanism rather than a host state-injection API. Initialization physics,
+movement turns, and the primitive stateful C API are introduced by later implementation phases.
 
 `decode_level_json()` produces that same canonical `LevelDefinition` only after strict format and
 structural validation. JSON decoding is deliberately separate from `Engine::load_level()` so an
