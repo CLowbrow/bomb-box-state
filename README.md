@@ -747,17 +747,23 @@ next task are tracked in the non-normative
 1. World schema, entity IDs, fixtures, stacks, validation, and replaceable
    level lifetime.
 2. Resolved-state history, undo-only rewind, and history reset on level load.
-3. Flat-cell walking and single-entity player pushes.
-4. Falling and crushing.
-5. Switches, doors, teleporters, and terminal events.
-6. Ramp traversal, automatic sliding, and whole-stack ramp movement.
-7. Single explosions and height-aware blast targeting.
-8. Simultaneous explosion waves and chain reactions.
-9. Full tick snapshots, event output, rewind/load lifecycle tests, and conflict
-   tests.
+3. Flat-cell walking with complete authoritative state, tick, event, and
+   rejection output.
+4. A stateful primitive C API and WebAssembly/JavaScript vertical slice that
+   can create an engine, load a world, move and rewind, and publish renderable
+   authoritative state to a browser host.
+5. Single-entity player pushes.
+6. Falling and crushing.
+7. Switches, doors, teleporters, and terminal events.
+8. Ramp traversal, automatic sliding, and whole-stack ramp movement.
+9. Single explosions and height-aware blast targeting.
+10. Simultaneous explosion waves and chain reactions.
+11. Full lifecycle, cross-adapter, and simultaneous-conflict hardening.
 
 Every phase should add behavior-level tests before implementation proceeds to
-the next phase.
+the next phase. Phases 3 and 4 form the first playable vertical slice; later
+gameplay features extend its result and adapter contracts rather than delaying
+the embedding boundary until all rules are complete.
 
 ## Project scaffold
 

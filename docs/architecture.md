@@ -40,17 +40,23 @@ final binary unless they reference it. See the [level format specification](leve
 
 1. Value types, validated level schema, and versioned level JSON encoding.
 2. Immutable world snapshots and deterministic queries.
-3. Tick planners for movement, gravity, ramps, fixtures, and blast waves.
-4. Turn orchestration and terminal handling.
-5. Primitive stateful C API and integration-facing level-loading entry points.
-6. Thin JavaScript and Unreal-facing adapters.
+3. Flat walking, turn results, and history orchestration for a minimal native
+   input-to-state loop.
+4. Primitive stateful C API and a thin JavaScript/WebAssembly adapter for the
+   same loop.
+5. Tick planners and turn orchestration for pushes, gravity, fixtures, ramps,
+   and blast waves.
+6. Terminal handling, complete conflict coverage, and additional thin host
+   adapters such as Unreal.
 
 The current `Engine` owns a canonical, validated `LevelDefinition`, the current dynamic
 `ResolvedState`, and an undo-only stack of earlier resolved states. Loading validates and prepares a
 candidate before replacing the prior definition and resetting history. Snapshots are returned by
 value so callers cannot retain a mutable view into engine-owned storage. History transitions are an
-internal orchestration mechanism rather than a host state-injection API. Initialization physics,
-movement turns, and the primitive stateful C API are introduced by later implementation phases.
+internal orchestration mechanism rather than a host state-injection API. Flat walking and its
+authoritative output are the next native layer; the primitive stateful C API and WebAssembly
+adapter immediately follow so the create/load/input/state loop is exercised before advanced
+physics. Initialization physics and the remaining movement systems are introduced afterward.
 
 `decode_level_json()` produces that same canonical `LevelDefinition` only after strict format and
 structural validation. JSON decoding is deliberately separate from `Engine::load_level()` so an

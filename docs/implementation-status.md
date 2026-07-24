@@ -15,17 +15,59 @@ normative source for gameplay and state-transition behavior.
 
 ## Suggested-order progress
 
+The current delivery priority is a playable browser-facing vertical slice. The
+engine should first prove that a host can create a world, submit a player input,
+and consume a new authoritative world state. Advanced interactions and physics
+follow only after that loop works through WebAssembly.
+
 | Phase | Status | Current coverage |
 | --- | --- | --- |
 | 1. World schema and level lifetime | **Implemented** | Typed coordinates, explicit axis conventions, flat and ramp cells, fixtures, stable entity IDs, half-step heights, stacks, structural validation, deterministic canonical storage and JSON, owned snapshots, and atomic valid/invalid level replacement. |
 | 2. Resolved-state history and rewind | **Implemented** | Caller-owned resolved-state snapshots, engine-owned undo-only history, rewind results, initialized `history_empty` behavior, repeated rewind, branching after rewind, and atomic load-time history replacement are covered. |
-| 3. Flat walking and player pushes | **Not started** | No gameplay movement command API or flat-cell movement rules exist yet. |
-| 4. Falling and crushing | **Not started** | Unsupported initial entities are structurally accepted but are not stabilized. |
-| 5. Fixtures and terminal outcomes | **Not started** | Fixture data is validated, but switches, effective door state, teleporters, and win/loss behavior are not resolved. |
-| 6. Ramps and sliding | **Not started** | Ramp geometry and endpoints are validated, but traversal and automatic sliding are not implemented. |
-| 7. Single explosions | **Not started** | Barrel entities exist in the schema, but arming, explosion, and height-aware blast behavior do not. |
-| 8. Explosion waves and chains | **Not started** | Simultaneous impulses, conflicts, waves, and chain reactions are not implemented. |
-| 9. Complete outputs and lifecycle/conflict corpus | **Not started** | Phase-one loading behavior has native tests, but full tick snapshots, semantic event output, cross-adapter behavior scenarios, and the complete lifecycle/conflict corpus do not exist. |
+| 3. Flat walking and authoritative turn output | **Not started** | No gameplay movement command API, flat-cell walking rules, or public movement result exists yet. |
+| 4. Stateful C ABI and browser vertical slice | **Not started** | The C ABI and WebAssembly module cannot yet create an engine, load a level, submit movement or rewind, or publish host-readable state and turn results. |
+| 5. Single-entity player pushes | **Not started** | Boxes and barrels exist in the schema, but player push behavior is not implemented. |
+| 6. Falling and crushing | **Not started** | Unsupported initial entities are structurally accepted but are not stabilized. |
+| 7. Fixtures and terminal outcomes | **Not started** | Fixture data is validated, but switches, effective door state, teleporters, and win/loss behavior are not resolved. |
+| 8. Ramps and sliding | **Not started** | Ramp geometry and endpoints are validated, but traversal and automatic sliding are not implemented. |
+| 9. Single explosions | **Not started** | Barrel entities exist in the schema, but arming, explosion, and height-aware blast behavior do not. |
+| 10. Explosion waves and chains | **Not started** | Simultaneous impulses, conflicts, waves, and chain reactions are not implemented. |
+| 11. Lifecycle, conflict, and cross-adapter hardening | **Not started** | Phase-one loading behavior has native tests, but the complete lifecycle/conflict corpus and cross-adapter parity coverage do not exist. |
+
+### Immediate vertical slice
+
+Phase 3 is intentionally narrower than the complete movement rules. Its test
+levels use flat cells and a single player, with no interactions that require
+pushes, gravity, ramps, fixtures, or explosions. It is complete when:
+
+- `Engine` accepts a cardinal movement command on a stable, ongoing state and
+  implements one-cell walking between compatible flat cells;
+- each command returns an explicit acceptance or rejection, ordered tick and
+  semantic event output when accepted, the complete resulting resolved state,
+  and the current outcome;
+- accepted moves preserve the prior resolved state for rewind, while rejected
+  moves leave both state and history unchanged; and
+- specification-level native tests cover all accepted directions, world
+  boundaries and other relevant rejections, deterministic complete results,
+  repeated rewind, and branching after rewind.
+
+Phase 4 carries that loop across the embedding boundary before any additional
+gameplay system is added. It is complete when:
+
+- the primitive C ABI provides opaque engine creation and destruction, level
+  loading from versioned JSON, movement, rewind, and caller-owned access to the
+  current state and complete command result;
+- the WebAssembly ES module exposes those operations through a thin JavaScript
+  interface without leaking C++ ownership or requiring a host to reconstruct
+  authoritative state from events; and
+- an automated JavaScript integration scenario creates an engine, loads a
+  simple world, reads renderable cells and entities, moves the player, observes
+  the updated authoritative state, rewinds it, and destroys the engine.
+
+The browser milestone supplies state and semantic results to a rendering host;
+rendering, animation, and input mapping remain outside this headless library.
+Output types and adapters introduced by phases 3 and 4 should be extended by
+later rules rather than replaced after each phase.
 
 ## Implemented public surface
 
@@ -98,9 +140,12 @@ Most recently recorded on 2026-07-23:
 
 ## Recommended next task
 
-Implement phase 3: add the public cardinal movement command API and complete
-flat-cell walking and single-entity player pushes. Add specification-level
-scenarios for accepted walking and pushes, every applicable rejection reason,
-atomic push failure, stack restrictions, deterministic state/event output,
-history preservation only for accepted turns, repeated rewind of those turns,
-and branching with a new move after rewind.
+Implement phase 3 without pulling later physics into the first vertical slice:
+add the public cardinal movement command and result types, then implement
+one-cell walking on simple flat-cell levels. Return a complete authoritative
+result for accepted movement and explicit rejection information otherwise.
+Add specification-level scenarios for all four directions, applicable blocked
+movement and invalid-input cases, deterministic complete state/event output,
+history preservation only for accepted turns, repeated rewind, and branching
+with a new move after rewind. Once that passes natively, phase 4 is the next
+priority; do not begin pushes, gravity, fixtures, ramps, or explosions first.
