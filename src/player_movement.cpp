@@ -48,6 +48,23 @@ PlayerMovementPlan plan_player_movement(const LevelDefinition& level,
         return rejected(MoveStatus::unsupported_geometry);
     }
 
+    const auto* const source_flat = std::get_if<FlatCell>(&source_cell->geometry);
+    const auto* const source_ramp = std::get_if<RampCell>(&source_cell->geometry);
+    const auto* const destination_flat =
+        std::get_if<FlatCell>(&destination_cell->geometry);
+    const auto* const destination_ramp =
+        std::get_if<RampCell>(&destination_cell->geometry);
+
+    std::optional<Height> push_contact_bottom;
+    if (source_flat != nullptr && destination_flat != nullptr) {
+        push_contact_bottom = player->bottom;
+    } else if (source_ramp != nullptr && destination_flat != nullptr
+               && player->bottom == surface_height(*source_cell)
+               && (direction == source_ramp->low_direction
+                   || direction == opposite(source_ramp->low_direction))) {
+        push_contact_bottom = Height::from_elevation(destination_flat->elevation);
+    }
+
     const Fixture* const fixture = find_fixture(level, *destination);
     const bool destination_is_exit = fixture != nullptr
         && std::holds_alternative<ExitTeleporter>(fixture->kind);
@@ -64,7 +81,7 @@ PlayerMovementPlan plan_player_movement(const LevelDefinition& level,
             continue;
         }
         ++destination_entity_count;
-        if (entity.bottom == player->bottom
+        if (push_contact_bottom.has_value() && entity.bottom == *push_contact_bottom
             && (entity.kind == EntityKind::box || entity.kind == EntityKind::barrel)) {
             push_target = &entity;
         }
@@ -136,8 +153,9 @@ PlayerMovementPlan plan_player_movement(const LevelDefinition& level,
         const auto next_pushed = std::find_if(
             next.entities.begin(), next.entities.end(), [push_target](const Entity& entity) {
                 return entity.id == push_target->id;
-            });
+        });
         next_player->coordinate = *destination;
+        next_player->bottom = *push_contact_bottom;
         next_pushed->coordinate = *pushed_destination;
         next_pushed->bottom = pushed_new_bottom;
         canonicalize_entities(next.entities);
@@ -150,7 +168,7 @@ PlayerMovementPlan plan_player_movement(const LevelDefinition& level,
                     player->coordinate,
                     *destination,
                     player->bottom,
-                    player->bottom,
+                    *push_contact_bottom,
                     MovementCause::player,
                 }},
                 GameplayEvent{EntityMovedEvent{
@@ -167,10 +185,6 @@ PlayerMovementPlan plan_player_movement(const LevelDefinition& level,
     }
 
     Height player_new_bottom = player->bottom;
-    const auto* const source_flat = std::get_if<FlatCell>(&source_cell->geometry);
-    const auto* const source_ramp = std::get_if<RampCell>(&source_cell->geometry);
-    const auto* const destination_flat = std::get_if<FlatCell>(&destination_cell->geometry);
-    const auto* const destination_ramp = std::get_if<RampCell>(&destination_cell->geometry);
 
     if (source_flat != nullptr && destination_flat != nullptr) {
         if (destination_is_exit

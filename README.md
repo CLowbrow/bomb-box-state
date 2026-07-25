@@ -307,6 +307,9 @@ to match one of its endpoints.
 - The player may traverse a ramp in either direction.
 - Moving between an endpoint and the ramp center changes player height by
   `0.5` and is ramp traversal, not climbing or falling.
+- When leaving the ramp center, the player may push an otherwise eligible box
+  or barrel occupying that endpoint. Push contact is evaluated at the endpoint
+  height, and the player changes to that height in the atomic push tick.
 - Traversing a one-cell ramp therefore normally takes two commands: endpoint
   to ramp, then ramp to the opposite endpoint.
 
