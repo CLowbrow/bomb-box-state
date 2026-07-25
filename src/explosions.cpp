@@ -21,8 +21,37 @@ struct BlastTarget final {
     EntityKind kind{EntityKind::box};
     Coordinate coordinate{};
     Height bottom{};
-    std::optional<Direction> movement_direction{};
+    std::array<bool, 4> impulses{};
+    std::optional<Coordinate> destination{};
+    bool movement_is_valid{};
+    bool destination_conflicts{};
 };
+
+[[nodiscard]] constexpr std::size_t direction_index(const Direction direction) noexcept
+{
+    switch (direction) {
+    case Direction::north: return 0;
+    case Direction::east: return 1;
+    case Direction::south: return 2;
+    case Direction::west: return 3;
+    }
+    return 0;
+}
+
+[[nodiscard]] BlastTarget& find_or_add_target(std::vector<BlastTarget>& targets,
+                                              const Entity& entity)
+{
+    const auto found = std::find_if(targets.begin(), targets.end(),
+                                    [&entity](const BlastTarget& target) {
+                                        return target.id == entity.id;
+                                    });
+    if (found != targets.end()) {
+        return *found;
+    }
+    targets.push_back(BlastTarget{
+        entity.id, entity.kind, entity.coordinate, entity.bottom});
+    return targets.back();
+}
 
 [[nodiscard]] std::optional<Height> offset_height(const Height height,
                                                   const std::int32_t offset) noexcept
@@ -118,9 +147,20 @@ struct BlastTarget final {
     return cell != nullptr && support_half_steps(*cell) <= target.bottom.half_steps;
 }
 
+[[nodiscard]] bool volumes_overlap(const BlastTarget& lhs,
+                                   const BlastTarget& rhs) noexcept
+{
+    if (lhs.destination != rhs.destination) {
+        return false;
+    }
+    const auto lhs_bottom = static_cast<std::int64_t>(lhs.bottom.half_steps);
+    const auto rhs_bottom = static_cast<std::int64_t>(rhs.bottom.half_steps);
+    return lhs_bottom < rhs_bottom + 2 && rhs_bottom < lhs_bottom + 2;
+}
+
 } // namespace
 
-std::optional<TickResult> resolve_single_explosion_tick(
+std::optional<TickResult> resolve_explosion_wave_tick(
     const LevelDefinition& level,
     const ResolvedState& state,
     const std::uint32_t tick_index)
@@ -129,65 +169,76 @@ std::optional<TickResult> resolve_single_explosion_tick(
         return std::nullopt;
     }
 
-    std::vector<const Entity*> ready;
-    for (const EntityId id : state.armed_barrels) {
-        const auto entity = std::find_if(state.entities.begin(), state.entities.end(),
-                                         [id](const Entity& value) {
-                                             return value.id == id
-                                                 && value.kind == EntityKind::barrel;
-                                         });
-        if (entity != state.entities.end()) {
-            ready.push_back(&*entity);
+    std::vector<const Entity*> sources;
+    for (const Entity& entity : state.entities) {
+        if (entity.kind == EntityKind::barrel && is_armed(state, entity.id)) {
+            sources.push_back(&entity);
         }
     }
-    if (ready.size() != 1) {
+    if (sources.empty()) {
         return std::nullopt;
     }
-
-    const Entity source = *ready.front();
-    const Cell* const source_cell = find_cell(level, source.coordinate);
-    if (source_cell == nullptr) {
-        return std::nullopt;
+    std::sort(sources.begin(), sources.end(), [](const Entity* const lhs,
+                                                 const Entity* const rhs) {
+        return std::tuple{lhs->coordinate.y, lhs->coordinate.x,
+                          lhs->bottom.half_steps, lhs->id}
+            < std::tuple{rhs->coordinate.y, rhs->coordinate.x,
+                         rhs->bottom.half_steps, rhs->id};
+    });
+    std::vector<EntityId> source_ids;
+    source_ids.reserve(sources.size());
+    for (const Entity* const source : sources) {
+        source_ids.push_back(source->id);
     }
+    std::sort(source_ids.begin(), source_ids.end());
+    const auto is_source = [&source_ids](const EntityId id) {
+        return std::binary_search(source_ids.begin(), source_ids.end(), id);
+    };
 
     std::vector<BlastTarget> targets;
-    for (const Entity& entity : state.entities) {
-        if (entity.id == source.id || entity.coordinate != source.coordinate) {
-            continue;
-        }
-        const auto difference = static_cast<std::int64_t>(entity.bottom.half_steps)
-            - source.bottom.half_steps;
-        if (difference == -2 || difference == 2) {
-            targets.push_back(BlastTarget{
-                entity.id, entity.kind, entity.coordinate, entity.bottom, std::nullopt});
-        }
-    }
-
     constexpr std::array directions{
         Direction::north, Direction::east, Direction::south, Direction::west};
-    for (const Direction direction : directions) {
-        const std::optional<Coordinate> coordinate =
-            step(source.coordinate, direction, level.coordinates);
-        if (!coordinate.has_value() || !in_bounds(level, *coordinate)) {
+    for (const Entity* const source : sources) {
+        const Cell* const source_cell = find_cell(level, source->coordinate);
+        if (source_cell == nullptr) {
             continue;
         }
-        const Cell* const target_cell = find_cell(level, *coordinate);
-        if (target_cell == nullptr) {
-            continue;
+
+        for (const Entity& entity : state.entities) {
+            if (is_source(entity.id) || entity.coordinate != source->coordinate) {
+                continue;
+            }
+            const auto difference = static_cast<std::int64_t>(entity.bottom.half_steps)
+                - source->bottom.half_steps;
+            if (difference == -2 || difference == 2) {
+                static_cast<void>(find_or_add_target(targets, entity));
+            }
         }
-        const std::optional<Height> target_bottom = adjacent_target_bottom(
-            *source_cell, source.bottom, *target_cell, direction);
-        if (!target_bottom.has_value()) {
-            continue;
-        }
-        const auto selected = std::find_if(state.entities.begin(), state.entities.end(),
-                                           [coordinate, target_bottom](const Entity& entity) {
-                                               return entity.coordinate == *coordinate
-                                                   && entity.bottom == *target_bottom;
-                                           });
-        if (selected != state.entities.end()) {
-            targets.push_back(BlastTarget{selected->id, selected->kind,
-                                          selected->coordinate, selected->bottom, direction});
+
+        for (const Direction direction : directions) {
+            const std::optional<Coordinate> coordinate =
+                step(source->coordinate, direction, level.coordinates);
+            if (!coordinate.has_value() || !in_bounds(level, *coordinate)) {
+                continue;
+            }
+            const Cell* const target_cell = find_cell(level, *coordinate);
+            if (target_cell == nullptr) {
+                continue;
+            }
+            const std::optional<Height> target_bottom = adjacent_target_bottom(
+                *source_cell, source->bottom, *target_cell, direction);
+            if (!target_bottom.has_value()) {
+                continue;
+            }
+            const auto selected = std::find_if(state.entities.begin(), state.entities.end(),
+                                               [coordinate, target_bottom](const Entity& entity) {
+                                                   return entity.coordinate == *coordinate
+                                                       && entity.bottom == *target_bottom;
+                                               });
+            if (selected != state.entities.end() && !is_source(selected->id)) {
+                BlastTarget& target = find_or_add_target(targets, *selected);
+                target.impulses[direction_index(direction)] = true;
+            }
         }
     }
 
@@ -199,20 +250,48 @@ std::optional<TickResult> resolve_single_explosion_tick(
                          rhs.bottom.half_steps, rhs.id};
     });
 
-    ResolvedState next = state;
-    next.entities.erase(std::remove_if(next.entities.begin(), next.entities.end(),
-                                       [&source](const Entity& entity) {
-                                           return entity.id == source.id;
-                                       }),
-                        next.entities.end());
-    const auto armed_source = std::lower_bound(next.armed_barrels.begin(),
-                                               next.armed_barrels.end(), source.id);
-    if (armed_source != next.armed_barrels.end() && *armed_source == source.id) {
-        next.armed_barrels.erase(armed_source);
+    for (BlastTarget& target : targets) {
+        const auto impulse_count = static_cast<std::size_t>(
+            std::count(target.impulses.begin(), target.impulses.end(), true));
+        if (target.kind == EntityKind::player || impulse_count != 1) {
+            continue;
+        }
+        const auto impulse = std::find(target.impulses.begin(), target.impulses.end(), true);
+        const Direction direction = directions[static_cast<std::size_t>(
+            std::distance(target.impulses.begin(), impulse))];
+        target.destination = step(target.coordinate, direction, level.coordinates);
+        target.movement_is_valid = target.destination.has_value()
+            && can_pop(level, state, target, *target.destination);
+    }
+    for (std::size_t left = 0; left < targets.size(); ++left) {
+        if (!targets[left].movement_is_valid) {
+            continue;
+        }
+        for (std::size_t right = left + 1; right < targets.size(); ++right) {
+            if (targets[right].movement_is_valid
+                && volumes_overlap(targets[left], targets[right])) {
+                targets[left].destination_conflicts = true;
+                targets[right].destination_conflicts = true;
+            }
+        }
     }
 
-    std::vector<GameplayEvent> events{
-        GameplayEvent{BarrelExplodedEvent{source.id, source.coordinate, source.bottom}}};
+    ResolvedState next = state;
+    next.entities.erase(std::remove_if(next.entities.begin(), next.entities.end(),
+                                       [&is_source](const Entity& entity) {
+                                           return is_source(entity.id);
+                                       }),
+                        next.entities.end());
+    next.armed_barrels.erase(
+        std::remove_if(next.armed_barrels.begin(), next.armed_barrels.end(), is_source),
+        next.armed_barrels.end());
+
+    std::vector<GameplayEvent> events;
+    events.reserve(sources.size() + targets.size() * 2);
+    for (const Entity* const source : sources) {
+        events.emplace_back(BarrelExplodedEvent{
+            source->id, source->coordinate, source->bottom});
+    }
     bool lost = false;
     for (const BlastTarget& target : targets) {
         if (target.kind == EntityKind::player) {
@@ -220,20 +299,16 @@ std::optional<TickResult> resolve_single_explosion_tick(
             continue;
         }
 
-        if (target.movement_direction.has_value()) {
-            const std::optional<Coordinate> destination = step(
-                target.coordinate, *target.movement_direction, level.coordinates);
-            if (destination.has_value() && can_pop(level, state, target, *destination)) {
-                const auto entity = std::find_if(next.entities.begin(), next.entities.end(),
-                                                 [&target](const Entity& value) {
-                                                     return value.id == target.id;
-                                                 });
-                if (entity != next.entities.end()) {
-                    entity->coordinate = *destination;
-                    events.emplace_back(EntityMovedEvent{
-                        target.id, target.coordinate, *destination,
-                        target.bottom, target.bottom, MovementCause::blast});
-                }
+        if (target.movement_is_valid && !target.destination_conflicts) {
+            const auto entity = std::find_if(next.entities.begin(), next.entities.end(),
+                                             [&target](const Entity& value) {
+                                                 return value.id == target.id;
+                                             });
+            if (entity != next.entities.end()) {
+                entity->coordinate = *target.destination;
+                events.emplace_back(EntityMovedEvent{
+                    target.id, target.coordinate, *target.destination,
+                    target.bottom, target.bottom, MovementCause::blast});
             }
         }
 

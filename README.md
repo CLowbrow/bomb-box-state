@@ -448,6 +448,8 @@ different from adjacent-cell blast pushes:
 ### Explosion-tick event order
 
 - `BarrelExploded` events for a wave precede that wave's target effects.
+- `BarrelExploded` events are ordered by source cell in canonical row-major
+  order, then by the sources' pre-wave bottom-to-top order within a cell.
 - Target effects are ordered by affected cell in canonical row-major order,
   then by pre-wave bottom-to-top order within a cell.
 - A successful blast pop emits `EntityMoved` with cause `blast`. If the moved

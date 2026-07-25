@@ -31,7 +31,7 @@ follow only after that loop works through WebAssembly.
 | 7. Fixtures and terminal outcomes | **Implemented** | Color-wide AND switches, rewindable effective door state, safe occupied-door hold-open behavior, fixture-aware walking and pushes, teleporter restrictions and wins, terminal gating/history, initialization, and win-before-loss precedence are covered. |
 | 8. Ramps and sliding | **Implemented** | Oriented half-step player traversal, downhill box/barrel pushes, deterministic automatic whole-stack slides, blocked retries, fixture-aware destinations, fall-before-slide ordering, and slide conflicts are covered. |
 | 9. Single explosions | **Implemented** | One settled armed source detonates atomically after fall/slide settlement, with source removal, flat/ramp height targeting, same-cell effects, legal adjacent pops, barrel arming, player loss, fixture changes, follow-up physics, deterministic events, initialization, and exact rewind. |
-| 10. Explosion waves and chains | **Not started** | Simultaneous impulses, conflicts, waves, and chain reactions are not implemented. |
+| 10. Explosion waves and chains | **Implemented** | Every settled armed source in a wave uses one pre-wave snapshot; same-direction impulses coalesce, multi-direction and overlapping-volume conflicts cancel without ID priority, affected barrels arm even when blocked, and later waves wait for blast-driven falls and ramp slides. |
 | 11. Lifecycle, conflict, and cross-adapter hardening | **Not started** | Phase-one loading behavior has native tests, but the complete lifecycle/conflict corpus and cross-adapter parity coverage do not exist. |
 
 ### Immediate vertical slice
@@ -123,12 +123,16 @@ later rules rather than replaced after each phase.
   pre-tick snapshot, reject shared-destination conflicts, retry after later
   state changes, honor doors and teleporters, and emit source-row-major,
   bottom-to-top events without arming barrels.
-- A single-explosion planner runs only after gravity and ramp movement settle.
-  From one immutable pre-blast state it removes the source, targets flat and
-  oriented-ramp stack heights, pops legal adjacent boxes and barrels, arms hit
-  barrels even when blocked, handles direct same-cell effects and player loss,
-  and leaves unsupported entities for later gravity/slide ticks. Explosion
-  events retain the removed source's ID, coordinate, and bottom height.
+- The explosion-wave planner runs only after gravity and ramp movement settle.
+  From one immutable pre-wave state it removes every ready source, targets flat
+  and oriented-ramp stack heights, coalesces matching impulses, cancels
+  multi-direction and overlapping-volume conflicts without ID priority, pops
+  legal adjacent boxes and barrels, arms hit barrels even when blocked, handles
+  direct same-cell effects and player loss, and leaves unsupported entities for
+  later gravity/slide ticks. Newly armed barrels detonate together in a later
+  wave only after that movement settles. Explosion events retain each removed
+  source's ID, coordinate, and bottom height and precede spatially ordered
+  target effects.
 - Fixture resolution runs after each physical tick. Switch colors use
   color-wide AND behavior, inactive occupied doors stay effectively open until
   vacated, and switch/door events follow physical events in deterministic
@@ -167,10 +171,9 @@ canonical supplied snapshot in `loaded_level()`, derives initial fixture state,
 and runs gravity and ramp sliding with post-tick fixture and teleporter
 resolution before installing `resolved_state()` as the first command boundary.
 Initialization can therefore produce switch/door transitions, falling,
-barrel-arming, whole-stack slides, one single-source explosion with follow-up
-physics, and terminal win/loss ticks. Multiple simultaneous sources and later
-chain waves remain deferred to Phase 10, so those cases are not yet stable
-under the complete specification.
+barrel-arming, whole-stack slides, simultaneous explosion waves, complete
+movement-separated chain reactions, and terminal win/loss ticks before the
+first command boundary is installed.
 
 ## Test infrastructure
 
@@ -199,10 +202,10 @@ Most recently recorded on 2026-07-24:
 
 | Surface | Commands | Result |
 | --- | --- | --- |
-| Native debug | `cmake --preset native-debug`; `cmake --build --preset native-debug`; `ctest --preset native-debug --output-on-failure` | Passed: 78 of 78 tests: 65 behavior cases, 5 C ABI boundary cases, 5 focused unit cases, 1 cross-adapter contract runner, and 2 production consumer/header smokes. |
-| Native release | `cmake --preset native-release`; `cmake --build --preset native-release`; `ctest --preset native-release --output-on-failure` | Passed: 78 of 78 tests. |
+| Native debug | `cmake --preset native-debug`; `cmake --build --preset native-debug`; `ctest --preset native-debug --output-on-failure` | Passed: 85 of 85 tests: 72 behavior cases, 5 C ABI boundary cases, 5 focused unit cases, 1 cross-adapter contract runner, and 2 production consumer/header smokes. |
+| Native release | `cmake --preset native-release`; `cmake --build --preset native-release`; `ctest --preset native-release --output-on-failure` | Passed: 85 of 85 tests. |
 | WebAssembly debug | `cmake --preset wasm-debug`; `cmake --build --preset wasm-debug`; `ctest --preset wasm-debug --output-on-failure` | Passed: portable core and stateful adapter build; 1 of 1 Node tests ran the authored browser vertical-slice contract. |
-| Native sanitized | `cmake --preset native-sanitized`; `cmake --build --preset native-sanitized` | Configure and build passed with deferred GoogleTest discovery. Tests were not executed, as required on this Apple Silicon/macOS host because the Apple sanitizer runtime stalls during GoogleTest discovery; execution remains delegated to the Ubuntu sanitizer CI job. |
+| Native sanitized | `cmake --preset native-sanitized`; `cmake --build --preset native-sanitized` | Configure and build passed after Phase 10 with deferred GoogleTest discovery. Tests were not executed, as required on this Apple Silicon/macOS host because the Apple sanitizer runtime stalls during GoogleTest discovery; execution remains delegated to the Ubuntu sanitizer CI job. |
 | JSON Schema syntax | `jq empty docs/level-format.schema.json` | Passed. |
 | Vendored yyjson | `shasum -a 256 vendor/yyjson/yyjson.c vendor/yyjson/yyjson.h vendor/yyjson/LICENSE`; global-symbol inspection with `nm` | All files match the recorded 0.12.0 import checksums. Only the two `game_rules_*` bridge symbols are global; no upstream `yyjson_*` implementation symbol is exported. |
 | Install package | `cmake --install out/build/native-debug --prefix <temporary-directory>` | Passed after the Phase 9 public event addition. The static archive is self-contained, no GoogleTest artifact or dependency is installed, and the package includes the yyjson MIT license, third-party notice, and provenance README. |
@@ -211,13 +214,9 @@ Most recently recorded on 2026-07-24:
 ## Known limitations
 
 - Movement resolves flat and ramp walking, single-entity pushes, derived
-  falling, automatic whole-stack ramp slides, and one single-source explosion
-  pass. Switches, doors, and teleporters participate fully.
-- Simultaneously ready barrels are not yet detonated because selecting one
-  sequentially would violate the shared pre-wave rules. A barrel armed by a
-  Phase 9 blast is recorded authoritatively but its later chain wave is not yet
-  scheduled, so these Phase 10 cases can still leave armed barrels at a command
-  boundary.
+  falling, automatic whole-stack ramp slides, simultaneous explosion waves,
+  and complete movement-separated chains. Switches, doors, and teleporters
+  participate fully.
 - Falling-on-player crushing is covered both through its focused internal rule
   seam and through a public blast-pop scenario that removes middle support.
 - Sanitized tests must run in the Ubuntu CI job or another known-working Linux
@@ -227,7 +226,7 @@ Most recently recorded on 2026-07-24:
 
 ## Recommended next task
 
-Implement phase 10 explosion waves and chains next. Plan all simultaneously
-ready sources from one pre-wave snapshot, combine and cancel impulses without
-ID-based priority, resolve destination conflicts, then schedule later waves
-only after blast-driven falls and ramp slides settle.
+Implement phase 11 lifecycle, conflict, and cross-adapter hardening next. Extend
+the authored adapter-neutral corpus beyond the browser vertical slice and cover
+remaining lifecycle and simultaneous-conflict combinations across native and
+WebAssembly surfaces.

@@ -94,18 +94,20 @@ center. Downhill pushes enter the ramp center atomically, then a separate immuta
 moves every unblocked ramp stack to its low endpoint, rejects shared-destination conflicts, and
 retries blocked stacks after later physical or fixture changes. Derived stabilization always runs
 gravity before sliding so entities falling onto a ramp settle and arm before the complete stack can
-slide in a later tick. The single-explosion planner removes one settled armed source from an
-immutable pre-blast state, targets adjacent flat and oriented ramp heights, applies legal one-cell
-blast pops, arms affected barrels, and reports direct player loss atomically. Gravity and sliding
-then settle consequences in later ticks. Simultaneously ready sources, later explosion waves, and
-chain scheduling remain a separate orchestration phase so entity IDs never choose a source order.
+slide in a later tick. The explosion-wave planner removes every settled armed source from one
+immutable pre-wave state, targets adjacent flat and oriented ramp heights, combines same-direction
+impulses, cancels multi-direction and overlapping-destination conflicts, applies the remaining legal
+one-cell blast pops, arms affected barrels, and reports direct player loss atomically. Source and
+target events follow spatial pre-wave order; entity IDs never choose a physics result. Gravity and
+sliding settle blast consequences before the engine schedules any newly armed barrels together in a
+later wave.
 Loading runs initial fixture derivation followed by the same derived/post-tick path before installing
 the first history state and returns the supplied initial state, initialization ticks, stabilized or
 terminal state, and outcome. An accepted push commits the player and pushed entity together before
 any required fall tick; any failed source, target, or destination check leaves state and history
 unchanged. The primitive stateful C API and WebAssembly adapter carry that same
-create/load/input/state/rewind loop across the embedding boundary. Single-source blasts are
-integrated; simultaneous explosion waves and chains are the next movement-system extension.
+create/load/input/state/rewind loop across the embedding boundary. Single and simultaneous blast
+waves, including chains separated by required fall and slide ticks, use that same result contract.
 
 `decode_level_json()` produces that same canonical `LevelDefinition` only after strict format and
 structural validation. JSON decoding is deliberately separate from `Engine::load_level()` so an

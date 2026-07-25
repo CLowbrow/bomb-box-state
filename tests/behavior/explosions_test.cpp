@@ -153,7 +153,7 @@ TEST(Explosions, SelectsOnlyTheEntityAtBlastHeightAndDropsTheUpperStack)
     EXPECT_EQ(reversed_engine.load_level(reversed), loaded);
 }
 
-TEST(Explosions, ArmsOnlyDirectlyTouchingBarrelsInTheSourceCell)
+TEST(Explosions, ChainsThroughDirectlyTouchingBarrelsInTheSourceCell)
 {
     LevelDefinition level = flat_line(
         {0, 0}, Entity{1, EntityKind::player, {1, 0}, Height{0}});
@@ -164,7 +164,7 @@ TEST(Explosions, ArmsOnlyDirectlyTouchingBarrelsInTheSourceCell)
     const LoadResult loaded = engine.load_level(level);
 
     ASSERT_TRUE(loaded.accepted());
-    ASSERT_EQ(loaded.ticks.size(), 2U);
+    ASSERT_EQ(loaded.ticks.size(), 3U);
     EXPECT_EQ(loaded.ticks[0].events,
               (std::vector<GameplayEvent>{
                   EntityMovedEvent{8, {0, 0}, {0, 0}, Height{4}, Height{2},
@@ -176,9 +176,15 @@ TEST(Explosions, ArmsOnlyDirectlyTouchingBarrelsInTheSourceCell)
                   BarrelExplodedEvent{8, {0, 0}, Height{2}},
                   BarrelArmedEvent{9},
               }));
+    EXPECT_EQ(loaded.ticks[2].events,
+              (std::vector<GameplayEvent>{
+                  BarrelExplodedEvent{9, {0, 0}, Height{0}},
+                  LevelLostEvent{},
+              }));
     ASSERT_TRUE(loaded.final_state.has_value());
-    EXPECT_EQ(entity(*loaded.final_state, 9).bottom, Height{0});
-    EXPECT_EQ(loaded.final_state->armed_barrels, (std::vector<EntityId>{9}));
+    EXPECT_FALSE(contains_entity(*loaded.final_state, 9));
+    EXPECT_TRUE(loaded.final_state->armed_barrels.empty());
+    EXPECT_EQ(loaded.outcome, std::optional{Outcome::lost});
 }
 
 TEST(Explosions, PoppingMiddleSupportCausesAFatalPlayerFallInTheNextTick)
@@ -211,7 +217,7 @@ TEST(Explosions, PoppingMiddleSupportCausesAFatalPlayerFallInTheNextTick)
     EXPECT_EQ(loaded.outcome, std::optional{Outcome::lost});
 }
 
-TEST(Explosions, ArmsABlockedBarrelWithoutStartingItsChainWave)
+TEST(Explosions, ChainsThroughABarrelWhoseBlastMovementIsBlocked)
 {
     LevelDefinition level = flat_line(
         {1, 0, 0, 0}, Entity{1, EntityKind::player, {0, 0}, Height{2}});
@@ -223,15 +229,19 @@ TEST(Explosions, ArmsABlockedBarrelWithoutStartingItsChainWave)
     const LoadResult loaded = engine.load_level(level);
 
     ASSERT_TRUE(loaded.accepted());
-    ASSERT_EQ(loaded.ticks.size(), 2U);
+    ASSERT_EQ(loaded.ticks.size(), 3U);
     EXPECT_EQ(loaded.ticks[1].events,
               (std::vector<GameplayEvent>{
                   BarrelExplodedEvent{8, {1, 0}, Height{0}},
                   BarrelArmedEvent{9},
               }));
+    EXPECT_EQ(loaded.ticks[2].events,
+              (std::vector<GameplayEvent>{
+                  BarrelExplodedEvent{9, {2, 0}, Height{0}},
+              }));
     ASSERT_TRUE(loaded.final_state.has_value());
-    EXPECT_EQ(entity(*loaded.final_state, 9).coordinate, (Coordinate{2, 0}));
-    EXPECT_EQ(loaded.final_state->armed_barrels, (std::vector<EntityId>{9}));
+    EXPECT_FALSE(contains_entity(*loaded.final_state, 9));
+    EXPECT_TRUE(loaded.final_state->armed_barrels.empty());
 }
 
 TEST(Explosions, RecomputesSwitchesAndDoorsInTheExplosionTick)
@@ -351,6 +361,238 @@ TEST(Explosions, UsesRampEndpointConnectivityAndIgnoresPerpendicularEdges)
     EXPECT_EQ(survived.outcome, std::optional{Outcome::ongoing});
     EXPECT_EQ(entity(*survived.final_state, 1),
               (Entity{1, EntityKind::player, {1, 0}, Height{1}}));
+}
+
+TEST(ExplosionWaves, CancelsOpposingImpulsesFromSimultaneousSourcesDeterministically)
+{
+    LevelDefinition level = flat_grid(
+        5, 2, Entity{1, EntityKind::player, {2, 1}, Height{0}});
+    level.entities.push_back(Entity{8, EntityKind::barrel, {1, 0}, Height{2}});
+    level.entities.push_back(Entity{3, EntityKind::box, {2, 0}, Height{0}});
+    level.entities.push_back(Entity{4, EntityKind::barrel, {3, 0}, Height{2}});
+    Engine engine;
+
+    const LoadResult loaded = engine.load_level(level);
+
+    ASSERT_TRUE(loaded.accepted());
+    ASSERT_EQ(loaded.ticks.size(), 2U);
+    EXPECT_EQ(loaded.ticks[0].events,
+              (std::vector<GameplayEvent>{
+                  EntityMovedEvent{8, {1, 0}, {1, 0}, Height{2}, Height{0},
+                                   MovementCause::fall},
+                  BarrelArmedEvent{8},
+                  EntityMovedEvent{4, {3, 0}, {3, 0}, Height{2}, Height{0},
+                                   MovementCause::fall},
+                  BarrelArmedEvent{4},
+              }));
+    EXPECT_EQ(loaded.ticks[1].events,
+              (std::vector<GameplayEvent>{
+                  BarrelExplodedEvent{8, {1, 0}, Height{0}},
+                  BarrelExplodedEvent{4, {3, 0}, Height{0}},
+              }));
+    ASSERT_TRUE(loaded.final_state.has_value());
+    EXPECT_EQ(entity(*loaded.final_state, 3),
+              (Entity{3, EntityKind::box, {2, 0}, Height{0}}));
+    EXPECT_TRUE(loaded.final_state->armed_barrels.empty());
+
+    LevelDefinition reversed = level;
+    std::reverse(reversed.cells.begin(), reversed.cells.end());
+    std::reverse(reversed.entities.begin(), reversed.entities.end());
+    Engine reversed_engine;
+    EXPECT_EQ(reversed_engine.load_level(reversed), loaded);
+}
+
+TEST(ExplosionWaves, CancelsOtherwiseValidMovementsWithOverlappingDestinations)
+{
+    LevelDefinition level = flat_grid(
+        5, 2, Entity{1, EntityKind::player, {2, 1}, Height{0}});
+    level.entities.push_back(Entity{8, EntityKind::barrel, {0, 0}, Height{2}});
+    level.entities.push_back(Entity{2, EntityKind::box, {1, 0}, Height{0}});
+    level.entities.push_back(Entity{3, EntityKind::box, {3, 0}, Height{0}});
+    level.entities.push_back(Entity{9, EntityKind::barrel, {4, 0}, Height{2}});
+    Engine engine;
+
+    const LoadResult loaded = engine.load_level(level);
+
+    ASSERT_TRUE(loaded.accepted());
+    ASSERT_EQ(loaded.ticks.size(), 2U);
+    EXPECT_EQ(loaded.ticks[1].events,
+              (std::vector<GameplayEvent>{
+                  BarrelExplodedEvent{8, {0, 0}, Height{0}},
+                  BarrelExplodedEvent{9, {4, 0}, Height{0}},
+              }));
+    ASSERT_TRUE(loaded.final_state.has_value());
+    EXPECT_EQ(entity(*loaded.final_state, 2).coordinate, (Coordinate{1, 0}));
+    EXPECT_EQ(entity(*loaded.final_state, 3).coordinate, (Coordinate{3, 0}));
+}
+
+TEST(ExplosionWaves, AllowsNonoverlappingArrivalsAtDifferentHeightsInOneCell)
+{
+    LevelDefinition level = flat_grid(
+        5, 2, Entity{1, EntityKind::player, {2, 1}, Height{0}});
+    level.cells[3].geometry = FlatCell{1};
+    level.cells[4].geometry = FlatCell{1};
+    level.entities.push_back(Entity{8, EntityKind::barrel, {0, 0}, Height{2}});
+    level.entities.push_back(Entity{2, EntityKind::box, {1, 0}, Height{0}});
+    level.entities.push_back(Entity{3, EntityKind::box, {3, 0}, Height{2}});
+    level.entities.push_back(Entity{9, EntityKind::barrel, {4, 0}, Height{4}});
+    Engine engine;
+
+    const LoadResult loaded = engine.load_level(level);
+
+    ASSERT_TRUE(loaded.accepted());
+    ASSERT_EQ(loaded.ticks.size(), 2U);
+    EXPECT_EQ(loaded.ticks[1].events,
+              (std::vector<GameplayEvent>{
+                  BarrelExplodedEvent{8, {0, 0}, Height{0}},
+                  BarrelExplodedEvent{9, {4, 0}, Height{2}},
+                  EntityMovedEvent{2, {1, 0}, {2, 0}, Height{0}, Height{0},
+                                   MovementCause::blast},
+                  EntityMovedEvent{3, {3, 0}, {2, 0}, Height{2}, Height{2},
+                                   MovementCause::blast},
+              }));
+    ASSERT_TRUE(loaded.final_state.has_value());
+    EXPECT_EQ(entity(*loaded.final_state, 2).coordinate, (Coordinate{2, 0}));
+    EXPECT_EQ(entity(*loaded.final_state, 3).coordinate, (Coordinate{2, 0}));
+}
+
+TEST(ExplosionWaves, ResolvesDirectionConflictBeforeBlockedDestinationsAndStillChains)
+{
+    LevelDefinition level = flat_grid(
+        4, 4, Entity{1, EntityKind::player, {3, 3}, Height{0}});
+    level.entities.push_back(Entity{2, EntityKind::box, {1, 0}, Height{0}});
+    level.entities.push_back(Entity{7, EntityKind::barrel, {1, 1}, Height{0}});
+    level.entities.push_back(Entity{8, EntityKind::barrel, {2, 1}, Height{2}});
+    level.entities.push_back(Entity{9, EntityKind::barrel, {1, 2}, Height{2}});
+    Engine engine;
+
+    const LoadResult loaded = engine.load_level(level);
+
+    ASSERT_TRUE(loaded.accepted());
+    ASSERT_EQ(loaded.ticks.size(), 3U);
+    EXPECT_EQ(loaded.ticks[1].events,
+              (std::vector<GameplayEvent>{
+                  BarrelExplodedEvent{8, {2, 1}, Height{0}},
+                  BarrelExplodedEvent{9, {1, 2}, Height{0}},
+                  BarrelArmedEvent{7},
+              }));
+    EXPECT_EQ(loaded.ticks[2].events,
+              (std::vector<GameplayEvent>{
+                  BarrelExplodedEvent{7, {1, 1}, Height{0}},
+              }));
+    ASSERT_TRUE(loaded.final_state.has_value());
+    EXPECT_FALSE(contains_entity(*loaded.final_state, 7));
+    EXPECT_EQ(entity(*loaded.final_state, 2).coordinate, (Coordinate{1, 0}));
+}
+
+TEST(ExplosionChains, SettlesBlastDrivenFallBeforeTheNextWaveAndRewindsExactly)
+{
+    LevelDefinition level = flat_line(
+        {2, 2, 0, 0, -1}, Entity{1, EntityKind::player, {0, 0}, Height{4}});
+    level.entities.push_back(Entity{8, EntityKind::barrel, {1, 0}, Height{4}});
+    level.entities.push_back(Entity{9, EntityKind::barrel, {3, 0}, Height{0}});
+    Engine engine;
+    ASSERT_TRUE(engine.load_level(level).accepted());
+
+    const MoveResult moved = engine.move(Direction::east);
+
+    ASSERT_TRUE(moved.accepted());
+    ASSERT_EQ(moved.ticks.size(), 5U);
+    EXPECT_EQ(moved.ticks[2].events,
+              (std::vector<GameplayEvent>{
+                  BarrelExplodedEvent{8, {2, 0}, Height{0}},
+                  EntityMovedEvent{9, {3, 0}, {4, 0}, Height{0}, Height{0},
+                                   MovementCause::blast},
+                  BarrelArmedEvent{9},
+              }));
+    EXPECT_EQ(moved.ticks[3].events,
+              (std::vector<GameplayEvent>{
+                  EntityMovedEvent{9, {4, 0}, {4, 0}, Height{0}, Height{-2},
+                                   MovementCause::fall},
+              }));
+    EXPECT_EQ(moved.ticks[4].events,
+              (std::vector<GameplayEvent>{
+                  BarrelExplodedEvent{9, {4, 0}, Height{-2}},
+              }));
+    ASSERT_TRUE(moved.final_state.has_value());
+    EXPECT_TRUE(moved.final_state->armed_barrels.empty());
+
+    ASSERT_TRUE(engine.rewind().accepted());
+    EXPECT_EQ(engine.move(Direction::east), moved);
+}
+
+TEST(ExplosionChains, DetonatesMultipleNewlyArmedBarrelsTogetherInTheNextWave)
+{
+    LevelDefinition level = flat_grid(
+        5, 5, Entity{1, EntityKind::player, {2, 4}, Height{0}});
+    level.entities.push_back(Entity{8, EntityKind::barrel, {2, 2}, Height{2}});
+    level.entities.push_back(Entity{9, EntityKind::barrel, {1, 2}, Height{0}});
+    level.entities.push_back(Entity{7, EntityKind::barrel, {3, 2}, Height{0}});
+    Engine engine;
+
+    const LoadResult loaded = engine.load_level(level);
+
+    ASSERT_TRUE(loaded.accepted());
+    ASSERT_EQ(loaded.ticks.size(), 3U);
+    EXPECT_EQ(loaded.ticks[1].events,
+              (std::vector<GameplayEvent>{
+                  BarrelExplodedEvent{8, {2, 2}, Height{0}},
+                  EntityMovedEvent{9, {1, 2}, {0, 2}, Height{0}, Height{0},
+                                   MovementCause::blast},
+                  BarrelArmedEvent{9},
+                  EntityMovedEvent{7, {3, 2}, {4, 2}, Height{0}, Height{0},
+                                   MovementCause::blast},
+                  BarrelArmedEvent{7},
+              }));
+    EXPECT_EQ(loaded.ticks[2].events,
+              (std::vector<GameplayEvent>{
+                  BarrelExplodedEvent{9, {0, 2}, Height{0}},
+                  BarrelExplodedEvent{7, {4, 2}, Height{0}},
+              }));
+    ASSERT_TRUE(loaded.final_state.has_value());
+    EXPECT_TRUE(loaded.final_state->armed_barrels.empty());
+    EXPECT_EQ(loaded.outcome, std::optional{Outcome::ongoing});
+}
+
+TEST(ExplosionChains, SettlesBlastDrivenRampFallAndSlideBeforeTheNextWave)
+{
+    LevelDefinition level = flat_grid(
+        5, 2, Entity{1, EntityKind::player, {0, 1}, Height{0}});
+    level.cells[0].geometry = FlatCell{1};
+    level.cells[1].geometry = FlatCell{1};
+    level.cells[2].geometry = FlatCell{1};
+    level.cells[3].geometry = RampCell{Direction::east, 0};
+    level.entities.push_back(Entity{8, EntityKind::barrel, {1, 0}, Height{4}});
+    level.entities.push_back(Entity{9, EntityKind::barrel, {2, 0}, Height{2}});
+    Engine engine;
+
+    const LoadResult loaded = engine.load_level(level);
+
+    ASSERT_TRUE(loaded.accepted());
+    ASSERT_EQ(loaded.ticks.size(), 5U);
+    EXPECT_EQ(loaded.ticks[1].events,
+              (std::vector<GameplayEvent>{
+                  BarrelExplodedEvent{8, {1, 0}, Height{2}},
+                  EntityMovedEvent{9, {2, 0}, {3, 0}, Height{2}, Height{2},
+                                   MovementCause::blast},
+                  BarrelArmedEvent{9},
+              }));
+    EXPECT_EQ(loaded.ticks[2].events,
+              (std::vector<GameplayEvent>{
+                  EntityMovedEvent{9, {3, 0}, {3, 0}, Height{2}, Height{1},
+                                   MovementCause::fall},
+              }));
+    EXPECT_EQ(loaded.ticks[3].events,
+              (std::vector<GameplayEvent>{
+                  EntityMovedEvent{9, {3, 0}, {4, 0}, Height{1}, Height{0},
+                                   MovementCause::slide},
+              }));
+    EXPECT_EQ(loaded.ticks[4].events,
+              (std::vector<GameplayEvent>{
+                  BarrelExplodedEvent{9, {4, 0}, Height{0}},
+              }));
+    ASSERT_TRUE(loaded.final_state.has_value());
+    EXPECT_TRUE(loaded.final_state->armed_barrels.empty());
 }
 
 } // namespace
