@@ -3,6 +3,7 @@
 #include "game_rules/engine.hpp"
 
 #include <algorithm>
+#include <cstdint>
 #include <tuple>
 
 namespace game_rules::detail {
@@ -14,6 +15,24 @@ namespace game_rules::detail {
                        [coordinate](const Entity& entity) {
                            return entity.coordinate == coordinate;
                        });
+}
+
+[[nodiscard]] inline bool volume_is_clear(const ResolvedState& state,
+                                          const Coordinate coordinate,
+                                          const Height bottom) noexcept
+{
+    const auto arrival_bottom = static_cast<std::int64_t>(bottom.half_steps);
+    const auto arrival_top = arrival_bottom + 2;
+    return std::none_of(state.entities.begin(), state.entities.end(),
+                        [coordinate, arrival_bottom, arrival_top](const Entity& entity) {
+                            if (entity.coordinate != coordinate) {
+                                return false;
+                            }
+                            const auto entity_bottom =
+                                static_cast<std::int64_t>(entity.bottom.half_steps);
+                            const auto entity_top = entity_bottom + 2;
+                            return entity_bottom < arrival_top && arrival_bottom < entity_top;
+                        });
 }
 
 inline void canonicalize_entities(std::vector<Entity>& entities)

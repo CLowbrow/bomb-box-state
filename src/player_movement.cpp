@@ -137,7 +137,7 @@ PlayerMovementPlan plan_player_movement(const LevelDefinition& level,
             }
         }
 
-        if (occupied(state, *pushed_destination)) {
+        if (!volume_is_clear(state, *pushed_destination, pushed_new_bottom)) {
             return rejected(MoveStatus::occupied);
         }
         if (surface_height(*pushed_destination_cell).half_steps

@@ -161,6 +161,169 @@ TEST(Falling, PushesOverALedgeThenFallsArmsAndExplodesABarrel)
     EXPECT_EQ(engine.move(Direction::east), first);
 }
 
+TEST(Falling, PushesABoxFromElevationThreeOntoABoxAtElevationOneToFormAStack)
+{
+    LevelDefinition level =
+        flat_line({3, 3, 1}, Entity{1, EntityKind::player, {0, 0}, Height{6}});
+    level.entities.push_back(Entity{2, EntityKind::box, {1, 0}, Height{6}});
+    level.entities.push_back(Entity{3, EntityKind::box, {2, 0}, Height{2}});
+
+    const ResolvedState initial{
+        {
+            Entity{1, EntityKind::player, {0, 0}, Height{6}},
+            Entity{2, EntityKind::box, {1, 0}, Height{6}},
+            Entity{3, EntityKind::box, {2, 0}, Height{2}},
+        },
+        Outcome::ongoing,
+    };
+    const ResolvedState after_push{
+        {
+            Entity{1, EntityKind::player, {1, 0}, Height{6}},
+            Entity{3, EntityKind::box, {2, 0}, Height{2}},
+            Entity{2, EntityKind::box, {2, 0}, Height{6}},
+        },
+        Outcome::ongoing,
+    };
+    const ResolvedState stacked{
+        {
+            Entity{1, EntityKind::player, {1, 0}, Height{6}},
+            Entity{3, EntityKind::box, {2, 0}, Height{2}},
+            Entity{2, EntityKind::box, {2, 0}, Height{4}},
+        },
+        Outcome::ongoing,
+    };
+
+    Engine engine;
+    ASSERT_TRUE(engine.load_level(level).accepted());
+
+    const MoveResult moved = engine.move(Direction::east);
+
+    EXPECT_EQ(moved,
+              (MoveResult{
+                  MoveStatus::moved,
+                  Direction::east,
+                  {},
+                  initial,
+                  {
+                      TickResult{
+                          0,
+                          {
+                              EntityMovedEvent{1, {0, 0}, {1, 0}, Height{6}, Height{6},
+                                               MovementCause::player},
+                              EntityMovedEvent{2, {1, 0}, {2, 0}, Height{6}, Height{6},
+                                               MovementCause::player},
+                          },
+                          after_push,
+                      },
+                      TickResult{
+                          1,
+                          {EntityMovedEvent{2, {2, 0}, {2, 0}, Height{6}, Height{4},
+                                            MovementCause::fall}},
+                          stacked,
+                      },
+                  },
+                  stacked,
+                  Outcome::ongoing,
+              }));
+    EXPECT_EQ(engine.resolved_state(), std::optional{stacked});
+}
+
+TEST(Falling, PushesABarrelFromElevationThreeOntoABarrelAtElevationOneBeforeTheyExplode)
+{
+    LevelDefinition level =
+        flat_line({3, 3, 1}, Entity{1, EntityKind::player, {0, 0}, Height{6}});
+    level.entities.push_back(Entity{8, EntityKind::barrel, {1, 0}, Height{6}});
+    level.entities.push_back(Entity{9, EntityKind::barrel, {2, 0}, Height{2}});
+
+    const ResolvedState initial{
+        {
+            Entity{1, EntityKind::player, {0, 0}, Height{6}},
+            Entity{8, EntityKind::barrel, {1, 0}, Height{6}},
+            Entity{9, EntityKind::barrel, {2, 0}, Height{2}},
+        },
+        Outcome::ongoing,
+    };
+    const ResolvedState after_push{
+        {
+            Entity{1, EntityKind::player, {1, 0}, Height{6}},
+            Entity{9, EntityKind::barrel, {2, 0}, Height{2}},
+            Entity{8, EntityKind::barrel, {2, 0}, Height{6}},
+        },
+        Outcome::ongoing,
+    };
+    ResolvedState stacked{
+        {
+            Entity{1, EntityKind::player, {1, 0}, Height{6}},
+            Entity{9, EntityKind::barrel, {2, 0}, Height{2}},
+            Entity{8, EntityKind::barrel, {2, 0}, Height{4}},
+        },
+        Outcome::ongoing,
+    };
+    stacked.armed_barrels = {8};
+    ResolvedState lower_barrel_armed{
+        {
+            Entity{1, EntityKind::player, {1, 0}, Height{6}},
+            Entity{9, EntityKind::barrel, {2, 0}, Height{2}},
+        },
+        Outcome::ongoing,
+    };
+    lower_barrel_armed.armed_barrels = {9};
+    const ResolvedState exploded{
+        {Entity{1, EntityKind::player, {1, 0}, Height{6}}},
+        Outcome::ongoing,
+    };
+
+    Engine engine;
+    ASSERT_TRUE(engine.load_level(level).accepted());
+
+    const MoveResult moved = engine.move(Direction::east);
+
+    EXPECT_EQ(moved,
+              (MoveResult{
+                  MoveStatus::moved,
+                  Direction::east,
+                  {},
+                  initial,
+                  {
+                      TickResult{
+                          0,
+                          {
+                              EntityMovedEvent{1, {0, 0}, {1, 0}, Height{6}, Height{6},
+                                               MovementCause::player},
+                              EntityMovedEvent{8, {1, 0}, {2, 0}, Height{6}, Height{6},
+                                               MovementCause::player},
+                          },
+                          after_push,
+                      },
+                      TickResult{
+                          1,
+                          {
+                              EntityMovedEvent{8, {2, 0}, {2, 0}, Height{6}, Height{4},
+                                               MovementCause::fall},
+                              BarrelArmedEvent{8},
+                          },
+                          stacked,
+                      },
+                      TickResult{
+                          2,
+                          {
+                              BarrelExplodedEvent{8, {2, 0}, Height{4}},
+                              BarrelArmedEvent{9},
+                          },
+                          lower_barrel_armed,
+                      },
+                      TickResult{
+                          3,
+                          {BarrelExplodedEvent{9, {2, 0}, Height{2}}},
+                          exploded,
+                      },
+                  },
+                  exploded,
+                  Outcome::ongoing,
+              }));
+    EXPECT_EQ(engine.resolved_state(), std::optional{exploded});
+}
+
 TEST(Falling, InitializationAndReplacementAreOrderIndependentAndIsolated)
 {
     LevelDefinition ordered = flat_line({0, 0}, Entity{50, EntityKind::player, {1, 0}, Height{0}});

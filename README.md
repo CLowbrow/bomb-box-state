@@ -192,10 +192,12 @@ resolved state in a fresh history.
   entity in its cell. A box or barrel with anything above or below it cannot be
   pushed by the player.
 - A player push may move only that one entity. It cannot recursively push an
-  entity occupying the destination cell.
+  entity whose volume overlaps the pushed entity's arrival volume.
 - Push legality is calculated from the state at the start of the movement
-  tick. An occupied destination remains blocking even if its occupant could
-  theoretically move later in the same tick.
+  tick. An overlapping destination volume remains blocking even if its occupant
+  could theoretically move later in the same tick. An entity entirely below
+  the arrival volume does not block the horizontal push and may become landing
+  support during the following gravity tick.
 - A push is atomic: either the pushed entity and player both move, or neither
   moves.
 - An accepted player-push tick emits the player's `EntityMoved` event first
@@ -212,6 +214,11 @@ Implementation note: a future version may permit pushing the top of a stack, a
 stack suffix, or an entire stack. Movement APIs and events should therefore be
 capable of describing more than one moved entity even though the initial
 player-push rules permit only one.
+
+For example, a box pushed at elevation `3` into a flat cell at elevation `1`
+containing one box at the floor is allowed: the moving box enters at bottom
+height `3`, then falls to bottom height `2` on the lower box. A barrel follows
+the same movement and landing rules, then arms because it fell.
 
 ## Falling
 

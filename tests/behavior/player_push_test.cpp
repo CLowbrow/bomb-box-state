@@ -185,6 +185,24 @@ TEST(PlayerPush, RejectsStackedTargetsAndRecursivePushesAtomically)
     EXPECT_EQ(occupied_engine.move(Direction::east),
               expected_rejection(MoveStatus::occupied, Direction::east, occupied));
     EXPECT_EQ(occupied_engine.rewind().status, RewindStatus::history_empty);
+
+    LevelDefinition overlapping_stack = flat_grid(4, 1, {0, 0});
+    overlapping_stack.cells[0].geometry = FlatCell{2};
+    overlapping_stack.cells[1].geometry = FlatCell{2};
+    overlapping_stack.cells[2].geometry = FlatCell{1};
+    overlapping_stack.entities[0].bottom = Height::from_elevation(2);
+    overlapping_stack.entities.push_back(
+        Entity{4, EntityKind::box, {1, 0}, Height::from_elevation(2)});
+    overlapping_stack.entities.push_back(
+        Entity{5, EntityKind::box, {2, 0}, Height::from_elevation(1)});
+    overlapping_stack.entities.push_back(
+        Entity{6, EntityKind::barrel, {2, 0}, Height::from_elevation(2)});
+    Engine overlapping_stack_engine;
+    ASSERT_TRUE(overlapping_stack_engine.load_level(overlapping_stack).accepted());
+    EXPECT_EQ(overlapping_stack_engine.move(Direction::east),
+              expected_rejection(MoveStatus::occupied, Direction::east,
+                                 overlapping_stack));
+    EXPECT_EQ(overlapping_stack_engine.rewind().status, RewindStatus::history_empty);
 }
 
 TEST(PlayerPush, RejectsWorldAndDeferredRuleBoundariesWithoutPartialMovement)
