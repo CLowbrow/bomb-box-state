@@ -296,8 +296,8 @@ and no arbitrary entity or event-queue ordering is needed.
 
 ### Geometry
 
-A ramp occupies a cell and connects exactly two cardinally adjacent flat cells
-on opposite sides of it. It has:
+A ramp occupies a cell and connects exactly two cardinally adjacent endpoint
+cells on opposite sides of it. It has:
 
 - An orientation: north/south or east/west.
 - A low direction.
@@ -309,26 +309,40 @@ Entry or exit perpendicular to the ramp orientation is prohibited. A ramp does
 not connect any of its perpendicular neighbors, even if their elevations happen
 to match one of its endpoints.
 
+An endpoint may connect either to a flat cell at the endpoint's integer height
+or directly to another collinear ramp. Two adjacent ramps connect only when one
+ramp's high endpoint meets the other ramp's low endpoint at the same integer
+height. Low-to-low and high-to-high joins are invalid. Connected ramps therefore
+form a monotonic chain; for example, a ramp from `0` to `1` may be immediately
+followed by a ramp from `1` to `2`.
+
 ### Player traversal
 
 - The player may traverse a ramp in either direction.
 - Moving between an endpoint and the ramp center changes player height by
   `0.5` and is ramp traversal, not climbing or falling.
+- Moving between the centers of two connected ramps changes player height by
+  `1.0` and is also ramp traversal. The player may traverse every ramp in a
+  connected chain in either direction, one cell per command.
 - When leaving the ramp center, the player may push an otherwise eligible box
   or barrel occupying that endpoint. Push contact is evaluated at the endpoint
   height, and the player changes to that height in the atomic push tick.
-- Traversing a one-cell ramp therefore normally takes two commands: endpoint
-  to ramp, then ramp to the opposite endpoint.
+- Traversing a one-cell ramp between flat endpoints takes two commands:
+  endpoint to ramp, then ramp to the opposite endpoint.
 
 ### Boxes, barrels, and ramp stacks
 
 - A box or barrel may be pushed onto a ramp only from its high endpoint and in
   the downhill direction.
-- Moving from the high endpoint onto the ramp and sliding from the ramp to the
-  low endpoint are ramp movements, not falls. These movements do not arm a
-  barrel.
+- Moving from the high endpoint onto the ramp, sliding between connected ramp
+  centers, and sliding from the bottom ramp to its low flat endpoint are ramp
+  movements, not falls. These movements do not arm a barrel.
 - A box or barrel on a ramp automatically tries to slide toward the low
   endpoint.
+- If the low endpoint connects to another ramp, an unblocked ramp stack slides
+  into that ramp's center in one derived tick and tries to continue downhill in
+  the next derived tick. A stack pushed onto the top ramp of an unblocked chain
+  therefore slides through every ramp and reaches the bottom flat endpoint.
 - If the low destination contains any entity, has a closed door, or has an
   exit teleporter, it is blocked and the ramp entity remains in place. A
   switch or effectively open door does not block the slide.
@@ -338,14 +352,14 @@ to match one of its endpoints.
   endpoint. That movement is a fall, not a slide. A barrel falling any positive
   distance onto a ramp becomes armed.
 - Additional entities may fall onto a blocked ramp occupant and form a stack.
-- When a ramp stack is able to slide, the **entire stack moves together** to
-  the low endpoint during one derived tick. Upper members do not fall one at a
-  time.
+- When a ramp stack is able to slide, the **entire stack moves together** one
+  cell toward the low endpoint during one derived tick. Upper members do not
+  fall one at a time.
 - Moving a whole ramp stack is automatic ramp behavior, not a player pushing a
   stack.
 - Independent ramp stacks slide simultaneously from one pre-tick snapshot. If
-  two or more stacks would enter the same low endpoint, all of those
-  conflicting slides fail and the stacks remain on their ramps.
+  two or more stacks would enter the same downhill destination cell, all of
+  those conflicting slides fail and the stacks remain on their ramps.
 - Successful slide events are ordered by source ramp coordinate in canonical
   row-major order, then by the entities' pre-tick bottom-to-top order within
   each ramp stack.
@@ -390,7 +404,8 @@ before it explodes. In particular:
   high endpoint at height `H + 0.5`. This offset applies independently to each
   member of a ramp stack. A blast may cross either oriented ramp edge at that
   member's corresponding endpoint height. Perpendicular ramp edges do not
-  carry a blast between levels.
+  carry a blast between levels. Connected ramp centers carry a blast across
+  their shared high-to-low endpoint using the corresponding center heights.
 - Doors, switches, teleporters, and cell geometry are not damaged or moved by a
   blast.
 - The exploding barrel is removed from the world as part of its explosion.
@@ -801,7 +816,8 @@ At minimum, level validation should eventually check:
   initially contain unsupported gaps, which initialization will resolve.
 - Fixtures obey their cell-placement restrictions.
 - Every ramp has one valid low endpoint and one valid high endpoint on opposite
-  sides.
+  sides. An endpoint may be a flat cell at the matching elevation or a
+  collinear ramp joined high-to-low at the matching elevation.
 - No ramp connects through a perpendicular edge.
 - Every door and switch has a syntactically valid color identifier; matching
   colors are not required.

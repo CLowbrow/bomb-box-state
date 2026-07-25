@@ -93,6 +93,46 @@ struct CoordinateLess final {
     return direction;
 }
 
+enum class RampEndpoint : std::uint8_t {
+    low,
+    high,
+};
+
+[[nodiscard]] inline std::optional<RampEndpoint> ramp_endpoint_at(
+    const RampCell& ramp,
+    const Direction direction) noexcept
+{
+    if (direction == ramp.low_direction) {
+        return RampEndpoint::low;
+    }
+    if (direction == opposite(ramp.low_direction)) {
+        return RampEndpoint::high;
+    }
+    return std::nullopt;
+}
+
+[[nodiscard]] inline std::int64_t ramp_endpoint_half_steps(
+    const RampCell& ramp,
+    const RampEndpoint endpoint) noexcept
+{
+    return static_cast<std::int64_t>(ramp.low_elevation) * 2
+        + (endpoint == RampEndpoint::high ? 2 : 0);
+}
+
+[[nodiscard]] inline bool ramps_connect(const RampCell& source,
+                                        const RampCell& destination,
+                                        const Direction travel_direction) noexcept
+{
+    const std::optional<RampEndpoint> source_endpoint =
+        ramp_endpoint_at(source, travel_direction);
+    const std::optional<RampEndpoint> destination_endpoint =
+        ramp_endpoint_at(destination, opposite(travel_direction));
+    return source_endpoint.has_value() && destination_endpoint.has_value()
+        && source_endpoint != destination_endpoint
+        && ramp_endpoint_half_steps(source, *source_endpoint)
+            == ramp_endpoint_half_steps(destination, *destination_endpoint);
+}
+
 [[nodiscard]] inline const Cell* find_cell(const LevelDefinition& level,
                                            const Coordinate coordinate) noexcept
 {

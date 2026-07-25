@@ -102,8 +102,11 @@ A ramp cell has this shape:
 
 `lowDirection` is `north`, `east`, `south`, or `west`. It identifies the ramp's low endpoint from
 the ramp cell under the declared coordinate axes. `lowElevation` is the integer elevation of that
-endpoint; the opposite endpoint must be a flat cell at `lowElevation + 1`. The ramp-center support
-height is therefore `lowElevation + 0.5`. `lowElevation` ranges from `-1073741824` through
+endpoint; its high endpoint is at `lowElevation + 1`, and its ramp-center support height is
+`lowElevation + 0.5`. Each endpoint must touch either a flat cell at the matching integer elevation
+or a collinear ramp whose complementary endpoint has that elevation. Direct ramp joins must be
+high-to-low; low-to-low and high-to-high joins are invalid. This permits monotonic chains such as
+adjacent `0`-to-`1` and `1`-to-`2` ramps. `lowElevation` ranges from `-1073741824` through
 `1073741822`, inclusive, so the low endpoint, center, and high endpoint all fit the height type.
 
 Every in-bounds coordinate must have exactly one cell. Sparse maps and implicit default cells are

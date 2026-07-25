@@ -17,6 +17,7 @@ namespace {
 struct SlideCandidate final {
     Coordinate source{};
     Coordinate destination{};
+    Height destination_bottom{};
     std::vector<std::size_t> entity_indices{};
 };
 
@@ -82,7 +83,22 @@ std::optional<TickResult> resolve_sliding_tick(const LevelDefinition& level,
             || destination_fixture_blocks(level, state, *destination)) {
             continue;
         }
-        candidates.push_back(SlideCandidate{cell.coordinate, *destination, std::move(indices)});
+        const Cell* const destination_cell = find_cell(level, *destination);
+        if (destination_cell == nullptr) {
+            continue;
+        }
+        if (const auto* destination_ramp =
+                std::get_if<RampCell>(&destination_cell->geometry);
+            destination_ramp != nullptr
+            && !ramps_connect(*ramp, *destination_ramp, ramp->low_direction)) {
+            continue;
+        }
+        candidates.push_back(SlideCandidate{
+            cell.coordinate,
+            *destination,
+            surface_height(*destination_cell),
+            std::move(indices),
+        });
     }
 
     std::map<Coordinate, std::size_t, CoordinateLess> destination_counts;
@@ -96,11 +112,15 @@ std::optional<TickResult> resolve_sliding_tick(const LevelDefinition& level,
         if (destination_counts[candidate.destination] != 1) {
             continue;
         }
+        const Entity& source_bottom = state.entities[candidate.entity_indices.front()];
+        const auto bottom_change = static_cast<std::int64_t>(
+            candidate.destination_bottom.half_steps) - source_bottom.bottom.half_steps;
         for (const std::size_t index : candidate.entity_indices) {
             const Entity& before = state.entities[index];
             Entity& after = next.entities[index];
             after.coordinate = candidate.destination;
-            --after.bottom.half_steps;
+            after.bottom.half_steps = static_cast<std::int32_t>(
+                static_cast<std::int64_t>(before.bottom.half_steps) + bottom_change);
             events.emplace_back(EntityMovedEvent{
                 before.id,
                 candidate.source,

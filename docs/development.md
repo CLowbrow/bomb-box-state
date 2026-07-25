@@ -96,16 +96,17 @@ if (rewound.accepted()) {
 }
 ```
 
-The current movement scope is flat and oriented ramp walking, atomic
-single-entity pushes including downhill ramp entry, derived falling and
-whole-stack sliding, simultaneous explosion waves and chains, switches, doors,
-and exit teleporters. A push emits the
+The current movement scope is flat and oriented ramp walking, including
+high-to-low connected ramp chains, atomic single-entity pushes including
+downhill ramp entry, derived falling and whole-stack sliding through every
+ramp in a chain, simultaneous explosion waves and chains, switches, doors, and
+exit teleporters. A push emits the
 player's movement event followed by the box or barrel movement event in the
 same tick; fixture changes follow physical events. A push over a lower flat
 support is completed by a derived fall tick, while a downhill ramp push is
-completed by a later slide tick. Stacked targets, recursive pushes, closed
-doors, teleporter restrictions, perpendicular ramp traversal, and other
-blocked destinations reject without entering history.
+completed by one later slide tick per traversed ramp cell. Stacked targets,
+recursive pushes, closed doors, teleporter restrictions, perpendicular ramp
+traversal, and other blocked destinations reject without entering history.
 
 `Engine::load_level()` runs initial fixture derivation and the same gravity and
 ramp-slide planners before establishing the new history boundary. Its

@@ -92,15 +92,17 @@ preserves spatial event order, and records armed barrel IDs in resolved state. F
 derives palette-ordered active switch colors and row-major effectively open doors after each
 physical tick, appending deterministic semantic changes to that tick. Teleporter contact finalizes
 the tick before fixture or later derived work and gives a win precedence over a same-tick loss.
-Ramp traversal changes player height by one half-step between oriented endpoints and the ramp
-center. Downhill pushes enter the ramp center atomically, then a separate immutable slide planner
-moves every unblocked ramp stack to its low endpoint, rejects shared-destination conflicts, and
-retries blocked stacks after later physical or fixture changes. Derived stabilization always runs
-gravity before sliding so entities falling onto a ramp settle and arm before the complete stack can
-slide in a later tick. The explosion-wave planner removes every settled armed source from one
-immutable pre-wave state, targets adjacent flat and oriented ramp heights, combines same-direction
-impulses, cancels multi-direction and overlapping-destination conflicts, applies the remaining legal
-one-cell blast pops, arms affected barrels, and reports direct player loss atomically. Source and
+Ramp traversal changes player height by one half-step between oriented flat endpoints and the ramp
+center, or by two half-steps between centers in a validated high-to-low ramp chain. Downhill pushes
+enter the top ramp center atomically, then a separate immutable slide planner moves every unblocked
+ramp stack one cell downhill per derived tick, including through connected ramp centers, rejects
+shared-destination conflicts, and retries blocked stacks after later physical or fixture changes.
+Derived stabilization always runs gravity before sliding so entities falling onto a ramp settle and
+arm before the complete stack can slide in a later tick. The explosion-wave planner removes every
+settled armed source from one immutable pre-wave state, targets adjacent flat and oriented ramp
+heights, combines same-direction impulses, cancels multi-direction and overlapping-destination
+conflicts, applies the remaining legal one-cell blast pops, arms affected barrels, and reports
+direct player loss atomically. Source and
 target events follow spatial pre-wave order; entity IDs never choose a physics result. Gravity and
 sliding settle blast consequences before the engine schedules any newly armed barrels together in a
 later wave.

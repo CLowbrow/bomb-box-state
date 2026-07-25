@@ -28,7 +28,7 @@ both the native C ABI and WebAssembly adapter.
 | 5. Single-entity player pushes | **Implemented** | Atomic one-cell box and barrel pushes work in every cardinal direction across compatible flat supports, with unstacked-target enforcement, volume-aware destination collision checks, deterministic events, exact rewind, and native C/WebAssembly contract coverage. Height-separated pushes can enter an occupied column when their arrival volume is clear, then fall onto the lower support normally. |
 | 6. Falling and crushing | **Implemented** | Initial and post-push gravity compacts independent columns bottom-up in deterministic derived ticks, including stacks and ramp-center landings; player fall loss, latent crushing, barrel arming, complete load output, exact rewind, and replacement isolation are covered. |
 | 7. Fixtures and terminal outcomes | **Implemented** | Color-wide AND switches, rewindable effective door state, safe occupied-door hold-open behavior, fixture-aware walking and pushes, teleporter restrictions and wins, terminal gating/history, initialization, and win-before-loss precedence are covered. |
-| 8. Ramps and sliding | **Implemented** | Oriented half-step player traversal, pushes while exiting onto either ramp endpoint, downhill box/barrel pushes, deterministic automatic whole-stack slides, blocked retries, fixture-aware destinations, fall-before-slide ordering, and slide conflicts are covered. |
+| 8. Ramps and sliding | **Implemented** | Oriented endpoint/center player traversal includes high-to-low connected ramp chains; downhill box/barrel pushes and deterministic automatic whole-stack slides continue through every unblocked ramp in a chain. Pushes while exiting ramps, blocked retries, fixture-aware destinations, fall-before-slide ordering, and slide conflicts are covered. |
 | 9. Single explosions | **Implemented** | One settled armed source detonates atomically after fall/slide settlement, with source removal, flat/ramp height targeting, same-cell effects, legal adjacent pops, barrel arming, player loss, fixture changes, follow-up physics, deterministic events, initialization, and exact rewind. |
 | 10. Explosion waves and chains | **Implemented** | Every settled armed source in a wave uses one pre-wave snapshot; same-direction impulses coalesce, multi-direction and overlapping-volume conflicts cancel without ID priority, affected barrels arm even when blocked, and later waves wait for blast-driven falls and ramp slides. |
 | 11. Lifecycle, conflict, and cross-adapter hardening | **Implemented** | Invalid replacements preserve terminal state and complete rewind history; valid replacements reproduce fresh initialization and clear old terminal/history state. Mixed explosion and whole-stack slide conflicts preserve independent moves without entity-ID or container-order priority. An eight-turn stress sequence rewinds every turn, exactly replays 15 ticks across pushes, three explosions, fixture changes, and a terminal win, then branches after partial rewind; the same authored sequence passes through native C and WebAssembly. |
@@ -115,12 +115,13 @@ later rules rather than replaced after each phase.
   behavior, and emits events in canonical coordinate and pre-tick height order.
   Falls onto ramp centers settle before the slide phase. Fatal player falls
   and would-be landings on the player produce terminal loss output.
-- Players traverse oriented ramps through half-step endpoint/center movements.
-  A box or barrel can be pushed from the high endpoint into the ramp center,
-  after which the automatic slide planner moves the complete ramp stack to an
-  unblocked low endpoint in a separate derived tick. Slides use an immutable
-  pre-tick snapshot, reject shared-destination conflicts, retry after later
-  state changes, honor doors and teleporters, and emit source-row-major,
+- Players traverse oriented ramps through half-step endpoint/center movements
+  and full-step movements between connected ramp centers. A box or barrel can
+  be pushed from the high endpoint into the top ramp center, after which the
+  automatic slide planner moves the complete ramp stack one cell downhill per
+  derived tick until it reaches an unblocked flat endpoint. Slides use an
+  immutable pre-tick snapshot, reject shared-destination conflicts, retry after
+  later state changes, honor doors and teleporters, and emit source-row-major,
   bottom-to-top events without arming barrels.
 - The explosion-wave planner runs only after gravity and ramp movement settle.
   From one immutable pre-wave state it removes every ready source, targets flat
@@ -209,10 +210,10 @@ Most recently recorded on 2026-07-25:
 
 | Surface | Commands | Result |
 | --- | --- | --- |
-| Native debug | `cmake --preset native-debug`; `cmake --build --preset native-debug`; `ctest --preset native-debug --output-on-failure` | Passed: 95 of 95 tests: 81 behavior cases, 5 C ABI boundary cases, 5 focused unit cases, 2 cross-adapter contract runners, and 2 production consumer/header smokes. This includes box and barrel pushes from elevation 3 onto matching entities supported at elevation 1, plus overlapping-volume rejection. |
+| Native debug | `cmake --preset native-debug`; `cmake --build --preset native-debug`; `ctest --preset native-debug --output-on-failure` | Passed: 98 of 98 tests: 84 behavior cases, 5 C ABI boundary cases, 5 focused unit cases, 2 cross-adapter contract runners, and 2 production consumer/header smokes. This includes connected-ramp validation, full-chain player traversal, multi-tick box sliding from the top ramp to the bottom flat, exact replay after rewind, and blast connectivity across adjacent ramp centers. |
 | Native release | `cmake --preset native-release`; `cmake --build --preset native-release`; `ctest --preset native-release --output-on-failure` | Passed: 91 of 91 tests. |
 | WebAssembly debug | `cmake --preset wasm-debug`; `cmake --build --preset wasm-debug`; `ctest --preset wasm-debug --output-on-failure` | Passed: portable core and stateful adapter build; 1 of 1 Node tests ran all 4 authored contract scripts covering the browser vertical slice plus lifecycle, conflict, and multi-turn rewind/replay hardening. |
-| Native sanitized | `cmake --preset native-sanitized`; `cmake --build --preset native-sanitized` | Configure and build passed with the height-separated push fix and deferred GoogleTest discovery. Tests were not executed, as required on this Apple Silicon/macOS host because the Apple sanitizer runtime stalls during GoogleTest discovery; execution remains delegated to the Ubuntu sanitizer CI job. |
+| Native sanitized | `cmake --preset native-sanitized`; `cmake --build --preset native-sanitized` | Configure and build passed with connected ramp chains and deferred GoogleTest discovery. Tests were not executed, as required on this Apple Silicon/macOS host because the Apple sanitizer runtime stalls during GoogleTest discovery; execution remains delegated to the Ubuntu sanitizer CI job. |
 | JSON Schema syntax | `jq empty docs/level-format.schema.json` | Passed. |
 | Vendored yyjson | `shasum -a 256 vendor/yyjson/yyjson.c vendor/yyjson/yyjson.h vendor/yyjson/LICENSE`; global-symbol inspection with `nm` | All files match the recorded 0.12.0 import checksums. Only the two `game_rules_*` bridge symbols are global; no upstream `yyjson_*` implementation symbol is exported. |
 | Install package | `cmake --install out/build/native-debug --prefix <temporary-directory>` | Passed after the Phase 9 public event addition. The static archive is self-contained, no GoogleTest artifact or dependency is installed, and the package includes the yyjson MIT license, third-party notice, and provenance README. |

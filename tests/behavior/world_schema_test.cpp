@@ -71,6 +71,20 @@ TEST(WorldSchema, AcceptsValidSchemaStacksAndDeferredStabilization)
 {
     EXPECT_TRUE(validate_level(ramp_level()).valid());
 
+    LevelDefinition ramp_chain;
+    ramp_chain.width = 4;
+    ramp_chain.height = 1;
+    ramp_chain.cells = {
+        Cell{{0, 0}, FlatCell{0}},
+        Cell{{1, 0}, RampCell{Direction::west, 0}},
+        Cell{{2, 0}, RampCell{Direction::west, 1}},
+        Cell{{3, 0}, FlatCell{2}},
+    };
+    ramp_chain.entities = {
+        Entity{1, EntityKind::player, {0, 0}, Height{0}},
+    };
+    EXPECT_TRUE(validate_level(ramp_chain).valid());
+
     LevelDefinition unsupported = flat_level();
     unsupported.entities.push_back(
         Entity{2, EntityKind::box, Coordinate{1, 0}, Height::from_elevation(3)});
@@ -159,6 +173,36 @@ TEST(WorldSchema, RejectsInvalidStructure)
     {
         LevelDefinition level = ramp_level();
         level.cells[0].geometry = FlatCell{2};
+        EXPECT_TRUE(contains(validate_level(level), ValidationErrorCode::invalid_ramp_endpoints));
+    }
+    {
+        LevelDefinition level;
+        level.width = 4;
+        level.height = 1;
+        level.cells = {
+            Cell{{0, 0}, FlatCell{0}},
+            Cell{{1, 0}, RampCell{Direction::west, 0}},
+            Cell{{2, 0}, RampCell{Direction::west, 2}},
+            Cell{{3, 0}, FlatCell{3}},
+        };
+        level.entities = {
+            Entity{1, EntityKind::player, {0, 0}, Height{0}},
+        };
+        EXPECT_TRUE(contains(validate_level(level), ValidationErrorCode::invalid_ramp_endpoints));
+    }
+    {
+        LevelDefinition level;
+        level.width = 4;
+        level.height = 1;
+        level.cells = {
+            Cell{{0, 0}, FlatCell{1}},
+            Cell{{1, 0}, RampCell{Direction::east, 0}},
+            Cell{{2, 0}, RampCell{Direction::west, 0}},
+            Cell{{3, 0}, FlatCell{1}},
+        };
+        level.entities = {
+            Entity{1, EntityKind::player, {0, 0}, Height{2}},
+        };
         EXPECT_TRUE(contains(validate_level(level), ValidationErrorCode::invalid_ramp_endpoints));
     }
 }

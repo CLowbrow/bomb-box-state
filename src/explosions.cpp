@@ -76,28 +76,36 @@ struct BlastTarget final {
     if (source_ramp == nullptr && target_ramp == nullptr) {
         return source_bottom;
     }
-    if (source_ramp != nullptr && target_ramp != nullptr) {
+    if (source_ramp != nullptr && target_ramp != nullptr
+        && !ramps_connect(*source_ramp, *target_ramp, blast_direction)) {
         return std::nullopt;
     }
 
+    std::optional<Height> target_bottom = source_bottom;
     if (source_ramp != nullptr) {
         if (blast_direction == source_ramp->low_direction) {
-            return offset_height(source_bottom, -1);
+            target_bottom = offset_height(*target_bottom, -1);
+        } else if (blast_direction == opposite(source_ramp->low_direction)) {
+            target_bottom = offset_height(*target_bottom, 1);
+        } else {
+            return std::nullopt;
         }
-        if (blast_direction == opposite(source_ramp->low_direction)) {
-            return offset_height(source_bottom, 1);
+        if (!target_bottom.has_value()) {
+            return std::nullopt;
         }
-        return std::nullopt;
     }
 
-    const Direction target_to_source = opposite(blast_direction);
-    if (target_to_source == target_ramp->low_direction) {
-        return offset_height(source_bottom, 1);
+    if (target_ramp != nullptr) {
+        const Direction target_to_source = opposite(blast_direction);
+        if (target_to_source == target_ramp->low_direction) {
+            target_bottom = offset_height(*target_bottom, 1);
+        } else if (target_to_source == opposite(target_ramp->low_direction)) {
+            target_bottom = offset_height(*target_bottom, -1);
+        } else {
+            return std::nullopt;
+        }
     }
-    if (target_to_source == opposite(target_ramp->low_direction)) {
-        return offset_height(source_bottom, -1);
-    }
-    return std::nullopt;
+    return target_bottom;
 }
 
 [[nodiscard]] bool destination_fixture_blocks(const LevelDefinition& level,

@@ -156,14 +156,25 @@ ValidationResult validate_level(const LevelDefinition& level)
             add_error(result, ValidationErrorCode::invalid_ramp_endpoints, coordinate);
             continue;
         }
+        const auto endpoint_is_valid = [ramp](const Direction direction,
+                                              const Cell& neighbor) {
+            const std::optional<detail::RampEndpoint> endpoint =
+                detail::ramp_endpoint_at(*ramp, direction);
+            if (!endpoint.has_value()) {
+                return false;
+            }
+            if (const auto* flat = std::get_if<FlatCell>(&neighbor.geometry)) {
+                return static_cast<std::int64_t>(flat->elevation) * 2
+                    == detail::ramp_endpoint_half_steps(*ramp, *endpoint);
+            }
+            return detail::ramps_connect(
+                *ramp, std::get<RampCell>(neighbor.geometry), direction);
+        };
         const auto low = cells.find(*low_coordinate);
         const auto high = cells.find(*high_coordinate);
-        const auto* low_flat = low == cells.end() ? nullptr : std::get_if<FlatCell>(&low->second->geometry);
-        const auto* high_flat = high == cells.end() ? nullptr : std::get_if<FlatCell>(&high->second->geometry);
-        if (low_flat == nullptr || high_flat == nullptr
-            || low_flat->elevation != ramp->low_elevation
-            || static_cast<std::int64_t>(high_flat->elevation)
-                != static_cast<std::int64_t>(ramp->low_elevation) + 1) {
+        if (low == cells.end() || high == cells.end()
+            || !endpoint_is_valid(ramp->low_direction, *low->second)
+            || !endpoint_is_valid(detail::opposite(ramp->low_direction), *high->second)) {
             add_error(result, ValidationErrorCode::invalid_ramp_endpoints, coordinate);
         }
     }

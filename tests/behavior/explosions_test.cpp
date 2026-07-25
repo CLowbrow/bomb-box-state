@@ -363,6 +363,42 @@ TEST(Explosions, UsesRampEndpointConnectivityAndIgnoresPerpendicularEdges)
               (Entity{1, EntityKind::player, {1, 0}, Height{1}}));
 }
 
+TEST(Explosions, CarriesABlastAcrossConnectedRampCenters)
+{
+    LevelDefinition level;
+    level.width = 4;
+    level.height = 1;
+    level.cells = {
+        Cell{{0, 0}, FlatCell{0}},
+        Cell{{1, 0}, RampCell{Direction::west, 0}},
+        Cell{{2, 0}, RampCell{Direction::west, 1}},
+        Cell{{3, 0}, FlatCell{2}},
+    };
+    level.entities = {
+        Entity{2, EntityKind::box, {0, 0}, Height{0}},
+        Entity{8, EntityKind::barrel, {1, 0}, Height{3}},
+        Entity{1, EntityKind::player, {2, 0}, Height{3}},
+    };
+    Engine engine;
+
+    const LoadResult loaded = engine.load_level(level);
+
+    ASSERT_TRUE(loaded.accepted());
+    ASSERT_EQ(loaded.ticks.size(), 2U);
+    EXPECT_EQ(loaded.ticks[0].events,
+              (std::vector<GameplayEvent>{
+                  EntityMovedEvent{8, {1, 0}, {1, 0}, Height{3}, Height{1},
+                                   MovementCause::fall},
+                  BarrelArmedEvent{8},
+              }));
+    EXPECT_EQ(loaded.ticks[1].events,
+              (std::vector<GameplayEvent>{
+                  BarrelExplodedEvent{8, {1, 0}, Height{1}},
+                  LevelLostEvent{},
+              }));
+    EXPECT_EQ(loaded.outcome, std::optional{Outcome::lost});
+}
+
 TEST(ExplosionWaves, CancelsOpposingImpulsesFromSimultaneousSourcesDeterministically)
 {
     LevelDefinition level = flat_grid(

@@ -95,6 +95,87 @@ TEST(Ramps, PlayerTraversesBothEndpointsInHalfStepsAndRewindsExactly)
                   1, {1, 0}, {0, 0}, Height{1}, Height{0}, MovementCause::player}}));
 }
 
+TEST(Ramps, PlayerClimbsAConnectedRampChain)
+{
+    LevelDefinition level;
+    level.width = 4;
+    level.height = 1;
+    level.cells = {
+        Cell{{0, 0}, FlatCell{0}},
+        Cell{{1, 0}, RampCell{Direction::west, 0}},
+        Cell{{2, 0}, RampCell{Direction::west, 1}},
+        Cell{{3, 0}, FlatCell{2}},
+    };
+    level.entities = {
+        Entity{1, EntityKind::player, {0, 0}, Height{0}},
+    };
+    Engine engine;
+    ASSERT_TRUE(engine.load_level(level).accepted());
+
+    const MoveResult first_ramp = engine.move(Direction::east);
+    ASSERT_TRUE(first_ramp.accepted());
+    EXPECT_EQ(first_ramp.ticks[0].events,
+              (std::vector<GameplayEvent>{EntityMovedEvent{
+                  1, {0, 0}, {1, 0}, Height{0}, Height{1}, MovementCause::player}}));
+
+    const MoveResult second_ramp = engine.move(Direction::east);
+    ASSERT_TRUE(second_ramp.accepted());
+    EXPECT_EQ(second_ramp.ticks[0].events,
+              (std::vector<GameplayEvent>{EntityMovedEvent{
+                  1, {1, 0}, {2, 0}, Height{1}, Height{3}, MovementCause::player}}));
+
+    const MoveResult top = engine.move(Direction::east);
+    ASSERT_TRUE(top.accepted());
+    EXPECT_EQ(top.ticks[0].events,
+              (std::vector<GameplayEvent>{EntityMovedEvent{
+                  1, {2, 0}, {3, 0}, Height{3}, Height{4}, MovementCause::player}}));
+    EXPECT_EQ(entity(*top.final_state, 1),
+              (Entity{1, EntityKind::player, {3, 0}, Height{4}}));
+}
+
+TEST(Ramps, PushedBoxSlidesThroughAConnectedRampChain)
+{
+    LevelDefinition level;
+    level.width = 5;
+    level.height = 1;
+    level.cells = {
+        Cell{{0, 0}, FlatCell{0}},
+        Cell{{1, 0}, RampCell{Direction::west, 0}},
+        Cell{{2, 0}, RampCell{Direction::west, 1}},
+        Cell{{3, 0}, FlatCell{2}},
+        Cell{{4, 0}, FlatCell{2}},
+    };
+    level.entities = {
+        Entity{8, EntityKind::box, {3, 0}, Height{4}},
+        Entity{1, EntityKind::player, {4, 0}, Height{4}},
+    };
+    Engine engine;
+    ASSERT_TRUE(engine.load_level(level).accepted());
+
+    const MoveResult moved = engine.move(Direction::west);
+
+    ASSERT_TRUE(moved.accepted());
+    ASSERT_EQ(moved.ticks.size(), 3U);
+    EXPECT_EQ(moved.ticks[0].events,
+              (std::vector<GameplayEvent>{
+                  EntityMovedEvent{1, {4, 0}, {3, 0}, Height{4}, Height{4},
+                                   MovementCause::player},
+                  EntityMovedEvent{8, {3, 0}, {2, 0}, Height{4}, Height{3},
+                                   MovementCause::player},
+              }));
+    EXPECT_EQ(moved.ticks[1].events,
+              (std::vector<GameplayEvent>{EntityMovedEvent{
+                  8, {2, 0}, {1, 0}, Height{3}, Height{1}, MovementCause::slide}}));
+    EXPECT_EQ(moved.ticks[2].events,
+              (std::vector<GameplayEvent>{EntityMovedEvent{
+                  8, {1, 0}, {0, 0}, Height{1}, Height{0}, MovementCause::slide}}));
+    EXPECT_EQ(entity(*moved.final_state, 8),
+              (Entity{8, EntityKind::box, {0, 0}, Height{0}}));
+
+    ASSERT_TRUE(engine.rewind().accepted());
+    EXPECT_EQ(engine.move(Direction::west), moved);
+}
+
 TEST(Ramps, RejectsPerpendicularTraversalWithoutStartingAHistoryEntry)
 {
     LevelDefinition level = flat_grid(

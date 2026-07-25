@@ -212,6 +212,13 @@ PlayerMovementPlan plan_player_movement(const LevelDefinition& level,
             return rejected(MoveStatus::unsupported_geometry);
         }
         player_new_bottom = Height::from_elevation(destination_flat->elevation);
+    } else if (source_ramp != nullptr && destination_ramp != nullptr) {
+        if (destination_entity_count != 0
+            || player->bottom != surface_height(*source_cell)
+            || !ramps_connect(*source_ramp, *destination_ramp, direction)) {
+            return rejected(MoveStatus::unsupported_geometry);
+        }
+        player_new_bottom = surface_height(*destination_cell);
     } else {
         return rejected(MoveStatus::unsupported_geometry);
     }
