@@ -194,6 +194,9 @@ first command boundary is installed.
   operation scripts. The browser vertical slice and engine-hardening
   lifecycle/conflict scripts run unchanged through the native C ABI and
   Node/WebAssembly runners.
+  Contract text fixtures are pinned to LF at checkout, and malformed-input
+  expectations use line-ending-independent error locations so their exact
+  byte-offset assertions remain portable.
   The rewind stress script reuses the same complete move expectations after a
   full eight-turn rewind and after a partial-rewind branch. Canonical and
   reordered conflict inputs share authored expectations; neither adapter is
