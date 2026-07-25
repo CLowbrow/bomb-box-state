@@ -1,0 +1,5 @@
+# Each reordered load must match the same authored oracle as its canonical counterpart.
+load|explosion-conflict-load.expected.json|explosion-conflict-level.json
+load|explosion-conflict-load.expected.json|explosion-conflict-level-reordered.json
+load|slide-conflict-load.expected.json|slide-conflict-level.json
+load|slide-conflict-load.expected.json|slide-conflict-level-reordered.json

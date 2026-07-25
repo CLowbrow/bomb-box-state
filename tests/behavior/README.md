@@ -15,8 +15,8 @@ exercise the same concern through `Engine`, but it must not depend on the intern
 Do not add mocks or production test hooks where a complete deterministic state and public operation
 can express the behavior directly.
 
-Phase 4 will introduce a versioned, adapter-neutral contract corpus beside these native C++ tests.
-Native C ABI and Node/WebAssembly runners will execute the same authored scenarios and normalize
-their complete outputs to one logical model. The goal is shared public behavior coverage, not
-recompiling internal C++ unit tests under WebAssembly. Adapter-specific ownership, memory, export,
-and language-representation tests remain alongside each adapter.
+A versioned, adapter-neutral contract corpus lives beside these native C++ tests under
+`tests/contracts/`. Native C ABI and Node/WebAssembly runners execute the same authored operation
+scripts and normalize their complete outputs to one logical model. The goal is shared public
+behavior coverage, not recompiling internal C++ unit tests under WebAssembly. Adapter-specific
+ownership, memory, export, and language-representation tests remain alongside each adapter.

@@ -1,0 +1,15 @@
+# A single engine is used for the complete script. Paths are relative to this file.
+get-state|no-level-state.expected.json
+move|no-level-move-east.expected.json|east
+rewind|no-level-rewind.expected.json
+load|../../browser_vertical_slice/v1/load.expected.json|../../browser_vertical_slice/v1/level.json
+move|../../browser_vertical_slice/v1/move-east.expected.json|east
+load|invalid-load-preserves-state.expected.json|malformed.json
+get-state|state-after-invalid-load.expected.json
+rewind|../../browser_vertical_slice/v1/rewind.expected.json
+move|../../browser_vertical_slice/v1/move-east.expected.json|east
+load|terminal-load.expected.json|terminal-level.json
+move|terminal-move.expected.json|west
+rewind|terminal-history-empty.expected.json
+load|../../browser_vertical_slice/v1/load.expected.json|../../browser_vertical_slice/v1/level.json
+rewind|replacement-history-empty.expected.json

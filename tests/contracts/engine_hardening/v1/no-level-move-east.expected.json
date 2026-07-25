@@ -1,0 +1,1 @@
+{"apiVersion":1,"operation":"move","status":"no_level","accepted":false,"direction":"east","events":[{"type":"moveBlocked","direction":"east","reason":"no_level"}],"initialState":null,"ticks":[],"state":null,"outcome":null}

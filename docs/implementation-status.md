@@ -15,10 +15,9 @@ normative source for gameplay and state-transition behavior.
 
 ## Suggested-order progress
 
-The current delivery priority is a playable browser-facing vertical slice. The
-engine should first prove that a host can create a world, submit a player input,
-and consume a new authoritative world state. Advanced interactions and physics
-follow only after that loop works through WebAssembly.
+The suggested implementation sequence is complete. The engine now provides the
+full specified rules surface and verifies its stateful host contract through
+both the native C ABI and WebAssembly adapter.
 
 | Phase | Status | Current coverage |
 | --- | --- | --- |
@@ -32,7 +31,7 @@ follow only after that loop works through WebAssembly.
 | 8. Ramps and sliding | **Implemented** | Oriented half-step player traversal, downhill box/barrel pushes, deterministic automatic whole-stack slides, blocked retries, fixture-aware destinations, fall-before-slide ordering, and slide conflicts are covered. |
 | 9. Single explosions | **Implemented** | One settled armed source detonates atomically after fall/slide settlement, with source removal, flat/ramp height targeting, same-cell effects, legal adjacent pops, barrel arming, player loss, fixture changes, follow-up physics, deterministic events, initialization, and exact rewind. |
 | 10. Explosion waves and chains | **Implemented** | Every settled armed source in a wave uses one pre-wave snapshot; same-direction impulses coalesce, multi-direction and overlapping-volume conflicts cancel without ID priority, affected barrels arm even when blocked, and later waves wait for blast-driven falls and ramp slides. |
-| 11. Lifecycle, conflict, and cross-adapter hardening | **Not started** | Phase-one loading behavior has native tests, but the complete lifecycle/conflict corpus and cross-adapter parity coverage do not exist. |
+| 11. Lifecycle, conflict, and cross-adapter hardening | **Implemented** | Invalid replacements preserve terminal state and complete rewind history; valid replacements reproduce fresh initialization and clear old terminal/history state. Mixed explosion and whole-stack slide conflicts preserve independent moves without entity-ID or container-order priority. An eight-turn stress sequence rewinds every turn, exactly replays 15 ticks across pushes, three explosions, fixture changes, and a terminal win, then branches after partial rewind; the same authored sequence passes through native C and WebAssembly. |
 
 ### Immediate vertical slice
 
@@ -191,10 +190,15 @@ first command boundary is installed.
 - GoogleTest discovery occurs at CTest time. This prevents a sanitized build
   from starting the sanitizer runtime merely to enumerate cases inside the
   Codex workspace sandbox.
-- The versioned adapter-neutral corpus under
-  `tests/contracts/browser_vertical_slice/v1/` runs through both native C ABI
-  and Node/WebAssembly runners. Both compare against authored expectations;
-  internal C++ unit tests are not duplicated under Emscripten.
+- The versioned adapter-neutral corpus under `tests/contracts/` uses reusable
+  operation scripts. The browser vertical slice and engine-hardening
+  lifecycle/conflict scripts run unchanged through the native C ABI and
+  Node/WebAssembly runners.
+  The rewind stress script reuses the same complete move expectations after a
+  full eight-turn rewind and after a partial-rewind branch. Canonical and
+  reordered conflict inputs share authored expectations; neither adapter is
+  used as the other's oracle, and internal C++ unit tests are not duplicated
+  under Emscripten.
 
 ## Verification record
 
@@ -202,10 +206,10 @@ Most recently recorded on 2026-07-24:
 
 | Surface | Commands | Result |
 | --- | --- | --- |
-| Native debug | `cmake --preset native-debug`; `cmake --build --preset native-debug`; `ctest --preset native-debug --output-on-failure` | Passed: 85 of 85 tests: 72 behavior cases, 5 C ABI boundary cases, 5 focused unit cases, 1 cross-adapter contract runner, and 2 production consumer/header smokes. |
-| Native release | `cmake --preset native-release`; `cmake --build --preset native-release`; `ctest --preset native-release --output-on-failure` | Passed: 85 of 85 tests. |
-| WebAssembly debug | `cmake --preset wasm-debug`; `cmake --build --preset wasm-debug`; `ctest --preset wasm-debug --output-on-failure` | Passed: portable core and stateful adapter build; 1 of 1 Node tests ran the authored browser vertical-slice contract. |
-| Native sanitized | `cmake --preset native-sanitized`; `cmake --build --preset native-sanitized` | Configure and build passed after Phase 10 with deferred GoogleTest discovery. Tests were not executed, as required on this Apple Silicon/macOS host because the Apple sanitizer runtime stalls during GoogleTest discovery; execution remains delegated to the Ubuntu sanitizer CI job. |
+| Native debug | `cmake --preset native-debug`; `cmake --build --preset native-debug`; `ctest --preset native-debug --output-on-failure` | Passed: 91 of 91 tests: 77 behavior cases, 5 C ABI boundary cases, 5 focused unit cases, 2 cross-adapter contract runners, and 2 production consumer/header smokes. |
+| Native release | `cmake --preset native-release`; `cmake --build --preset native-release`; `ctest --preset native-release --output-on-failure` | Passed: 91 of 91 tests. |
+| WebAssembly debug | `cmake --preset wasm-debug`; `cmake --build --preset wasm-debug`; `ctest --preset wasm-debug --output-on-failure` | Passed: portable core and stateful adapter build; 1 of 1 Node tests ran all 4 authored contract scripts covering the browser vertical slice plus lifecycle, conflict, and multi-turn rewind/replay hardening. |
+| Native sanitized | `cmake --preset native-sanitized`; `cmake --build --preset native-sanitized` | Configure and build passed with the current engine-hardening coverage and deferred GoogleTest discovery. Tests were not executed, as required on this Apple Silicon/macOS host because the Apple sanitizer runtime stalls during GoogleTest discovery; execution remains delegated to the Ubuntu sanitizer CI job. |
 | JSON Schema syntax | `jq empty docs/level-format.schema.json` | Passed. |
 | Vendored yyjson | `shasum -a 256 vendor/yyjson/yyjson.c vendor/yyjson/yyjson.h vendor/yyjson/LICENSE`; global-symbol inspection with `nm` | All files match the recorded 0.12.0 import checksums. Only the two `game_rules_*` bridge symbols are global; no upstream `yyjson_*` implementation symbol is exported. |
 | Install package | `cmake --install out/build/native-debug --prefix <temporary-directory>` | Passed after the Phase 9 public event addition. The static archive is self-contained, no GoogleTest artifact or dependency is installed, and the package includes the yyjson MIT license, third-party notice, and provenance README. |
@@ -226,7 +230,6 @@ Most recently recorded on 2026-07-24:
 
 ## Recommended next task
 
-Implement phase 11 lifecycle, conflict, and cross-adapter hardening next. Extend
-the authored adapter-neutral corpus beyond the browser vertical slice and cover
-remaining lifecycle and simultaneous-conflict combinations across native and
-WebAssembly surfaces.
+No implementation phase remains in the current roadmap. Define the next
+product milestone before expanding rule behavior; the clearest existing
+integration gap is completing and verifying a real Unreal-facing wrapper.

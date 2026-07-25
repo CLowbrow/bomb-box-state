@@ -52,6 +52,7 @@ game_rules_add_gtest(
     behavior/level_json_test.cpp
     behavior/resolved_state_history_test.cpp
     behavior/flat_walking_test.cpp
+    behavior/hardening_test.cpp
     behavior/explosions_test.cpp
     behavior/falling_test.cpp
     behavior/fixtures_test.cpp
@@ -79,10 +80,23 @@ add_test(
     NAME game_rules.contract.browser_vertical_slice.v1.native
     COMMAND
         game_rules_c_api_contract
-        "${CMAKE_CURRENT_SOURCE_DIR}/contracts/browser_vertical_slice/v1"
+        "${CMAKE_CURRENT_SOURCE_DIR}/contracts/browser_vertical_slice/v1/contract.txt"
 )
 set_tests_properties(
     game_rules.contract.browser_vertical_slice.v1.native
+    PROPERTIES LABELS "contract;integration;native"
+)
+
+add_test(
+    NAME game_rules.contract.engine_hardening.v1.native
+    COMMAND
+        game_rules_c_api_contract
+        "${CMAKE_CURRENT_SOURCE_DIR}/contracts/engine_hardening/v1/lifecycle.txt"
+        "${CMAKE_CURRENT_SOURCE_DIR}/contracts/engine_hardening/v1/conflicts.txt"
+        "${CMAKE_CURRENT_SOURCE_DIR}/contracts/engine_hardening/v1/rewind-stress.txt"
+)
+set_tests_properties(
+    game_rules.contract.engine_hardening.v1.native
     PROPERTIES LABELS "contract;integration;native"
 )
 

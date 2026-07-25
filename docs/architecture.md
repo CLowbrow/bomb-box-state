@@ -49,10 +49,13 @@ no-RTTI, portability, and sanitizer settings when tests link it.
 Cross-adapter confidence comes from shared logical contracts, not from compiling every C++ unit
 test for every host. Native C++ runs the complete unit and behavior suites. Beginning with the
 stateful phase-4 boundary, native C ABI and Node/WebAssembly runners execute the same versioned,
-adapter-neutral public scenarios and normalize their outputs to the same logical result model.
-Those scenarios compare authored expected acceptance, ticks, ordered events, authoritative state,
-outcome, and lifecycle effects. They must not treat one adapter's live output as the oracle for
-another, because a shared core defect could otherwise make both agree on the wrong result.
+adapter-neutral operation scripts and normalize their outputs to the same logical result model.
+Each script owns one engine for its complete sequence, so lifecycle effects such as invalid-load
+atomicity, rewind preservation, terminal replacement, and history reset remain observable. The
+scenarios compare authored expected acceptance, ticks, ordered events, authoritative state,
+outcome, and lifecycle effects. Canonical and reordered conflict levels intentionally share one
+authored oracle. The runners must not treat one adapter's live output as the oracle for another,
+because a shared core defect could otherwise make both agree on the wrong result.
 
 Boundary-specific tests remain necessary for C compilation, opaque-handle and buffer ownership,
 WebAssembly memory and export behavior, JavaScript representation of 64-bit entity IDs, and later

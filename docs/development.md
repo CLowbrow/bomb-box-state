@@ -63,13 +63,16 @@ Native tests are divided by purpose:
   no-RTTI policy as the core. The GoogleTest runners use their normal runtime while linking the
   already production-compiled core; sanitizer instrumentation is applied to both.
 
-The adapter-neutral contract corpus for the stateful C ABI and WebAssembly surface currently runs
-one authored browser vertical-slice scenario through both native C and Node/WebAssembly runners.
-Native C++ unit tests do not need to be recompiled under Emscripten. Adapter-neutral scenarios
-compare their normalized complete results against the same authored expectations; neither adapter's
-live output is an oracle for the other. The test runner may own fixture files and platform
-facilities; the engine remains headless and filesystem-independent. Expand this corpus as later
-cross-adapter lifecycle and conflict coverage is implemented.
+The adapter-neutral contract corpus under `tests/contracts/` runs reusable authored operation
+scripts through both the native C ABI and Node/WebAssembly runners. It covers the browser vertical
+slice plus pre-load behavior, invalid-load atomicity, rewind/replay, terminal replacement and
+history reset, mixed simultaneous explosion conflicts, and mixed whole-stack slide conflicts. Its
+eight-turn rewind stress sequence includes five pushes, three detonations, blast and fall movement,
+switch/door changes, a terminal win, full rewind and exact replay, and a partial-rewind branch.
+Canonical and reordered conflict inputs compare against the same authored expectations. Native C++
+unit tests do not need to be recompiled under Emscripten, and neither adapter's live output is an
+oracle for the other. The test runner may own fixture files and platform facilities; the engine
+remains headless and filesystem-independent.
 
 ## Native gameplay loop
 

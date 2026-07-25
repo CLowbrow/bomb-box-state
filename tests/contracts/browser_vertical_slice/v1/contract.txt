@@ -1,0 +1,6 @@
+# operation | expected JSON | input
+load|load.expected.json|level.json
+get-state|initial-state.expected.json
+move|move-east.expected.json|east
+rewind|rewind.expected.json
+get-state|rewound-state.expected.json

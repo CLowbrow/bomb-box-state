@@ -36,7 +36,10 @@ if(BUILD_TESTING)
                 "${GAME_RULES_NODE_EXECUTABLE}"
                 "${CMAKE_CURRENT_SOURCE_DIR}/smoke_test.mjs"
                 "$<TARGET_FILE:game_rules_wasm>"
-                "${PROJECT_SOURCE_DIR}/tests/contracts/browser_vertical_slice/v1"
+                "${PROJECT_SOURCE_DIR}/tests/contracts/browser_vertical_slice/v1/contract.txt"
+                "${PROJECT_SOURCE_DIR}/tests/contracts/engine_hardening/v1/lifecycle.txt"
+                "${PROJECT_SOURCE_DIR}/tests/contracts/engine_hardening/v1/conflicts.txt"
+                "${PROJECT_SOURCE_DIR}/tests/contracts/engine_hardening/v1/rewind-stress.txt"
         )
         set_tests_properties(game_rules.wasm.smoke PROPERTIES LABELS "integration;wasm")
     else()
