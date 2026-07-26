@@ -1,9 +1,8 @@
 # Game-rules level format, version 1
 
-This document is the normative serialization specification for a game-rules
-engine level. `README.md`
-remains normative for gameplay and state transitions; this document defines how a level's supplied
-initial data is represented and exchanged.
+This document is the normative serialization specification for a game-rules engine level. The
+[gameplay rules](rules.md) remain normative for behavior and state transitions; this document
+defines how a level's supplied initial data is represented and exchanged.
 
 ## Goals and boundary
 
@@ -151,9 +150,9 @@ values and must not round-trip them through `number`.
 
 This representation is exact across native, WebAssembly, and Unreal builds. It also represents
 entities in initially unstable levels and gaps within a supplied stack; initialization later settles
-them according to `README.md`. Each entity is one height unit, or two half-steps, tall. Initial
-volumes must not overlap, no entity may intersect its cell surface, and the player must be the top
-entity in its column.
+them according to the [gameplay rules](rules.md). Each entity is one height unit, or two half-steps,
+tall. Initial volumes must not overlap, no entity may intersect its cell surface, and the player
+must be the top entity in its column.
 
 ## Validation and error model
 

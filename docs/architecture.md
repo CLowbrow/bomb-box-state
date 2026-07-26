@@ -1,120 +1,92 @@
-# Architecture constraints
+# Architecture
+
+## Overview
+
+`game_rules_state` is a headless simulation library. A host loads a level and
+sends cardinal movement or rewind commands; the engine returns complete,
+authoritative snapshots and ordered semantic events. The host owns rendering,
+animation, audio, controls, persistence, and scheduling.
+
+Each `game_rules::Engine` owns one independent session:
+
+- the canonical definition of the loaded level;
+- the current resolved state; and
+- an undo-only stack of earlier resolved states.
+
+There is no global mutable game state. A process can create, replace, run, and
+destroy multiple engines independently.
+
+## Public surfaces
+
+The same rules implementation is available through several thin boundaries:
+
+- `GameRules::State` is the native C++20 static library.
+- `game_rules/c_api.h` exposes opaque engine handles and caller-owned JSON
+  strings for C and foreign-function consumers.
+- `integrations/wasm` exports the C boundary and adds JavaScript ownership,
+  parsing, and lifecycle checks.
+- `integrations/unreal` is a plugin scaffold for staging a platform-compatible
+  core build into Unreal Engine.
+
+C++ standard-library types never cross the C ABI. The C and WebAssembly
+response contract is documented in the [embedding API](embedding-api.md).
+
+## State transitions
+
+Level loading parses and validates a candidate before changing the active
+session. A valid level is canonicalized, stabilized with the normal gameplay
+rules, and then installed as a fresh history root. An invalid load leaves the
+current level and its history untouched.
+
+A movement command is planned from the immutable command-boundary state. The
+engine commits the player action atomically, then resolves all derived work—
+gravity, ramp slides, fixture changes, explosion waves, and terminal outcomes—
+until the world is stable or terminal. Each derived tick includes its events
+and authoritative state. Only the final resolved state becomes a rewind
+boundary.
+
+Rewind restores an exact earlier resolved state. It does not replay events or
+rerun the simulation, and abandoned future states are not retained for redo.
+
+The [gameplay rules](rules.md) define the precise ordering and conflict rules.
 
 ## Portability boundary
 
-`game_rules_state` is the authoritative rules library. It may use portable C++20, the standard
-library, and the pinned private yyjson C99 source internally, but it must not depend on Unreal
-headers, Emscripten headers, browser APIs, rendering, audio, input devices, wall-clock time,
-threads, or random-number sources.
+The core uses portable C++20, the standard library, and a pinned private copy
+of yyjson. It does not depend on Unreal or Emscripten headers, browser APIs, a
+renderer, input devices, a filesystem, environment variables, wall-clock time,
+threads, or random-number sources. Platform-specific code belongs under
+`integrations/`.
 
-Platform code belongs in `integrations/`:
+The JSON codec accepts and returns in-memory strings. yyjson is compiled behind
+a private bridge with upstream symbols hidden, and its types do not appear in
+public headers. Consumers that construct `LevelDefinition` directly do not
+pull the codec objects into a final static link unless they use it. See the
+[level format](level-format.md) and [third-party notices](../THIRD_PARTY_NOTICES.md).
 
-- `integrations/wasm` links the core and exports its C ABI to JavaScript.
-- `integrations/unreal` wraps a platform-specific core build in an Unreal runtime plugin.
+## Determinism and ownership
 
-The C API uses fixed-width integers, opaque per-instance engine handles, caller-owned JSON result
-buffers, and explicit status/error strings. Do not pass C++ standard-library objects across that
-ABI. The WebAssembly adapter adds only JavaScript ownership and JSON parsing; its response contract
-is documented in [the embedding API](embedding-api.md).
+- Heights use integer half-steps rather than floating point.
+- Stable entity IDs identify entities but never decide simultaneous physics.
+- Every tick is computed from one pre-tick snapshot and committed atomically.
+- Coordinates, entities, derived state, and events have explicit canonical
+  ordering.
+- Returned states are caller-owned values, never mutable views into an engine.
+- Failures and rejected commands leave state and history unchanged.
+- Level replacement makes all state from the previous level unreachable.
 
-The versioned level JSON codec is part of the portable core but lives in separate translation units.
-It accepts and returns in-memory strings and has no filesystem or platform dependency. Generic JSON
-syntax is parsed by the pinned, unmodified yyjson 0.12.0 source. A private C bridge gives upstream
-functions internal linkage and exports only `game_rules_*` bridge symbols, avoiding collisions
-when an embedding host uses another yyjson build. yyjson types do not enter a public header. Static
-library consumers that construct `LevelDefinition` directly do not pull the codec objects into their
-final binary unless they reference it. See the [level format specification](level-format.md) and
-[third-party notices](../THIRD_PARTY_NOTICES.md).
-
-## Determinism guardrails
-
-- Encode rule heights as integer half-steps; the current geometry never needs arbitrary floating
-  point values.
-- Give entities stable integer IDs, but never use ID or container iteration order to resolve a
-  simultaneous physics conflict.
-- Compute a tick from an immutable pre-tick snapshot and commit its result atomically.
-- Keep serialization canonical: explicit coordinate convention, explicit enum spellings, and stable
-  event ordering.
-- Avoid hidden global state. An engine instance should own all mutable simulation state.
-- Behavior tests should compare complete tick/event/state results across native and Wasm builds.
+These constraints make a command sequence replayable across native,
+WebAssembly, and future host adapters.
 
 ## Verification boundary
 
-The installed engine and its public package must not acquire dependencies from the test system.
-Native unit and behavior tests may use a test-only framework, filesystem fixtures, and richer
-diagnostic support because those facilities are excluded from the `GameRules::State` target and its
-install/export surface. The core itself is still compiled with its production no-exceptions,
-no-RTTI, portability, and sanitizer settings when tests link it.
+Native unit tests cover focused algorithms, while behavior tests exercise
+complete public operations and compare the full ordered result. Native C and
+Node/WebAssembly runners also execute the same authored, adapter-neutral
+contract scenarios. Expected outputs are reviewed fixtures; neither adapter's
+live result is used as the other's oracle.
 
-Cross-adapter confidence comes from shared logical contracts, not from compiling every C++ unit
-test for every host. Native C++ runs the complete unit and behavior suites. Beginning with the
-stateful phase-4 boundary, native C ABI and Node/WebAssembly runners execute the same versioned,
-adapter-neutral operation scripts and normalize their outputs to the same logical result model.
-Each script owns one engine for its complete sequence, so lifecycle effects such as invalid-load
-atomicity, rewind preservation, terminal replacement, and history reset remain observable. The
-scenarios compare authored expected acceptance, ticks, ordered events, authoritative state,
-outcome, and lifecycle effects. Canonical and reordered conflict levels intentionally share one
-authored oracle. The runners must not treat one adapter's live output as the oracle for another,
-because a shared core defect could otherwise make both agree on the wrong result.
-
-Boundary-specific tests remain necessary for C compilation, opaque-handle and buffer ownership,
-WebAssembly memory and export behavior, JavaScript representation of 64-bit entity IDs, and later
-Unreal ownership and packaging. Internal unit tests, fuzz targets, and benchmarks are not part of
-the cross-adapter contract corpus.
-
-## Intended implementation layers
-
-1. Value types, validated level schema, and versioned level JSON encoding.
-2. Immutable world snapshots and deterministic queries.
-3. Flat walking, turn results, and history orchestration for a minimal native
-   input-to-state loop.
-4. Primitive stateful C API and a thin JavaScript/WebAssembly adapter for the
-   same loop.
-5. Tick planners and turn orchestration for pushes, gravity, fixtures, ramps,
-   and blast waves.
-6. Terminal handling, complete conflict coverage, and additional thin host
-   adapters such as Unreal.
-
-The current `Engine` owns a canonical, validated `LevelDefinition`, the current dynamic
-`ResolvedState`, and an undo-only stack of earlier resolved states. Loading validates and prepares a
-candidate before replacing the prior definition and resetting history. Snapshots are returned by
-value so callers cannot retain a mutable view into engine-owned storage. History transitions are an
-internal orchestration mechanism rather than a host state-injection API. Internal world and state
-query helpers centralize coordinate stepping, bounds and fixture lookup, support heights, occupancy,
-entity ordering, and armed-barrel bookkeeping so rule planners share the same deterministic
-semantics. Player walking and pushing are planned from an immutable command-boundary state by a
-dedicated physical-movement planner; `Engine` remains responsible for command gating, fixture
-derivation, derived stabilization, history commit, and public result assembly. Flat walking,
-single-entity player pushes, and gravity return zero-based ordered ticks with semantic events and
-per-tick states. Gravity is an independent column
-planner: it calculates final landing heights bottom-up, commits every possible fall in one tick,
-preserves spatial event order, and records armed barrel IDs in resolved state. Fixture resolution
-derives palette-ordered active switch colors and row-major effectively open doors after each
-physical tick, appending deterministic semantic changes to that tick. Teleporter contact finalizes
-the tick before fixture or later derived work and gives a win precedence over a same-tick loss.
-Ramp traversal changes player height by one half-step between oriented flat endpoints and the ramp
-center, or by two half-steps between centers in a validated high-to-low ramp chain. Downhill pushes
-enter the top ramp center atomically, then a separate immutable slide planner moves every unblocked
-ramp stack one cell downhill per derived tick, including through connected ramp centers, rejects
-shared-destination conflicts, and retries blocked stacks after later physical or fixture changes.
-Derived stabilization always runs gravity before sliding so entities falling onto a ramp settle and
-arm before the complete stack can slide in a later tick. The explosion-wave planner removes every
-settled armed source from one immutable pre-wave state, targets adjacent flat and oriented ramp
-heights, combines same-direction impulses, cancels multi-direction and overlapping-destination
-conflicts, applies the remaining legal one-cell blast pops, arms affected barrels, and reports
-direct player loss atomically. Source and
-target events follow spatial pre-wave order; entity IDs never choose a physics result. Gravity and
-sliding settle blast consequences before the engine schedules any newly armed barrels together in a
-later wave.
-Loading runs initial fixture derivation followed by the same derived/post-tick path before installing
-the first history state and returns the supplied initial state, initialization ticks, stabilized or
-terminal state, and outcome. An accepted push commits the player and pushed entity together before
-any required fall tick; any failed source, target, or destination check leaves state and history
-unchanged. The primitive stateful C API and WebAssembly adapter carry that same
-create/load/input/state/rewind loop across the embedding boundary. Single and simultaneous blast
-waves, including chains separated by required fall and slide ticks, use that same result contract.
-
-`decode_level_json()` produces that same canonical `LevelDefinition` only after strict format and
-structural validation. JSON decoding is deliberately separate from `Engine::load_level()` so an
-invalid document cannot create partially committed engine state, and so integrations can attach
-their own distribution metadata outside the rule-relevant document.
+Boundary-specific tests still cover C compilation and ownership, WebAssembly
+memory and JavaScript representations, install-package consumption, and host
+integration details. Test frameworks and fixtures are excluded from the
+installed `GameRules::State` package.
