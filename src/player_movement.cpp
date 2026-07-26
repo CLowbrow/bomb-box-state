@@ -55,6 +55,11 @@ PlayerMovementPlan plan_player_movement(const LevelDefinition& level,
     const auto* const destination_ramp =
         std::get_if<RampCell>(&destination_cell->geometry);
 
+    const bool lateral_ramp_push = source_ramp != nullptr
+        && destination_ramp != nullptr
+        && player->bottom == surface_height(*source_cell)
+        && ramp_centers_align_laterally(*source_ramp, *destination_ramp, direction);
+
     std::optional<Height> push_contact_bottom;
     if (source_flat != nullptr && destination_flat != nullptr) {
         push_contact_bottom = player->bottom;
@@ -63,6 +68,8 @@ PlayerMovementPlan plan_player_movement(const LevelDefinition& level,
                && (direction == source_ramp->low_direction
                    || direction == opposite(source_ramp->low_direction))) {
         push_contact_bottom = Height::from_elevation(destination_flat->elevation);
+    } else if (lateral_ramp_push) {
+        push_contact_bottom = surface_height(*destination_cell);
     }
 
     const Fixture* const fixture = find_fixture(level, *destination);
@@ -98,7 +105,7 @@ PlayerMovementPlan plan_player_movement(const LevelDefinition& level,
     }
 
     if (push_target != nullptr) {
-        if (!std::holds_alternative<FlatCell>(destination_cell->geometry)) {
+        if (destination_flat == nullptr && !lateral_ramp_push) {
             return rejected(MoveStatus::unsupported_geometry);
         }
         if (push_target != destination_top) {
@@ -120,12 +127,29 @@ PlayerMovementPlan plan_player_movement(const LevelDefinition& level,
         }
 
         Height pushed_new_bottom = push_target->bottom;
-        if (const auto* const ramp =
-                std::get_if<RampCell>(&pushed_destination_cell->geometry)) {
-            const Height high_endpoint{static_cast<std::int32_t>(
-                static_cast<std::int64_t>(ramp->low_elevation) * 2 + 2)};
-            if (direction != ramp->low_direction || push_target->bottom != high_endpoint) {
-                return rejected(MoveStatus::unsupported_geometry);
+        const auto* const pushed_destination_ramp =
+            std::get_if<RampCell>(&pushed_destination_cell->geometry);
+        if (lateral_ramp_push && pushed_destination_ramp == nullptr) {
+            return rejected(MoveStatus::unsupported_geometry);
+        }
+        if (pushed_destination_ramp != nullptr) {
+            if (lateral_ramp_push) {
+                if (!ramp_centers_align_laterally(
+                        *destination_ramp, *pushed_destination_ramp, direction)
+                    || push_target->bottom != surface_height(*destination_cell)) {
+                    return rejected(MoveStatus::unsupported_geometry);
+                }
+            } else {
+                const auto high_endpoint_half_steps =
+                    static_cast<std::int64_t>(
+                        pushed_destination_ramp->low_elevation)
+                    * 2 + 2;
+                const Height high_endpoint{
+                    static_cast<std::int32_t>(high_endpoint_half_steps)};
+                if (direction != pushed_destination_ramp->low_direction
+                    || push_target->bottom != high_endpoint) {
+                    return rejected(MoveStatus::unsupported_geometry);
+                }
             }
             pushed_new_bottom = surface_height(*pushed_destination_cell);
         }
@@ -220,7 +244,9 @@ PlayerMovementPlan plan_player_movement(const LevelDefinition& level,
     } else if (source_ramp != nullptr && destination_ramp != nullptr) {
         if (destination_entity_count != 0
             || player->bottom != surface_height(*source_cell)
-            || !ramps_connect(*source_ramp, *destination_ramp, direction)) {
+            || (!ramps_connect(*source_ramp, *destination_ramp, direction)
+                && !ramp_centers_align_laterally(
+                    *source_ramp, *destination_ramp, direction))) {
             return rejected(MoveStatus::unsupported_geometry);
         }
         player_new_bottom = surface_height(*destination_cell);

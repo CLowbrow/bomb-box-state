@@ -133,6 +133,16 @@ enum class RampEndpoint : std::uint8_t {
             == ramp_endpoint_half_steps(destination, *destination_endpoint);
 }
 
+[[nodiscard]] inline bool ramp_centers_align_laterally(
+    const RampCell& source,
+    const RampCell& destination,
+    const Direction travel_direction) noexcept
+{
+    return source.low_direction == destination.low_direction
+        && source.low_elevation == destination.low_elevation
+        && !ramp_endpoint_at(source, travel_direction).has_value();
+}
+
 [[nodiscard]] inline const Cell* find_cell(const LevelDefinition& level,
                                            const Coordinate coordinate) noexcept
 {

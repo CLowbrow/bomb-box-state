@@ -314,9 +314,11 @@ cells on opposite sides of it. It has:
 - A high endpoint surface at height `X + 1`.
 - A ramp-center support surface at height `X + 0.5`.
 
-Entry or exit perpendicular to the ramp orientation is prohibited. A ramp does
-not connect any of its perpendicular neighbors, even if their elevations happen
-to match one of its endpoints.
+Two laterally touching ramps with the same low direction and low elevation have
+aligned center surfaces. The player-movement, pushing, and blast rules below
+may cross that shared lateral edge. Automatic ramp slides never move laterally.
+All other entry or exit perpendicular to a ramp's orientation is prohibited,
+even if the neighboring surface happens to match one of the ramp's endpoints.
 
 An endpoint may connect either to a flat cell at the endpoint's integer height
 or directly to another collinear ramp. Two adjacent ramps connect only when one
@@ -333,6 +335,9 @@ followed by a ramp from `1` to `2`.
 - Moving between the centers of two connected ramps changes player height by
   `1.0` and is also ramp traversal. The player may traverse every ramp in a
   connected chain in either direction, one cell per command.
+- The player may move laterally between the centers of two touching parallel
+  ramps when they have the same low direction and low elevation. This move
+  preserves the player's height.
 - When leaving the ramp center, the player may push an otherwise eligible box
   or barrel occupying that endpoint. Push contact is evaluated at the endpoint
   height, and the player changes to that height in the atomic push tick.
@@ -343,6 +348,12 @@ followed by a ramp from `1` to `2`.
 
 - A box or barrel may be pushed onto a ramp only from its high endpoint and in
   the downhill direction.
+- A player on a ramp may push one otherwise eligible box or barrel laterally
+  across matching ramp lanes. The player, pushed entity, and destination must
+  occupy three contiguous ramps with the same low direction and low elevation.
+  The push preserves both entities' heights. The pushed entity then resumes
+  automatic downhill sliding in its new lane if that lane is unblocked.
+- A ramp occupant cannot be pushed uphill.
 - Moving from the high endpoint onto the ramp, sliding between connected ramp
   centers, and sliding from the bottom ramp to its low flat endpoint are ramp
   movements, not falls. These movements do not arm a barrel.
@@ -412,9 +423,14 @@ before it explodes. In particular:
   `H` is considered connected to the low endpoint at height `H - 0.5` and the
   high endpoint at height `H + 0.5`. This offset applies independently to each
   member of a ramp stack. A blast may cross either oriented ramp edge at that
-  member's corresponding endpoint height. Perpendicular ramp edges do not
-  carry a blast between levels. Connected ramp centers carry a blast across
-  their shared high-to-low endpoint using the corresponding center heights.
+  member's corresponding endpoint height. Connected ramp centers carry a blast
+  across their shared high-to-low endpoint using the corresponding center
+  heights. A blast may also cross laterally between touching ramp centers with
+  the same low direction and low elevation. The blast source, target, and
+  pushed destination must occupy three contiguous matching ramp lanes. The
+  movement preserves the target height, after which the target resumes
+  automatic downhill sliding. Perpendicular ramp edges do not otherwise carry
+  a blast between levels.
 - Doors, switches, teleporters, and cell geometry are not damaged or moved by a
   blast.
 - The exploding barrel is removed from the world as part of its explosion.

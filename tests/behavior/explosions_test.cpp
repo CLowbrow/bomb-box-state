@@ -399,6 +399,100 @@ TEST(Explosions, CarriesABlastAcrossConnectedRampCenters)
     EXPECT_EQ(loaded.outcome, std::optional{Outcome::lost});
 }
 
+TEST(Explosions, CarriesABlastAcrossMatchingRampLanesThenLetsTheTargetSlide)
+{
+    LevelDefinition level;
+    level.width = 3;
+    level.height = 3;
+    level.cells = {
+        Cell{{0, 0}, FlatCell{0}},
+        Cell{{1, 0}, RampCell{Direction::west, 0}},
+        Cell{{2, 0}, FlatCell{1}},
+        Cell{{0, 1}, FlatCell{0}},
+        Cell{{1, 1}, RampCell{Direction::west, 0}},
+        Cell{{2, 1}, FlatCell{1}},
+        Cell{{0, 2}, FlatCell{0}},
+        Cell{{1, 2}, RampCell{Direction::west, 0}},
+        Cell{{2, 2}, FlatCell{1}},
+    };
+    const ResolvedState initial{
+        {
+            Entity{2, EntityKind::box, {0, 0}, Height{0}},
+            Entity{8, EntityKind::barrel, {1, 0}, Height{3}},
+            Entity{3, EntityKind::box, {0, 1}, Height{0}},
+            Entity{9, EntityKind::box, {1, 1}, Height{1}},
+            Entity{1, EntityKind::player, {2, 2}, Height{2}},
+        },
+        Outcome::ongoing,
+    };
+    level.entities = initial.entities;
+    const ResolvedState after_fall{
+        {
+            Entity{2, EntityKind::box, {0, 0}, Height{0}},
+            Entity{8, EntityKind::barrel, {1, 0}, Height{1}},
+            Entity{3, EntityKind::box, {0, 1}, Height{0}},
+            Entity{9, EntityKind::box, {1, 1}, Height{1}},
+            Entity{1, EntityKind::player, {2, 2}, Height{2}},
+        },
+        Outcome::ongoing,
+        {8},
+    };
+    const ResolvedState after_blast{
+        {
+            Entity{2, EntityKind::box, {0, 0}, Height{0}},
+            Entity{3, EntityKind::box, {0, 1}, Height{0}},
+            Entity{9, EntityKind::box, {1, 2}, Height{1}},
+            Entity{1, EntityKind::player, {2, 2}, Height{2}},
+        },
+        Outcome::ongoing,
+    };
+    const ResolvedState final{
+        {
+            Entity{2, EntityKind::box, {0, 0}, Height{0}},
+            Entity{3, EntityKind::box, {0, 1}, Height{0}},
+            Entity{9, EntityKind::box, {0, 2}, Height{0}},
+            Entity{1, EntityKind::player, {2, 2}, Height{2}},
+        },
+        Outcome::ongoing,
+    };
+    const LoadResult expected{
+        LoadStatus::loaded,
+        {},
+        initial,
+        {
+            TickResult{
+                0,
+                {
+                    EntityMovedEvent{8, {1, 0}, {1, 0}, Height{3}, Height{1},
+                                     MovementCause::fall},
+                    BarrelArmedEvent{8},
+                },
+                after_fall,
+            },
+            TickResult{
+                1,
+                {
+                    BarrelExplodedEvent{8, {1, 0}, Height{1}},
+                    EntityMovedEvent{9, {1, 1}, {1, 2}, Height{1}, Height{1},
+                                     MovementCause::blast},
+                },
+                after_blast,
+            },
+            TickResult{
+                2,
+                {EntityMovedEvent{9, {1, 2}, {0, 2}, Height{1}, Height{0},
+                                  MovementCause::slide}},
+                final,
+            },
+        },
+        final,
+        Outcome::ongoing,
+    };
+    Engine engine;
+
+    EXPECT_EQ(engine.load_level(level), expected);
+}
+
 TEST(ExplosionWaves, CancelsOpposingImpulsesFromSimultaneousSourcesDeterministically)
 {
     LevelDefinition level = flat_grid(

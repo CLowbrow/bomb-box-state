@@ -76,9 +76,14 @@ struct BlastTarget final {
     if (source_ramp == nullptr && target_ramp == nullptr) {
         return source_bottom;
     }
-    if (source_ramp != nullptr && target_ramp != nullptr
-        && !ramps_connect(*source_ramp, *target_ramp, blast_direction)) {
-        return std::nullopt;
+    if (source_ramp != nullptr && target_ramp != nullptr) {
+        if (ramp_centers_align_laterally(
+                *source_ramp, *target_ramp, blast_direction)) {
+            return source_bottom;
+        }
+        if (!ramps_connect(*source_ramp, *target_ramp, blast_direction)) {
+            return std::nullopt;
+        }
     }
 
     std::optional<Height> target_bottom = source_bottom;
@@ -126,15 +131,32 @@ struct BlastTarget final {
 [[nodiscard]] bool can_pop(const LevelDefinition& level,
                            const ResolvedState& state,
                            const BlastTarget& target,
-                           const Coordinate destination) noexcept
+                           const Coordinate destination,
+                           const Direction direction) noexcept
 {
     if (!in_bounds(level, destination)
         || destination_fixture_blocks(level, state, destination)
         || !volume_is_clear(state, destination, target.bottom)) {
         return false;
     }
-    const Cell* const cell = find_cell(level, destination);
-    return cell != nullptr && support_half_steps(*cell) <= target.bottom.half_steps;
+    const Cell* const source_cell = find_cell(level, target.coordinate);
+    const Cell* const destination_cell = find_cell(level, destination);
+    if (source_cell == nullptr || destination_cell == nullptr) {
+        return false;
+    }
+    if (const auto* const source_ramp =
+            std::get_if<RampCell>(&source_cell->geometry);
+        source_ramp != nullptr
+        && !ramp_endpoint_at(*source_ramp, direction).has_value()) {
+        const auto* const destination_ramp =
+            std::get_if<RampCell>(&destination_cell->geometry);
+        if (destination_ramp == nullptr
+            || !ramp_centers_align_laterally(
+                *source_ramp, *destination_ramp, direction)) {
+            return false;
+        }
+    }
+    return support_half_steps(*destination_cell) <= target.bottom.half_steps;
 }
 
 [[nodiscard]] bool volumes_overlap(const BlastTarget& lhs,
@@ -251,7 +273,7 @@ std::optional<TickResult> resolve_explosion_wave_tick(
             std::distance(target.impulses.begin(), impulse))];
         target.destination = step(target.coordinate, direction, level.coordinates);
         target.movement_is_valid = target.destination.has_value()
-            && can_pop(level, state, target, *target.destination);
+            && can_pop(level, state, target, *target.destination, direction);
     }
     for (std::size_t left = 0; left < targets.size(); ++left) {
         if (!targets[left].movement_is_valid) {

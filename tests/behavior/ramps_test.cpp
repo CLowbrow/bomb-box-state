@@ -53,6 +53,20 @@ using namespace game_rules;
     return *found;
 }
 
+[[nodiscard]] MoveResult expected_rejection(const Direction direction,
+                                            const ResolvedState& state)
+{
+    return MoveResult{
+        MoveStatus::unsupported_geometry,
+        direction,
+        {GameplayEvent{MoveBlockedEvent{direction, MoveStatus::unsupported_geometry}}},
+        std::nullopt,
+        {},
+        state,
+        state.outcome,
+    };
+}
+
 TEST(Ramps, PlayerTraversesBothEndpointsInHalfStepsAndRewindsExactly)
 {
     LevelDefinition uphill = west_low_ramp_line(
@@ -131,6 +145,184 @@ TEST(Ramps, PlayerClimbsAConnectedRampChain)
                   1, {2, 0}, {3, 0}, Height{3}, Height{4}, MovementCause::player}}));
     EXPECT_EQ(entity(*top.final_state, 1),
               (Entity{1, EntityKind::player, {3, 0}, Height{4}}));
+}
+
+TEST(Ramps, PlayerMovesLaterallyBetweenTouchingParallelRampsAtTheSameHeight)
+{
+    LevelDefinition level;
+    level.width = 3;
+    level.height = 2;
+    level.cells = {
+        Cell{{0, 0}, FlatCell{0}},
+        Cell{{1, 0}, RampCell{Direction::west, 0}},
+        Cell{{2, 0}, FlatCell{1}},
+        Cell{{0, 1}, FlatCell{0}},
+        Cell{{1, 1}, RampCell{Direction::west, 0}},
+        Cell{{2, 1}, FlatCell{1}},
+    };
+    level.entities = {
+        Entity{1, EntityKind::player, {1, 0}, Height{1}},
+    };
+    Engine engine;
+    ASSERT_TRUE(engine.load_level(level).accepted());
+
+    const MoveResult moved = engine.move(Direction::north);
+
+    ASSERT_TRUE(moved.accepted());
+    ASSERT_EQ(moved.ticks.size(), 1U);
+    EXPECT_EQ(moved.ticks[0].events,
+              (std::vector<GameplayEvent>{EntityMovedEvent{
+                  1, {1, 0}, {1, 1}, Height{1}, Height{1}, MovementCause::player}}));
+    EXPECT_EQ(entity(*moved.final_state, 1),
+              (Entity{1, EntityKind::player, {1, 1}, Height{1}}));
+
+    ASSERT_TRUE(engine.rewind().accepted());
+    EXPECT_EQ(engine.move(Direction::north), moved);
+}
+
+TEST(Ramps, PushesPiecesAcrossMatchingRampLanesThenLetsThemSlideDown)
+{
+    for (const EntityKind kind : {EntityKind::box, EntityKind::barrel}) {
+        LevelDefinition level;
+        level.width = 3;
+        level.height = 3;
+        level.cells = {
+            Cell{{0, 0}, FlatCell{0}},
+            Cell{{1, 0}, RampCell{Direction::west, 0}},
+            Cell{{2, 0}, FlatCell{1}},
+            Cell{{0, 1}, FlatCell{0}},
+            Cell{{1, 1}, RampCell{Direction::west, 0}},
+            Cell{{2, 1}, FlatCell{1}},
+            Cell{{0, 2}, FlatCell{0}},
+            Cell{{1, 2}, RampCell{Direction::west, 0}},
+            Cell{{2, 2}, FlatCell{1}},
+        };
+        level.entities = {
+            Entity{1, EntityKind::player, {1, 0}, Height{1}},
+            Entity{2, EntityKind::box, {0, 1}, Height{0}},
+            Entity{8, kind, {1, 1}, Height{1}},
+        };
+        Engine engine;
+        const LoadResult loaded = engine.load_level(level);
+        ASSERT_TRUE(loaded.accepted());
+
+        const ResolvedState initial = *loaded.final_state;
+        const ResolvedState after_push{
+            {
+                Entity{2, EntityKind::box, {0, 1}, Height{0}},
+                Entity{1, EntityKind::player, {1, 1}, Height{1}},
+                Entity{8, kind, {1, 2}, Height{1}},
+            },
+            Outcome::ongoing,
+        };
+        const ResolvedState final{
+            {
+                Entity{2, EntityKind::box, {0, 1}, Height{0}},
+                Entity{1, EntityKind::player, {1, 1}, Height{1}},
+                Entity{8, kind, {0, 2}, Height{0}},
+            },
+            Outcome::ongoing,
+        };
+        const MoveResult expected{
+            MoveStatus::moved,
+            Direction::north,
+            {},
+            initial,
+            {
+                TickResult{
+                    0,
+                    {
+                        EntityMovedEvent{1, {1, 0}, {1, 1}, Height{1}, Height{1},
+                                         MovementCause::player},
+                        EntityMovedEvent{8, {1, 1}, {1, 2}, Height{1}, Height{1},
+                                         MovementCause::player},
+                    },
+                    after_push,
+                },
+                TickResult{
+                    1,
+                    {EntityMovedEvent{8, {1, 2}, {0, 2}, Height{1}, Height{0},
+                                      MovementCause::slide}},
+                    final,
+                },
+            },
+            final,
+            Outcome::ongoing,
+        };
+
+        EXPECT_EQ(engine.move(Direction::north), expected);
+        ASSERT_TRUE(engine.rewind().accepted());
+        EXPECT_EQ(engine.resolved_state(), std::optional{initial});
+        EXPECT_EQ(engine.move(Direction::north), expected);
+    }
+}
+
+TEST(Ramps, RejectsPushingAPieceSidewaysWithoutAnotherMatchingRampLane)
+{
+    LevelDefinition level;
+    level.width = 3;
+    level.height = 3;
+    level.cells = {
+        Cell{{0, 0}, FlatCell{0}},
+        Cell{{1, 0}, RampCell{Direction::west, 0}},
+        Cell{{2, 0}, FlatCell{1}},
+        Cell{{0, 1}, FlatCell{0}},
+        Cell{{1, 1}, RampCell{Direction::west, 0}},
+        Cell{{2, 1}, FlatCell{1}},
+        Cell{{0, 2}, FlatCell{0}},
+        Cell{{1, 2}, FlatCell{0}},
+        Cell{{2, 2}, FlatCell{0}},
+    };
+    level.entities = {
+        Entity{1, EntityKind::player, {1, 0}, Height{1}},
+        Entity{2, EntityKind::box, {0, 1}, Height{0}},
+        Entity{8, EntityKind::box, {1, 1}, Height{1}},
+    };
+    Engine engine;
+    const LoadResult loaded = engine.load_level(level);
+    ASSERT_TRUE(loaded.accepted());
+
+    EXPECT_EQ(engine.move(Direction::north),
+              expected_rejection(Direction::north, *loaded.final_state));
+    EXPECT_EQ(engine.rewind().status, RewindStatus::history_empty);
+}
+
+TEST(Ramps, RejectsLateralRampMovementWhenHeightOrInclineDiffers)
+{
+    const auto expect_rejected = [](const std::vector<Cell>& cells) {
+        LevelDefinition level;
+        level.width = 3;
+        level.height = 2;
+        level.cells = cells;
+        level.entities = {
+            Entity{1, EntityKind::player, {1, 0}, Height{1}},
+        };
+        Engine engine;
+        const LoadResult loaded = engine.load_level(level);
+        ASSERT_TRUE(loaded.accepted());
+
+        EXPECT_EQ(engine.move(Direction::north),
+                  expected_rejection(Direction::north, *loaded.final_state));
+        EXPECT_EQ(engine.rewind().status, RewindStatus::history_empty);
+    };
+
+    expect_rejected({
+        Cell{{0, 0}, FlatCell{0}},
+        Cell{{1, 0}, RampCell{Direction::west, 0}},
+        Cell{{2, 0}, FlatCell{1}},
+        Cell{{0, 1}, FlatCell{1}},
+        Cell{{1, 1}, RampCell{Direction::west, 1}},
+        Cell{{2, 1}, FlatCell{2}},
+    });
+
+    expect_rejected({
+        Cell{{0, 0}, FlatCell{0}},
+        Cell{{1, 0}, RampCell{Direction::west, 0}},
+        Cell{{2, 0}, FlatCell{1}},
+        Cell{{0, 1}, FlatCell{1}},
+        Cell{{1, 1}, RampCell{Direction::east, 0}},
+        Cell{{2, 1}, FlatCell{0}},
+    });
 }
 
 TEST(Ramps, PushedBoxSlidesThroughAConnectedRampChain)
