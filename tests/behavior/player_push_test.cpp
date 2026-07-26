@@ -160,22 +160,56 @@ TEST(PlayerPush, HonorsDeclaredAxisDirections)
               expected_push(level, Direction::east, 4, {1, 0}, {0, 0}));
 }
 
-TEST(PlayerPush, RejectsStackedTargetsAndRecursivePushesAtomically)
+TEST(PlayerPush, PushesOnlyTheTopEntityWhenThePlayerIsAtItsHeight)
 {
-    LevelDefinition stacked = flat_grid(4, 1, {0, 0});
-    stacked.entities.push_back(Entity{4, EntityKind::box, {1, 0}, Height::from_elevation(0)});
-    stacked.entities.push_back(Entity{5, EntityKind::barrel, {1, 0}, Height::from_elevation(1)});
-    Engine stacked_engine;
-    ASSERT_TRUE(stacked_engine.load_level(stacked).accepted());
-    EXPECT_EQ(stacked_engine.move(Direction::east),
-              expected_rejection(MoveStatus::stacked_push_target, Direction::east, stacked));
+    for (const EntityKind top_kind : {EntityKind::box, EntityKind::barrel}) {
+        SCOPED_TRACE(::testing::PrintToString(top_kind));
+        LevelDefinition level = flat_grid(3, 1, {0, 0});
+        level.cells[0].geometry = FlatCell{2};
+        level.cells[2].geometry = FlatCell{2};
+        level.entities[0].bottom = Height::from_elevation(2);
+        level.entities.push_back(
+            Entity{4, EntityKind::box, {1, 0}, Height::from_elevation(0)});
+        level.entities.push_back(
+            Entity{5, EntityKind::barrel, {1, 0}, Height::from_elevation(1)});
+        level.entities.push_back(
+            Entity{6, top_kind, {1, 0}, Height::from_elevation(2)});
+        Engine engine;
+        ASSERT_TRUE(engine.load_level(level).accepted());
+
+        const MoveResult moved = engine.move(Direction::east);
+
+        EXPECT_EQ(moved, expected_push(level, Direction::east, 6, {1, 0}, {2, 0}));
+        ASSERT_TRUE(moved.final_state.has_value());
+        EXPECT_EQ(moved.final_state->entities,
+                  (std::vector<Entity>{
+                      Entity{4, EntityKind::box, {1, 0}, Height::from_elevation(0)},
+                      Entity{5, EntityKind::barrel, {1, 0}, Height::from_elevation(1)},
+                      Entity{17, EntityKind::player, {1, 0}, Height::from_elevation(2)},
+                      Entity{6, top_kind, {2, 0}, Height::from_elevation(2)},
+                  }));
+    }
+}
+
+TEST(PlayerPush, RejectsANonTopTargetAndRecursivePushesAtomically)
+{
+    LevelDefinition non_top = flat_grid(4, 1, {0, 0});
+    non_top.entities.push_back(
+        Entity{4, EntityKind::box, {1, 0}, Height::from_elevation(0)});
+    non_top.entities.push_back(
+        Entity{5, EntityKind::barrel, {1, 0}, Height::from_elevation(1)});
+    Engine non_top_engine;
+    ASSERT_TRUE(non_top_engine.load_level(non_top).accepted());
+    EXPECT_EQ(non_top_engine.move(Direction::east),
+              expected_rejection(MoveStatus::stacked_push_target, Direction::east,
+                                 non_top));
     EXPECT_EQ(to_string(MoveStatus::stacked_push_target), "stacked_push_target");
-    EXPECT_EQ(stacked_engine.resolved_state(),
+    EXPECT_EQ(non_top_engine.resolved_state(),
               (std::optional{ResolvedState{
-                  canonicalize_level(stacked).entities,
+                  canonicalize_level(non_top).entities,
                   Outcome::ongoing,
               }}));
-    EXPECT_EQ(stacked_engine.rewind().status, RewindStatus::history_empty);
+    EXPECT_EQ(non_top_engine.rewind().status, RewindStatus::history_empty);
 
     LevelDefinition occupied = flat_grid(4, 1, {0, 0});
     occupied.entities.push_back(Entity{4, EntityKind::box, {1, 0}, Height::from_elevation(0)});
@@ -289,8 +323,13 @@ TEST(PlayerPush, RewindRestoresTheAtomicPrePushStateAndAllowsDeterministicReplay
 TEST(PlayerPush, IsIndependentOfSuppliedContainerOrder)
 {
     LevelDefinition ordered = flat_grid(3, 1, {0, 0});
+    ordered.cells[0].geometry = FlatCell{1};
+    ordered.cells[2].geometry = FlatCell{1};
+    ordered.entities[0].bottom = Height::from_elevation(1);
     ordered.entities.push_back(
         Entity{4, EntityKind::box, {1, 0}, Height::from_elevation(0)});
+    ordered.entities.push_back(
+        Entity{5, EntityKind::barrel, {1, 0}, Height::from_elevation(1)});
     LevelDefinition reversed = ordered;
     std::reverse(reversed.cells.begin(), reversed.cells.end());
     std::reverse(reversed.entities.begin(), reversed.entities.end());

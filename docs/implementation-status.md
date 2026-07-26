@@ -25,7 +25,7 @@ both the native C ABI and WebAssembly adapter.
 | 2. Resolved-state history and rewind | **Implemented** | Caller-owned resolved-state snapshots, engine-owned undo-only history, rewind results, initialized `history_empty` behavior, repeated rewind, branching after rewind, and atomic load-time history replacement are covered. |
 | 3. Flat walking and authoritative turn output | **Implemented** | Cardinal movement honors declared axes, walks one cell between compatible flat supports, returns complete tick/event/state/outcome results, rejects boundaries, ledges, blocking occupied destinations, malformed input, and terminal states, and preserves history only for accepted turns. |
 | 4. Stateful C ABI and browser vertical slice | **Implemented** | Opaque per-instance engines, versioned JSON loading, renderable snapshots, movement, complete tick/event results, rewind, caller-owned result memory, and a thin JavaScript ownership layer are exercised by one authored contract through native C and Node/WebAssembly. |
-| 5. Single-entity player pushes | **Implemented** | Atomic one-cell box and barrel pushes work in every cardinal direction across compatible flat supports, with unstacked-target enforcement, volume-aware destination collision checks, deterministic events, exact rewind, and native C/WebAssembly contract coverage. Height-separated pushes can enter an occupied column when their arrival volume is clear, then fall onto the lower support normally. |
+| 5. Single-entity player pushes | **Implemented** | Atomic one-cell box and barrel pushes work in every cardinal direction across compatible flat supports. An elevated player may push only the top entity from a stack at the player's height and takes its place on the remaining support; non-top targets remain blocked. Volume-aware destination collision checks, deterministic events, exact rewind, and native C/WebAssembly contract coverage remain in place. Height-separated pushes can enter an occupied column when their arrival volume is clear, then fall onto the lower support normally. |
 | 6. Falling and crushing | **Implemented** | Initial and post-push gravity compacts independent columns bottom-up in deterministic derived ticks, including stacks and ramp-center landings; player fall loss, latent crushing, barrel arming, complete load output, exact rewind, and replacement isolation are covered. |
 | 7. Fixtures and terminal outcomes | **Implemented** | Color-wide AND switches, rewindable effective door state, safe occupied-door hold-open behavior, fixture-aware walking and pushes, teleporter restrictions and wins, terminal gating/history, initialization, and win-before-loss precedence are covered. |
 | 8. Ramps and sliding | **Implemented** | Oriented endpoint/center player traversal includes high-to-low connected ramp chains; downhill box/barrel pushes and deterministic automatic whole-stack slides continue through every unblocked ramp in a chain. Pushes while exiting ramps, blocked retries, fixture-aware destinations, fall-before-slide ordering, and slide conflicts are covered. |
@@ -104,12 +104,14 @@ later rules rather than replaced after each phase.
   barrel arming and explosion, switch changes, door transitions, player
   crushing, and level win/loss without asking a host to reconstruct
   authoritative state from them.
-- The movement planner recognizes an unstacked box or barrel intersecting the
-  player's movement height as a push target. It validates the target and next
-  cell from the immutable pre-tick state, then atomically commits both moves in
-  one tick. Push events are deterministically ordered player first and pushed
-  entity second. Stacked targets report `stacked_push_target`; a lower flat
-  support now produces a following derived fall tick in the same accepted turn.
+- The movement planner recognizes a box or barrel intersecting the player's
+  movement height as a push target when it is the top entity in its cell. It
+  validates the target and next cell from the immutable pre-tick state, leaves
+  lower stack entities in place, and atomically commits the player taking the
+  target's former place plus the target's horizontal move in one tick. Push
+  events are deterministically ordered player first and pushed entity second.
+  A target with an entity above it reports `stacked_push_target`; a lower flat
+  support produces a following derived fall tick in the same accepted turn.
 - Gravity plans each cell independently from one immutable pre-tick snapshot,
   compacts separated groups bottom-up without using entity IDs to choose
   behavior, and emits events in canonical coordinate and pre-tick height order.
@@ -210,10 +212,10 @@ Most recently recorded on 2026-07-25:
 
 | Surface | Commands | Result |
 | --- | --- | --- |
-| Native debug | `cmake --preset native-debug`; `cmake --build --preset native-debug`; `ctest --preset native-debug --output-on-failure` | Passed: 98 of 98 tests: 84 behavior cases, 5 C ABI boundary cases, 5 focused unit cases, 2 cross-adapter contract runners, and 2 production consumer/header smokes. This includes connected-ramp validation, full-chain player traversal, multi-tick box sliding from the top ramp to the bottom flat, exact replay after rewind, and blast connectivity across adjacent ramp centers. |
-| Native release | `cmake --preset native-release`; `cmake --build --preset native-release`; `ctest --preset native-release --output-on-failure` | Passed: 91 of 91 tests. |
+| Native debug | `cmake --preset native-debug`; `cmake --build --preset native-debug`; `ctest --preset native-debug --output-on-failure` | Passed: 100 of 100 tests: 86 behavior cases, 5 C ABI boundary cases, 5 focused unit cases, 2 cross-adapter contract runners, and 2 production consumer/header smokes. This includes elevated box/barrel top-of-stack pushes, rejection of non-top targets, a pushed top box falling to a lower floor, exact rewind/replay, and entity-container-order independence. |
+| Native release | `cmake --preset native-release`; `cmake --build --preset native-release`; `ctest --preset native-release --output-on-failure` | Passed: 100 of 100 tests. |
 | WebAssembly debug | `cmake --preset wasm-debug`; `cmake --build --preset wasm-debug`; `ctest --preset wasm-debug --output-on-failure` | Passed: portable core and stateful adapter build; 1 of 1 Node tests ran all 4 authored contract scripts covering the browser vertical slice plus lifecycle, conflict, and multi-turn rewind/replay hardening. |
-| Native sanitized | `cmake --preset native-sanitized`; `cmake --build --preset native-sanitized` | Configure and build passed with connected ramp chains and deferred GoogleTest discovery. Tests were not executed, as required on this Apple Silicon/macOS host because the Apple sanitizer runtime stalls during GoogleTest discovery; execution remains delegated to the Ubuntu sanitizer CI job. |
+| Native sanitized | `cmake --preset native-sanitized`; `cmake --build --preset native-sanitized` | Configure and build passed with top-of-stack push coverage and deferred GoogleTest discovery. Tests were not executed, as required on this Apple Silicon/macOS host because the Apple sanitizer runtime stalls during GoogleTest discovery; execution remains delegated to the Ubuntu sanitizer CI job. |
 | JSON Schema syntax | `jq empty docs/level-format.schema.json` | Passed. |
 | Vendored yyjson | `shasum -a 256 vendor/yyjson/yyjson.c vendor/yyjson/yyjson.h vendor/yyjson/LICENSE`; global-symbol inspection with `nm` | All files match the recorded 0.12.0 import checksums. Only the two `game_rules_*` bridge symbols are global; no upstream `yyjson_*` implementation symbol is exported. |
 | Install package | `cmake --install out/build/native-debug --prefix <temporary-directory>` | Passed after the Phase 9 public event addition. The static archive is self-contained, no GoogleTest artifact or dependency is installed, and the package includes the yyjson MIT license, third-party notice, and provenance README. |
@@ -221,10 +223,10 @@ Most recently recorded on 2026-07-25:
 
 ## Known limitations
 
-- Movement resolves flat and ramp walking, single-entity pushes, derived
-  falling, automatic whole-stack ramp slides, simultaneous explosion waves,
-  and complete movement-separated chains. Switches, doors, and teleporters
-  participate fully.
+- Movement resolves flat and ramp walking, single-entity pushes including the
+  top entity of a stack, derived falling, automatic whole-stack ramp slides,
+  simultaneous explosion waves, and complete movement-separated chains.
+  Switches, doors, and teleporters participate fully.
 - Falling-on-player crushing is covered both through its focused internal rule
   seam and through a public blast-pop scenario that removes middle support.
 - Sanitized tests must run in the Ubuntu CI job or another known-working Linux

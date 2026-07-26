@@ -76,11 +76,16 @@ PlayerMovementPlan plan_player_movement(const LevelDefinition& level,
     Height destination_support = surface_height(*destination_cell);
     std::size_t destination_entity_count = 0;
     const Entity* push_target = nullptr;
+    const Entity* destination_top = nullptr;
     for (const Entity& entity : state.entities) {
         if (entity.coordinate != *destination) {
             continue;
         }
         ++destination_entity_count;
+        if (destination_top == nullptr
+            || entity.bottom.half_steps > destination_top->bottom.half_steps) {
+            destination_top = &entity;
+        }
         if (push_contact_bottom.has_value() && entity.bottom == *push_contact_bottom
             && (entity.kind == EntityKind::box || entity.kind == EntityKind::barrel)) {
             push_target = &entity;
@@ -96,7 +101,7 @@ PlayerMovementPlan plan_player_movement(const LevelDefinition& level,
         if (!std::holds_alternative<FlatCell>(destination_cell->geometry)) {
             return rejected(MoveStatus::unsupported_geometry);
         }
-        if (destination_entity_count != 1) {
+        if (push_target != destination_top) {
             return rejected(MoveStatus::stacked_push_target);
         }
         if (destination_is_exit) {

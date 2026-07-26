@@ -188,9 +188,15 @@ resolved state in a fresh history.
 ### Player pushing
 
 - The player may push a box or barrel one cell in the command direction.
-- The player may push an entity only if it is unstacked: it must be the sole
-  entity in its cell. A box or barrel with anything above or below it cannot be
-  pushed by the player.
+- The player may push an unstacked box or barrel, or only the top box or barrel
+  of a stack. The pushed entity's bottom must be at the player's current bottom
+  height, and no entity may be above it. An entity below the pushed entity
+  remains in place.
+- When the player pushes the top entity from a stack, the player enters the
+  vacated volume at the same bottom height and becomes the new top of the
+  source stack, supported by the entity that was directly below the pushed
+  entity. A target with any entity above it is rejected as
+  `stacked_push_target`.
 - A player push may move only that one entity. It cannot recursively push an
   entity whose volume overlaps the pushed entity's arrival volume.
 - Push legality is calculated from the state at the start of the movement
@@ -210,15 +216,21 @@ resolved state in a fresh history.
 - A player may push a box or barrel down a ramp but not up a ramp.
 - A player cannot push an entity or stack already occupying a ramp.
 
-Implementation note: a future version may permit pushing the top of a stack, a
-stack suffix, or an entire stack. Movement APIs and events should therefore be
-capable of describing more than one moved entity even though the initial
-player-push rules permit only one.
+Implementation note: a future version may permit pushing a stack suffix or an
+entire stack. Movement APIs and events should therefore remain capable of
+describing more than one moved entity even though a player push currently
+moves only one box or barrel in addition to the player.
 
 For example, a box pushed at elevation `3` into a flat cell at elevation `1`
 containing one box at the floor is allowed: the moving box enters at bottom
 height `3`, then falls to bottom height `2` on the lower box. A barrel follows
 the same movement and landing rules, then arms because it fell.
+
+For example, a player standing at elevation `2` beside a three-box stack whose
+boxes have bottom heights `0`, `1`, and `2` may push the top box. The lower two
+boxes remain in place, the player moves into the source cell at bottom height
+`2`, and the pushed box moves horizontally at bottom height `2` before any
+required fall is resolved.
 
 ## Falling
 
@@ -435,7 +447,7 @@ before it explodes. In particular:
 - An affected player causes a loss condition.
 
 A blast pop is not a player push. It may remove an entity from the middle of a
-stack even though the player may push only unstacked entities.
+stack even though the player may push only its top entity.
 
 For example, suppose a barrel exploding at height `1` is west of this stack:
 

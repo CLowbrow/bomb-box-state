@@ -228,6 +228,76 @@ TEST(Falling, PushesABoxFromElevationThreeOntoABoxAtElevationOneToFormAStack)
     EXPECT_EQ(engine.resolved_state(), std::optional{stacked});
 }
 
+TEST(Falling, PushesTheTopBoxOffAStackThenSettlesItOnTheLowerFloor)
+{
+    LevelDefinition level =
+        flat_line({1, 0, 0}, Entity{1, EntityKind::player, {0, 0}, Height{2}});
+    level.entities.push_back(Entity{2, EntityKind::box, {1, 0}, Height{0}});
+    level.entities.push_back(Entity{3, EntityKind::box, {1, 0}, Height{2}});
+
+    const ResolvedState initial{
+        {
+            Entity{1, EntityKind::player, {0, 0}, Height{2}},
+            Entity{2, EntityKind::box, {1, 0}, Height{0}},
+            Entity{3, EntityKind::box, {1, 0}, Height{2}},
+        },
+        Outcome::ongoing,
+    };
+    const ResolvedState after_push{
+        {
+            Entity{2, EntityKind::box, {1, 0}, Height{0}},
+            Entity{1, EntityKind::player, {1, 0}, Height{2}},
+            Entity{3, EntityKind::box, {2, 0}, Height{2}},
+        },
+        Outcome::ongoing,
+    };
+    const ResolvedState settled{
+        {
+            Entity{2, EntityKind::box, {1, 0}, Height{0}},
+            Entity{1, EntityKind::player, {1, 0}, Height{2}},
+            Entity{3, EntityKind::box, {2, 0}, Height{0}},
+        },
+        Outcome::ongoing,
+    };
+
+    Engine engine;
+    ASSERT_TRUE(engine.load_level(level).accepted());
+
+    const MoveResult moved = engine.move(Direction::east);
+
+    EXPECT_EQ(moved,
+              (MoveResult{
+                  MoveStatus::moved,
+                  Direction::east,
+                  {},
+                  initial,
+                  {
+                      TickResult{
+                          0,
+                          {
+                              EntityMovedEvent{1, {0, 0}, {1, 0}, Height{2}, Height{2},
+                                               MovementCause::player},
+                              EntityMovedEvent{3, {1, 0}, {2, 0}, Height{2}, Height{2},
+                                               MovementCause::player},
+                          },
+                          after_push,
+                      },
+                      TickResult{
+                          1,
+                          {EntityMovedEvent{3, {2, 0}, {2, 0}, Height{2}, Height{0},
+                                            MovementCause::fall}},
+                          settled,
+                      },
+                  },
+                  settled,
+                  Outcome::ongoing,
+              }));
+    EXPECT_EQ(engine.resolved_state(), std::optional{settled});
+
+    EXPECT_EQ(engine.rewind().state, std::optional{initial});
+    EXPECT_EQ(engine.move(Direction::east), moved);
+}
+
 TEST(Falling, PushesABarrelFromElevationThreeOntoABarrelAtElevationOneBeforeTheyExplode)
 {
     LevelDefinition level =
