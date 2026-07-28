@@ -13,6 +13,7 @@ compile_commands.json
 .idea/
 .vscode/
 *.swp
+.vs/
 
 # Unreal-generated output (if the integration scaffold is copied into a project)
 Binaries/

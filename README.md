@@ -76,3 +76,7 @@ contract scenarios run through the native C and WebAssembly boundaries.
 
 Third-party licensing and provenance are recorded in
 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+
+# TODO
+
+Update the C API to return a `game_rules::Result` instead of a JSON string.
