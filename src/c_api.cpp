@@ -1,5 +1,6 @@
 #include "game_rules/c_api.h"
 
+#include "c_api_internal.hpp"
 #include "game_rules/engine.hpp"
 #include "game_rules/level_json.hpp"
 
@@ -14,10 +15,6 @@
 #include <string_view>
 #include <type_traits>
 #include <variant>
-
-struct game_rules_engine final {
-    game_rules::Engine value{};
-};
 
 namespace {
 

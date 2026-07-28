@@ -48,6 +48,8 @@ The test tree is organized by purpose:
   and Node/WebAssembly runners.
 - `tests/consumer` verifies the installed-style headers, C boundary, and
   production no-exceptions/no-RTTI configuration.
+- `tests/adapter` exercises both the typed native data ABI and the compatibility
+  JSON ABI, including ownership and invalid foreign input.
 - `tests/support` contains test-only builders, printers, and matchers.
 
 When adding or changing behavior, prefer a public scenario under
@@ -126,6 +128,12 @@ if (decoded.accepted()) {
 The [level format reference](level-format.md) describes the wire contract. Its
 [JSON Schema](level-format.schema.json) is useful for editor feedback, but the
 core decoder and validator remain authoritative for cross-entry rules.
+
+Native foreign-language hosts do not need to use this codec at runtime. The
+typed C data ABI accepts `game_rules_level_definition` arrays directly and
+returns typed snapshots, ticks, and events. See the [embedding API](embedding-api.md)
+for its ownership rules; adapter changes must retain the C99 header smoke test
+and add coverage under `tests/adapter/`.
 
 ## Dependencies and integrations
 

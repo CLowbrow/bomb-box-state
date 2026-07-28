@@ -21,15 +21,21 @@ destroy multiple engines independently.
 The same rules implementation is available through several thin boundaries:
 
 - `GameRules::State` is the native C++20 static library.
-- `game_rules/c_api.h` exposes opaque engine handles and caller-owned JSON
-  strings for C and foreign-function consumers.
+- `game_rules/c_api.h` exposes opaque engine handles and a versioned typed data
+  ABI for native foreign-function consumers. Its fixed-width structs and
+  explicitly owned immutable results are suitable for direct Odin bindings.
+- The same header retains the version 1 caller-owned JSON API used by the
+  existing WebAssembly adapter.
 - `integrations/wasm` exports the C boundary and adds JavaScript ownership,
   parsing, and lifecycle checks.
 - `integrations/unreal` is a plugin scaffold for staging a platform-compatible
   core build into Unreal Engine.
 
-C++ standard-library types never cross the C ABI. The C and WebAssembly
-response contract is documented in the [embedding API](embedding-api.md).
+C++ standard-library types never cross the C ABI. Typed input arrays are
+borrowed for one call and copied on accepted load. Typed result graphs are
+caller-owned and do not alias engine storage, so later operations cannot
+invalidate an in-flight presentation result. The C and WebAssembly contracts
+are documented in the [embedding API](embedding-api.md).
 
 ## State transitions
 

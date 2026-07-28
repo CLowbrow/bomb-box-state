@@ -1,106 +1,139 @@
 # C and WebAssembly embedding API
 
-The embedding boundary is a versioned, JSON-based view of the same engine state and command
-results exposed by the C++ API. It is intended for browser and foreign-function hosts; rendering,
-input mapping, animation timing, persistence, and scheduling remain host concerns.
+The C boundary has two contracts over the same engine:
 
-## Primitive C ABI
+- the typed data ABI is the preferred native foreign-function interface, including for Odin;
+- the version 1 JSON ABI remains available for the existing JavaScript/WebAssembly adapter.
 
-Include `game_rules/c_api.h`. An opaque `game_rules_engine*` owns one independent engine session,
-including the current level and rewind history:
+Both use an opaque `game_rules_engine*` for one independent session. Rendering, input mapping,
+animation timing, persistence, and scheduling remain host concerns.
+
+## Typed data ABI
+
+Include `game_rules/c_api.h` and check `game_rules_data_api_version()`. Version 1 uses only
+fixed-width integers, pointers, and plain C structs. C enums are not stored in ABI structs: every
+tag, status, Boolean, and count is explicitly `uint32_t`. Entity IDs are `uint64_t`, and heights
+are signed integer half-steps. This maps directly to Odin's `u32`, `u64`, `i32`, `rawptr`, and
+pointer types without JSON parsing or numeric precision loss.
+
+The basic lifecycle is:
 
 ```c
 game_rules_engine* engine = game_rules_engine_create();
+
+game_rules_level_definition level = { /* caller-owned arrays and counts */ };
+game_rules_load_result loaded = {0};
+uint32_t call = game_rules_engine_load_level_data(engine, &level, &loaded);
+if (call == GAME_RULES_CALL_OK && loaded.accepted) {
+    /* Read loaded.state, loaded.ticks, and their typed arrays. */
+}
+game_rules_load_result_dispose(&loaded);
+
+game_rules_move_result moved = {0};
+call = game_rules_engine_move_data(engine, GAME_RULES_DIRECTION_EAST, &moved);
+if (call == GAME_RULES_CALL_OK) {
+    /* Read moved.status, moved.ticks, moved.events, and moved.state. */
+}
+game_rules_move_result_dispose(&moved);
+
+game_rules_engine_destroy(engine);
+```
+
+`game_rules_engine_load_level_data()` borrows the input arrays only for that call. The engine
+copies and canonicalizes an accepted level. A zero count permits a null pointer; a nonzero count
+with a null pointer, an unknown tagged kind, or an invalid enum value returns
+`GAME_RULES_CALL_INVALID_ARGUMENT` without changing the engine. A structurally well-formed level
+that violates the world schema returns `GAME_RULES_CALL_OK` with
+`GAME_RULES_LOAD_INVALID_LEVEL` and ordered `game_rules_validation_error` values. Rejected loads
+preserve the previous level and rewind history.
+
+Each successful ABI call writes a result that owns one immutable allocation graph through its
+opaque `owned_storage` field. All pointers nested under the result remain valid across later engine
+calls and even engine destruction. Call the matching `*_result_dispose()` exactly once when
+finished; it releases the graph and zeros the result. Do not copy an owning result struct.
+Initialize a result to zero before its first call, and dispose it before reuse. Dispose functions
+accept null.
+
+The call return value reports boundary failures:
+
+- `GAME_RULES_CALL_OK`: the operation ran; inspect its operation-specific status or `has_state`;
+- `GAME_RULES_CALL_INVALID_ENGINE`: the engine pointer was null;
+- `GAME_RULES_CALL_INVALID_ARGUMENT`: an output/input pointer, tag, or enum value was invalid;
+- `GAME_RULES_CALL_ALLOCATION_FAILED`: the result owner itself could not be allocated.
+
+Normal gameplay rejection is not a call failure. For example, an out-of-range movement value
+returns `GAME_RULES_CALL_OK`, `GAME_RULES_MOVE_INVALID_DIRECTION`, `accepted == 0`,
+`has_direction == 0`, and no presentation event. A valid direction blocked by gameplay returns
+its specific move status and a typed move-blocked event.
+
+### Views and events
+
+`game_rules_snapshot` contains the canonical static level and authoritative resolved state.
+Static cells are row-major; fixtures and entities use the engine's canonical spatial order.
+Resolved-state arrays include entities, ascending armed-barrel IDs, palette-ordered active switch
+colors, row-major open doors, and outcome.
+
+Load and move results include initial and final dynamic states plus every ordered
+`game_rules_tick`. Each tick contains its ordered semantic events and complete authoritative
+`state_after`. The top-level snapshot is the complete current renderable state. Rewind returns its
+restored dynamic state, semantic event, and complete current snapshot.
+
+`game_rules_event` deliberately uses a fixed struct instead of a C union, which keeps hand-written
+foreign bindings simple. Read fields according to `kind`:
+
+| Kind | Meaningful fields |
+| --- | --- |
+| `GAME_RULES_EVENT_MOVE_BLOCKED` | `direction`, `move_status` |
+| `GAME_RULES_EVENT_STATE_REWOUND` | none |
+| `GAME_RULES_EVENT_ENTITY_MOVED` | `entity_id`, `from`, `to`, old/new bottom half-steps, `movement_cause` |
+| `GAME_RULES_EVENT_BARREL_ARMED` | `entity_id` |
+| `GAME_RULES_EVENT_BARREL_EXPLODED` | `entity_id`, `coordinate`, `bottom_half_steps` |
+| `GAME_RULES_EVENT_PLAYER_CRUSHED` | `entity_id` (player), `other_entity_id` (crusher) |
+| `GAME_RULES_EVENT_SWITCH_CHANGED` | `color`, `active` |
+| `GAME_RULES_EVENT_DOOR_OPENED`, `GAME_RULES_EVENT_DOOR_CLOSED` | `coordinate`, `color` |
+| `GAME_RULES_EVENT_LEVEL_WON`, `GAME_RULES_EVENT_LEVEL_LOST` | none |
+
+## Legacy JSON ABI, version 1
+
+`game_rules_api_version()` describes the existing JSON response contract, independently of the
+typed data ABI version. The JSON functions are retained for WebAssembly compatibility:
+
+```c
 char* loaded = game_rules_engine_load_level(engine, level_json, level_json_length);
 char* moved = game_rules_engine_move(engine, GAME_RULES_DIRECTION_EAST);
 
 game_rules_string_free(moved);
 game_rules_string_free(loaded);
-game_rules_engine_destroy(engine);
 ```
 
-The stable direction values are north `0`, east `1`, south `2`, and west `3`. `create` returns
-`NULL` only on allocation failure. Every stateful operation otherwise returns an allocated,
-null-terminated UTF-8 JSON document; a `NULL` result means response allocation failed. Release
-each result exactly once with `game_rules_string_free()`. Destroying or freeing `NULL` is allowed.
-A destroyed engine handle must not be reused.
+Every non-null result is an allocated, null-terminated UTF-8 document. Release it exactly once
+with `game_rules_string_free()`. A null result means response allocation failed. Level input uses
+the [version 1 level format](level-format.md), and entity IDs are decimal strings so their full
+unsigned 64-bit range remains safe in JavaScript.
 
-Level bytes use the existing [version 1 level format](level-format.md). The explicit byte length
-means the input need not be null-terminated. A rejected decode or load leaves an already loaded
-level and its history unchanged.
-
-## Response contract, version 1
-
-Every response contains `apiVersion`, `operation`, `status`, and `state`. `state` is `null` when no
-authoritative level is available. A renderable state contains:
-
-- the coordinate system, width, and height;
-- canonical cells and fixtures using the level-format field names;
-- current authoritative entities using decimal-string IDs and integer `bottomHalfSteps`;
-- canonical `armedBarrelIds`, also encoded as decimal strings;
-- palette-ordered `activeSwitchColors` and row-major `openDoorCoordinates`; and
-- the current `outcome` (`ongoing`, `won`, or `lost`).
-
-Entity IDs remain strings at this boundary so the full unsigned 64-bit range is safe in
-JavaScript. Heights remain integer half-steps. Hosts should treat response objects as snapshots;
-they do not alias engine-owned storage.
-
-`loadLevel` returns `loaded`, `invalid_json`, `invalid_level`, `invalid_argument`, or
-`invalid_engine`. A successful response contains the supplied dynamic `initialState`, ordered
-initialization `ticks` with semantic events and authoritative `stateAfter` snapshots, the complete
-final renderable `state`, and `outcome`. JSON errors include stable `code`, `byteOffset`, and `path`
-fields. Structural errors include an ordered `errors` array with stable code and context fields.
-
-`getState` returns `ok`, `no_level`, or `invalid_engine`. `move` additionally contains:
-
-- `accepted` and the decoded cardinal `direction` (or `null` for malformed input);
-- presentation-only rejection `events`;
-- the dynamic `initialState` for an accepted turn;
-- ordered `ticks`, each with its semantic events and authoritative dynamic `stateAfter`;
-- the complete final renderable `state`; and
-- the final `outcome`.
-
-Move status strings are the same stable strings as `MoveStatus`, including `moved`, `no_level`,
-`invalid_direction`, `world_boundary`, `stacked_push_target`, `closed_door`,
-`teleporter_restriction`, and `unsupported_geometry` for a transition the engine cannot represent.
-An accepted player push places the player's `entityMoved` event before the pushed box or barrel's
-event in the same tick. A derived fall uses `entityMoved` with cause `fall`; newly armed barrels emit
-`barrelArmed`. Single-source blasts emit `barrelExploded` with the removed barrel's decimal-string
-`entityId`, `coordinate`, and integer `bottomHalfSteps`; successful blast pops use `entityMoved`
-with cause `blast`. Fixture changes emit `switchChanged`, `doorOpened`, and `doorClosed`; wins emit
-`levelWon`. Crushing and terminal fall ticks may emit `playerCrushed` and `levelLost`. `rewind`
-returns `accepted`, semantic events, the complete restored state, and outcome with status `rewound`
-or `history_empty`.
-
-The authored examples under `tests/contracts/browser_vertical_slice/v1/` are executable version-1
-response examples shared by the native C ABI and WebAssembly tests.
+Every response contains `apiVersion`, `operation`, `status`, and the complete current `state` (or
+null without a level). Load and move responses include initial state, ordered ticks and events,
+final state, and outcome. Rewind includes its semantic event, restored renderable state, and
+outcome. The authored examples under `tests/contracts/` are executable response oracles shared by
+the native JSON runner and WebAssembly.
 
 ## JavaScript/WebAssembly interface
 
-The generated `game_rules.mjs` factory resolves to an Emscripten module with a thin `gameRules`
-object. It converts allocated C strings to parsed objects and always frees the module memory:
+The generated `game_rules.mjs` continues to wrap the JSON ABI with parsed JavaScript objects:
 
 ```js
 import createGameRulesModule from "./game_rules.mjs";
 
 const module = await createGameRulesModule();
-const api = module.gameRules;
-const engine = api.createEngine();
-
+const engine = module.gameRules.createEngine();
 try {
-  const loaded = engine.loadLevel(levelObject); // a JSON string also works
-  if (loaded.status !== "loaded") throw new Error(loaded.status);
-
-  const before = engine.getState();
-  const result = engine.move("east");
+  const loaded = engine.loadLevel(levelObject);
+  const moved = engine.move("east");
   const rewound = engine.rewind();
 } finally {
   engine.destroy();
 }
 ```
 
-`gameRules.createEngine()` returns an engine object with `loadLevel`, `getState`, `move`, `rewind`,
-and `destroy` methods. The numeric WebAssembly handle remains private. `move` accepts `north`,
-`east`, `south`, or `west`; the same strings are available from the frozen `gameRules.directions`
-object. `destroy` is idempotent, and any later stateful call throws a local lifecycle error instead
-of passing a stale handle into WebAssembly.
+`destroy()` is idempotent, and later stateful calls throw a local lifecycle error instead of
+passing a stale handle into WebAssembly.

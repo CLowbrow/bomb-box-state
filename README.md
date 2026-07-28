@@ -48,9 +48,11 @@ owns one level, its current resolved state, and its rewind history. Loading a
 new valid level replaces all three atomically.
 
 Hosts that cannot use the C++ interface can use the opaque C API in
-[`game_rules/c_api.h`](include/game_rules/c_api.h). The WebAssembly build wraps
-the same API with a small JavaScript interface. Both return versioned JSON
-snapshots and command results; see the [embedding API](docs/embedding-api.md).
+[`game_rules/c_api.h`](include/game_rules/c_api.h). Native foreign-language
+frontends can use its fixed-width typed data ABI without serializing commands,
+snapshots, or events as JSON. The WebAssembly build wraps the retained JSON ABI
+with a small JavaScript interface. See the [embedding API](docs/embedding-api.md)
+for both contracts.
 
 Levels can be built as C++ values or loaded from the strict, versioned JSON
 format described in the [level format reference](docs/level-format.md). A
@@ -77,6 +79,3 @@ contract scenarios run through the native C and WebAssembly boundaries.
 Third-party licensing and provenance are recorded in
 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
-# TODO
-
-Update the C API to return a `game_rules::Result` instead of a JSON string.

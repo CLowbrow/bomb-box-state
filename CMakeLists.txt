@@ -52,6 +52,7 @@ target_sources(
     PRIVATE
         $<TARGET_OBJECTS:game_rules_yyjson>
         src/c_api.cpp
+        src/c_data_api.cpp
         src/engine.cpp
         src/explosions.cpp
         src/fixtures.cpp

@@ -64,6 +64,7 @@ game_rules_add_gtest(
     game_rules_c_api_tests
     integration
     adapter/c_api_test.cpp
+    adapter/c_data_api_test.cpp
 )
 
 add_executable(
