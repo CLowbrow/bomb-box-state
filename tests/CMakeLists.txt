@@ -101,6 +101,110 @@ set_tests_properties(
     PROPERTIES LABELS "contract;integration;native"
 )
 
+add_executable(
+    game_rules_reference_runner
+    c-port/differential_runner.cpp
+)
+target_link_libraries(game_rules_reference_runner PRIVATE GameRules::State)
+target_compile_features(game_rules_reference_runner PRIVATE cxx_std_20)
+set_target_properties(game_rules_reference_runner PROPERTIES CXX_EXTENSIONS OFF)
+game_rules_set_project_warnings(game_rules_reference_runner)
+game_rules_enable_sanitizers(game_rules_reference_runner)
+
+add_executable(
+    game_rules_candidate_runner
+    c-port/differential_runner.cpp
+)
+target_link_libraries(game_rules_candidate_runner PRIVATE GameRules::StateC)
+target_compile_features(game_rules_candidate_runner PRIVATE cxx_std_20)
+set_target_properties(game_rules_candidate_runner PROPERTIES CXX_EXTENSIONS OFF)
+game_rules_set_project_warnings(game_rules_candidate_runner)
+game_rules_enable_sanitizers(game_rules_candidate_runner)
+
+add_test(
+    NAME game_rules.candidate.header_drift
+    COMMAND
+        "${CMAKE_COMMAND}" -E compare_files
+        "${PROJECT_SOURCE_DIR}/include/game_rules/c_api.h"
+        "${PROJECT_SOURCE_DIR}/c-port/include/game_rules/c_api.h"
+)
+set_tests_properties(
+    game_rules.candidate.header_drift
+    PROPERTIES LABELS "candidate;contract;native"
+)
+
+add_test(
+    NAME game_rules.reference_runner.browser_contract
+    COMMAND
+        game_rules_reference_runner
+        --check-expected
+        "${CMAKE_CURRENT_SOURCE_DIR}/contracts/browser_vertical_slice/v1/contract.txt"
+)
+set_tests_properties(
+    game_rules.reference_runner.browser_contract
+    PROPERTIES LABELS "candidate;contract;integration;native"
+)
+
+# This proves the incomplete candidate can consume the exact existing transcript syntax. It does
+# not compare against the authored oracle; the explicit differential test below owns that claim.
+add_test(
+    NAME game_rules.candidate_runner.consumes_browser_contract
+    COMMAND
+        game_rules_candidate_runner
+        "${CMAKE_CURRENT_SOURCE_DIR}/contracts/browser_vertical_slice/v1/contract.txt"
+)
+set_tests_properties(
+    game_rules.candidate_runner.consumes_browser_contract
+    PROPERTIES LABELS "candidate;contract;integration;native"
+)
+
+add_test(
+    NAME game_rules.candidate_runner.consumes_hardening_lifecycle
+    COMMAND
+        game_rules_candidate_runner
+        "${CMAKE_CURRENT_SOURCE_DIR}/contracts/engine_hardening/v1/lifecycle.txt"
+)
+set_tests_properties(
+    game_rules.candidate_runner.consumes_hardening_lifecycle
+    PROPERTIES LABELS "candidate;contract;integration;native"
+)
+
+find_package(Python3 REQUIRED COMPONENTS Interpreter)
+set(GAME_RULES_C_COMPARATOR "${PROJECT_SOURCE_DIR}/tools/c-port/compare_transcript.py")
+
+add_test(
+    NAME game_rules.differential.lifecycle_match
+    COMMAND
+        "${Python3_EXECUTABLE}"
+        "${GAME_RULES_C_COMPARATOR}"
+        "$<TARGET_FILE:game_rules_reference_runner>"
+        "$<TARGET_FILE:game_rules_candidate_runner>"
+        "${CMAKE_CURRENT_SOURCE_DIR}/c-port/transcripts/lifecycle-match.txt"
+)
+set_tests_properties(
+    game_rules.differential.lifecycle_match
+    PROPERTIES LABELS "candidate;differential;integration;native"
+)
+
+# This test succeeds only when the known stage-00 difference appears at the reviewed location. It
+# will fail if the comparator crashes, the runners fail, or a new earlier mismatch is introduced.
+add_test(
+    NAME game_rules.differential.gameplay_expected_incomplete
+    COMMAND
+        "${Python3_EXECUTABLE}"
+        "${GAME_RULES_C_COMPARATOR}"
+        --expect-difference
+        --expected-operation 1
+        --expected-path "$.status"
+        "$<TARGET_FILE:game_rules_reference_runner>"
+        "$<TARGET_FILE:game_rules_candidate_runner>"
+        "${CMAKE_CURRENT_SOURCE_DIR}/contracts/browser_vertical_slice/v1/contract.txt"
+)
+set_tests_properties(
+    game_rules.differential.gameplay_expected_incomplete
+    PROPERTIES LABELS "candidate;differential;expected-incomplete;integration;native"
+)
+
 # This small consumer stays framework-free and is compiled with the same
 # no-exceptions/no-RTTI policy as the core. It proves that the public C++ and C
 # headers remain usable under the engine's production compilation constraints.

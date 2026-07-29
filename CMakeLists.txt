@@ -103,6 +103,21 @@ target_compile_definitions(
 game_rules_set_project_warnings(game_rules_state)
 game_rules_set_runtime_options(game_rules_state)
 
+add_subdirectory(c-port)
+
+# The candidate copy is deliberately pinned byte-for-byte to the reference ABI.
+# This check is parent-only so a standalone c-port configure never reaches outside c-port/.
+add_custom_target(
+    game_rules_c_header_drift_check ALL
+    COMMAND
+        "${CMAKE_COMMAND}" -E compare_files
+        "${CMAKE_CURRENT_SOURCE_DIR}/include/game_rules/c_api.h"
+        "${CMAKE_CURRENT_SOURCE_DIR}/c-port/include/game_rules/c_api.h"
+    COMMENT "Checking the frozen C ABI header for candidate drift"
+    VERBATIM
+)
+add_dependencies(game_rules_state_c game_rules_c_header_drift_check)
+
 if(BUILD_TESTING AND NOT EMSCRIPTEN)
     add_subdirectory(tests)
 endif()

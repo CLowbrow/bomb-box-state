@@ -1,0 +1,10 @@
+# Stage-00 lifecycle operations intentionally shared by reference and candidate.
+get-state|../../contracts/engine_hardening/v1/no-level-state.expected.json
+move|../../contracts/engine_hardening/v1/no-level-move-east.expected.json|east
+rewind|../../contracts/engine_hardening/v1/no-level-rewind.expected.json
+destroy-engine|-
+get-state|-
+create-engine|-
+get-state|../../contracts/engine_hardening/v1/no-level-state.expected.json
+create-engine|-
+get-state|../../contracts/engine_hardening/v1/no-level-state.expected.json

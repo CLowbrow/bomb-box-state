@@ -144,3 +144,37 @@ is in [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md).
 
 For Unreal staging and platform-library requirements, see the
 [Unreal integration guide](../integrations/unreal/README.md).
+
+## C17 candidate and differential harness
+
+The stage-00 C candidate can be configured without the parent checkout:
+
+```sh
+cmake -S c-port -B out/c-port-native -G Ninja -DCMAKE_BUILD_TYPE=Debug -DBUILD_TESTING=ON
+cmake --build out/c-port-native
+ctest --test-dir out/c-port-native --output-on-failure
+```
+
+The ordinary native preset also builds the candidate, checks its pinned public
+header, and builds the two independent differential runners:
+
+```sh
+cmake --preset native-debug
+cmake --build --preset native-debug
+ctest --preset native-debug -L candidate
+```
+
+To inspect the intentional first gameplay gap directly:
+
+```sh
+python3 tools/c-port/compare_transcript.py \
+  out/build/native-debug/tests/game_rules_reference_runner \
+  out/build/native-debug/tests/game_rules_candidate_runner \
+  tests/contracts/browser_vertical_slice/v1/contract.txt
+```
+
+Normal comparison exits nonzero at the first difference. CTest's
+`game_rules.differential.gameplay_expected_incomplete` uses the comparator's
+explicit expected-difference mode, so the normal suite remains truthful while
+the port is incomplete. See `c-port/README.md` for sanitizer-ready and
+Emscripten commands, and `docs/c-port-status.md` for the feature matrix.

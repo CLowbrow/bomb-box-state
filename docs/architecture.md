@@ -96,3 +96,18 @@ Boundary-specific tests still cover C compilation and ownership, WebAssembly
 memory and JavaScript representations, install-package consumption, and host
 integration details. Test frameworks and fixtures are excluded from the
 installed `GameRules::State` package.
+
+## C17 rewrite boundary
+
+The behavior-preserving C17 candidate lives under `c-port/` and builds as
+`game_rules_state_c` / `GameRules::StateC`. It is intentionally self-contained:
+standalone configuration, production sources, public headers, candidate tests,
+and any future vendored dependencies cannot reach into the C++ checkout. The
+parent build performs a byte-for-byte drift check against the frozen C header.
+
+Differential execution uses separate reference and candidate runner processes,
+so their identical public C symbols never collide. Both consume the existing
+adapter-neutral contract transcript syntax and emit one canonical JSON result
+per operation. `docs/c-port-status.md` is the parity inventory and records
+intentional stage gaps; the C++ engine and reviewed contract outputs remain the
+behavioral oracle during the rewrite.
