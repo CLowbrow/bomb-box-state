@@ -118,6 +118,21 @@ add_custom_target(
 )
 add_dependencies(game_rules_state_c game_rules_c_header_drift_check)
 
+add_custom_target(
+    game_rules_c_yyjson_drift_check ALL
+    COMMAND "${CMAKE_COMMAND}" -E compare_files
+            "${CMAKE_CURRENT_SOURCE_DIR}/vendor/yyjson/yyjson.c"
+            "${CMAKE_CURRENT_SOURCE_DIR}/c-port/vendor/yyjson/yyjson.c"
+    COMMAND "${CMAKE_COMMAND}" -E compare_files
+            "${CMAKE_CURRENT_SOURCE_DIR}/vendor/yyjson/yyjson.h"
+            "${CMAKE_CURRENT_SOURCE_DIR}/c-port/vendor/yyjson/yyjson.h"
+    COMMAND "${CMAKE_COMMAND}" -E compare_files
+            "${CMAKE_CURRENT_SOURCE_DIR}/vendor/yyjson/LICENSE"
+            "${CMAKE_CURRENT_SOURCE_DIR}/c-port/vendor/yyjson/LICENSE"
+    COMMENT "Checking candidate yyjson provenance files for drift"
+    VERBATIM)
+add_dependencies(game_rules_state_c game_rules_c_yyjson_drift_check)
+
 if(BUILD_TESTING AND NOT EMSCRIPTEN)
     add_subdirectory(tests)
 endif()

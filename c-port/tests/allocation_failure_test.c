@@ -8,7 +8,15 @@
 #include <stdlib.h>
 #include <string.h>
 
-enum { MAX_TRACKED_ALLOCATIONS = 64 };
+enum { MAX_TRACKED_ALLOCATIONS = 2048 };
+
+static const char valid_level_json[] =
+    "{\"format\":\"game-rules-level\",\"version\":1,"
+    "\"coordinateSystem\":{\"origin\":{\"x\":0,\"y\":0},\"positiveX\":\"east\",\"positiveY\":\"north\"},"
+    "\"width\":1,\"height\":1,\"cells\":[{\"coordinate\":{\"x\":0,\"y\":0},"
+    "\"type\":\"flat\",\"elevation\":0}],\"fixtures\":[],"
+    "\"entities\":[{\"id\":\"1\",\"type\":\"player\",\"coordinate\":{\"x\":0,\"y\":0},"
+    "\"bottomHalfSteps\":0}]}";
 
 typedef struct tracked_allocation {
     void* pointer;
@@ -45,6 +53,9 @@ static void* tracked_allocate(void* context, size_t size)
     const size_t index = tracker->attempt;
     tracker->attempt += 1U;
     if (tracker->failure_enabled && index == tracker->fail_at) {
+        return NULL;
+    }
+    if (size > 1024U * 1024U * 1024U) {
         return NULL;
     }
     assert(tracker->allocation_count < MAX_TRACKED_ALLOCATIONS);
@@ -211,6 +222,88 @@ static void expect_atomic_replacement_failures(allocation_tracker* tracker,
     assert(tracker->live_count == baseline);
 }
 
+static void expect_stage02_load_failures(allocation_tracker* tracker,
+                                         const game_rules_allocator_v1* allocator)
+{
+    const game_rules_cell cell = {{0, 0}, GAME_RULES_CELL_FLAT, 0, 0};
+    const game_rules_entity entity = {1, GAME_RULES_ENTITY_PLAYER, {0, 0}, 0};
+    const game_rules_level_definition level = {
+        {{0, 0}, GAME_RULES_HORIZONTAL_EAST, GAME_RULES_VERTICAL_NORTH},
+        1U, 1U, &cell, 1U, NULL, 0U, &entity, 1U};
+    size_t json_attempts;
+    size_t typed_attempts;
+    size_t failure;
+    game_rules_engine* engine;
+    char* json;
+    game_rules_load_result load;
+
+    {
+        game_rules_level_definition overflow = level;
+        tracker_begin_success(tracker);
+        engine = game_rules_engine_create_with_allocator_v1(allocator);
+        assert(engine != NULL);
+        overflow.cell_count = UINT32_MAX;
+        assert(game_rules_engine_load_level_data(engine, &overflow, &load) ==
+               GAME_RULES_CALL_ALLOCATION_FAILED);
+        assert(game_rules_c_engine_session_marker(engine) == 0U);
+
+        overflow.cells = NULL;
+        tracker_begin_success(tracker);
+        assert(game_rules_engine_load_level_data(engine, &overflow, &load) ==
+               GAME_RULES_CALL_INVALID_ARGUMENT);
+        assert(tracker->attempt == 0U);
+        assert(game_rules_c_engine_session_marker(engine) == 0U);
+        game_rules_engine_destroy(engine);
+    }
+
+    tracker_begin_success(tracker);
+    engine = game_rules_engine_create_with_allocator_v1(allocator);
+    assert(engine != NULL);
+    tracker_begin_success(tracker);
+    json = game_rules_engine_load_level(engine, valid_level_json,
+                                        (uint32_t)strlen(valid_level_json));
+    assert(json != NULL);
+    json_attempts = tracker->attempt;
+    game_rules_string_free(json);
+    game_rules_engine_destroy(engine);
+
+    for (failure = 0U; failure < json_attempts; ++failure) {
+        tracker_begin_success(tracker);
+        engine = game_rules_engine_create_with_allocator_v1(allocator);
+        assert(engine != NULL);
+        tracker_begin_failure(tracker, failure);
+        assert(game_rules_engine_load_level(engine, valid_level_json,
+                                            (uint32_t)strlen(valid_level_json)) == NULL);
+        assert(game_rules_c_engine_session_marker(engine) == 0U);
+        game_rules_engine_destroy(engine);
+        assert(tracker->invalid_free_count == 0U);
+    }
+
+    tracker_begin_success(tracker);
+    engine = game_rules_engine_create_with_allocator_v1(allocator);
+    assert(engine != NULL);
+    memset(&load, 0, sizeof(load));
+    tracker_begin_success(tracker);
+    assert(game_rules_engine_load_level_data(engine, &level, &load) == GAME_RULES_CALL_OK);
+    typed_attempts = tracker->attempt;
+    game_rules_load_result_dispose(&load);
+    game_rules_engine_destroy(engine);
+
+    for (failure = 0U; failure < typed_attempts; ++failure) {
+        tracker_begin_success(tracker);
+        engine = game_rules_engine_create_with_allocator_v1(allocator);
+        assert(engine != NULL);
+        memset(&load, 0xA5, sizeof(load));
+        tracker_begin_failure(tracker, failure);
+        assert(game_rules_engine_load_level_data(engine, &level, &load) ==
+               GAME_RULES_CALL_ALLOCATION_FAILED);
+        assert(bytes_are_zero(&load, sizeof(load)));
+        assert(game_rules_c_engine_session_marker(engine) == 0U);
+        game_rules_engine_destroy(engine);
+        assert(tracker->invalid_free_count == 0U);
+    }
+}
+
 int main(void)
 {
     allocation_tracker tracker = {0};
@@ -261,6 +354,13 @@ int main(void)
     expect_one_allocation_failure_legacy(&tracker, engine);
     expect_one_allocation_failure_typed(&tracker, engine);
     expect_atomic_replacement_failures(&tracker, engine);
+    game_rules_engine_destroy(engine);
+    assert(tracker.live_count == 0U);
+    expect_stage02_load_failures(&tracker, &allocator);
+
+    tracker_begin_success(&tracker);
+    engine = game_rules_engine_create_with_allocator_v1(&allocator);
+    assert(engine != NULL);
 
     /* A result graph remains live through replacement and engine destruction. */
     tracker_begin_success(&tracker);

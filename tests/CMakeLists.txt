@@ -133,6 +133,20 @@ set_tests_properties(
     PROPERTIES LABELS "candidate;contract;native"
 )
 
+foreach(_yyjson_file IN ITEMS yyjson.c yyjson.h LICENSE)
+    string(REPLACE "." "_" _yyjson_test_suffix "${_yyjson_file}")
+    add_test(
+        NAME "game_rules.candidate.yyjson_${_yyjson_test_suffix}_drift"
+        COMMAND "${CMAKE_COMMAND}" -E compare_files
+                "${PROJECT_SOURCE_DIR}/vendor/yyjson/${_yyjson_file}"
+                "${PROJECT_SOURCE_DIR}/c-port/vendor/yyjson/${_yyjson_file}"
+    )
+    set_tests_properties(
+        "game_rules.candidate.yyjson_${_yyjson_test_suffix}_drift"
+        PROPERTIES LABELS "candidate;contract;provenance;native"
+    )
+endforeach()
+
 add_test(
     NAME game_rules.reference_runner.browser_contract
     COMMAND
@@ -186,7 +200,21 @@ set_tests_properties(
     PROPERTIES LABELS "candidate;differential;integration;native"
 )
 
-# This test succeeds only when the known stage-00 difference appears at the reviewed location. It
+add_test(
+    NAME game_rules.differential.level_load_parity
+    COMMAND
+        "${Python3_EXECUTABLE}"
+        "${GAME_RULES_C_COMPARATOR}"
+        "$<TARGET_FILE:game_rules_reference_runner>"
+        "$<TARGET_FILE:game_rules_candidate_runner>"
+        "${CMAKE_CURRENT_SOURCE_DIR}/c-port/level-load-parity.txt"
+)
+set_tests_properties(
+    game_rules.differential.level_load_parity
+    PROPERTIES LABELS "candidate;differential;parser;validation;integration;native"
+)
+
+# This test succeeds only when the known movement-stage difference appears at the reviewed location. It
 # will fail if the comparator crashes, the runners fail, or a new earlier mismatch is introduced.
 add_test(
     NAME game_rules.differential.gameplay_expected_incomplete
@@ -194,7 +222,7 @@ add_test(
         "${Python3_EXECUTABLE}"
         "${GAME_RULES_C_COMPARATOR}"
         --expect-difference
-        --expected-operation 1
+        --expected-operation 3
         --expected-path "$.status"
         "$<TARGET_FILE:game_rules_reference_runner>"
         "$<TARGET_FILE:game_rules_candidate_runner>"

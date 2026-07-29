@@ -1,0 +1,19 @@
+# Strict decoder, structural validation, canonical state, and rejected-load preservation.
+load|-|../contracts/browser_vertical_slice/v1/level.json
+get-state|-
+load|-|levels/malformed.json
+load|-|levels/unknown-member.json
+load|-|levels/duplicate-member.json
+load|-|levels/unsupported-version.json
+load|-|levels/fractional-width.json
+load|-|levels/bad-entity-id.json
+load|-|levels/no-player.json
+get-state|-
+load|-|levels/reordered-valid.json
+get-state|-
+load|-|levels/initial-fixtures.json
+get-state|-
+load|-|../contracts/engine_hardening/v1/terminal-level.json
+get-state|-
+load|-|levels/nesting-too-deep.json
+get-state|-

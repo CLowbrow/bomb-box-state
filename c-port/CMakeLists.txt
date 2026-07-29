@@ -22,7 +22,25 @@ option(GAME_RULES_C_WARNINGS_AS_ERRORS
        "Treat C candidate compiler warnings as errors"
        OFF)
 
-add_library(game_rules_state_c STATIC src/c_api.c)
+add_library(game_rules_c_yyjson OBJECT src/level_json_yyjson.c)
+target_compile_features(game_rules_c_yyjson PRIVATE c_std_99)
+set_target_properties(game_rules_c_yyjson PROPERTIES C_EXTENSIONS OFF POSITION_INDEPENDENT_CODE ON)
+target_compile_definitions(game_rules_c_yyjson PRIVATE
+    YYJSON_DISABLE_INCR_READER=1
+    YYJSON_DISABLE_NON_STANDARD=1
+    YYJSON_DISABLE_UTILS=1
+    YYJSON_DISABLE_WRITER=1)
+target_include_directories(game_rules_c_yyjson PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/vendor/yyjson")
+if(EMSCRIPTEN)
+    target_compile_options(game_rules_c_yyjson PRIVATE -O1)
+endif()
+
+add_library(game_rules_state_c STATIC
+    $<TARGET_OBJECTS:game_rules_c_yyjson>
+    src/c_api.c
+    src/level.c
+    src/level_json.c
+    src/stage02.c)
 add_library(GameRules::StateC ALIAS game_rules_state_c)
 target_compile_features(game_rules_state_c PUBLIC c_std_17)
 set_target_properties(
@@ -33,6 +51,7 @@ set_target_properties(
 )
 target_include_directories(
     game_rules_state_c
+    PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/vendor/yyjson"
     PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
         $<INSTALL_INTERFACE:include>
@@ -73,12 +92,21 @@ target_compile_features(game_rules_candidate_wasm_smoke PRIVATE c_std_17)
 set_target_properties(game_rules_candidate_wasm_smoke PROPERTIES C_EXTENSIONS OFF)
 game_rules_c_apply_options(game_rules_candidate_wasm_smoke)
 
+add_executable(game_rules_candidate_level_loading tests/level_loading_test.c)
+target_link_libraries(game_rules_candidate_level_loading PRIVATE GameRules::StateC)
+target_include_directories(game_rules_candidate_level_loading PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+target_compile_features(game_rules_candidate_level_loading PRIVATE c_std_17)
+set_target_properties(game_rules_candidate_level_loading PROPERTIES C_EXTENSIONS OFF)
+game_rules_c_apply_options(game_rules_candidate_level_loading)
+
 if(BUILD_TESTING)
     add_test(NAME game_rules.candidate.lifecycle COMMAND game_rules_candidate_lifecycle_smoke)
     add_test(NAME game_rules.candidate.allocation_failure COMMAND game_rules_candidate_allocation_failure)
+    add_test(NAME game_rules.candidate.level_loading COMMAND game_rules_candidate_level_loading)
     if(EMSCRIPTEN)
         set_tests_properties(game_rules.candidate.lifecycle PROPERTIES LABELS "candidate;wasm")
         set_tests_properties(game_rules.candidate.allocation_failure PROPERTIES LABELS "candidate;wasm")
+        set_tests_properties(game_rules.candidate.level_loading PROPERTIES LABELS "candidate;wasm")
         find_program(GAME_RULES_C_NODE_EXECUTABLE node)
         if(GAME_RULES_C_NODE_EXECUTABLE)
             add_test(
@@ -90,6 +118,7 @@ if(BUILD_TESTING)
     else()
         set_tests_properties(game_rules.candidate.lifecycle PROPERTIES LABELS "candidate;native")
         set_tests_properties(game_rules.candidate.allocation_failure PROPERTIES LABELS "candidate;native")
+        set_tests_properties(game_rules.candidate.level_loading PROPERTIES LABELS "candidate;native;parser;validation")
         add_test(NAME game_rules.candidate.wasm_smoke COMMAND game_rules_candidate_wasm_smoke)
         set_tests_properties(game_rules.candidate.wasm_smoke PROPERTIES LABELS "candidate;native;wasm-smoke")
     endif()
@@ -100,4 +129,6 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
     install(FILES include/game_rules/c_api.h DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/game_rules")
     install(FILES include/game_rules/c_allocator_api.h DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/game_rules")
     install(FILES THIRD_PARTY_NOTICES.md DESTINATION "${CMAKE_INSTALL_DATADIR}/GameRulesStateC")
+    install(FILES vendor/yyjson/LICENSE vendor/yyjson/README.game-rules.md
+            DESTINATION "${CMAKE_INSTALL_DATADIR}/GameRulesStateC/licenses")
 endif()

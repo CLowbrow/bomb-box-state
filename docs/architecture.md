@@ -114,6 +114,12 @@ storage is fully allocated before the active session pointer is swapped, so fail
 a partially committed level. The allocator context is host-owned and must outlive its engine and
 outstanding results; the candidate keeps no global allocator or mutable engine registry.
 
+The candidate owns a private pinned yyjson 0.12.0 copy, strict C17 decoder, shared typed level
+view, ordered validator, and canonical session representation. JSON and typed inputs converge before
+the allocate-then-swap commit. The parent checkout checks the candidate yyjson source, header, and
+license byte-for-byte against the reference pin, while standalone candidate builds use only files
+under `c-port/`.
+
 Differential execution uses separate reference and candidate runner processes,
 so their identical public C symbols never collide. Both consume the existing
 adapter-neutral contract transcript syntax and emit one canonical JSON result

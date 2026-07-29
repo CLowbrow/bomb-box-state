@@ -40,7 +40,7 @@ int main(void)
     assert(game_rules_api_version() == 1U);
     assert(game_rules_data_api_version() == 1U);
     assert(game_rules_allocator_api_version() == GAME_RULES_ALLOCATOR_API_VERSION_1);
-    assert(strcmp(game_rules_engine_status(), "c17_lifecycle") == 0);
+    assert(strcmp(game_rules_engine_status(), "schema_ready") == 0);
 
     engine = game_rules_engine_create();
     assert(engine != NULL);
@@ -53,7 +53,7 @@ int main(void)
     expect_json(game_rules_engine_rewind(engine),
                 "{\"apiVersion\":1,\"operation\":\"rewind\",\"status\":\"history_empty\",\"accepted\":false,\"events\":[],\"state\":null,\"outcome\":null}");
     expect_json(game_rules_engine_load_level(engine, "{}", 2U),
-                "{\"apiVersion\":1,\"operation\":\"loadLevel\",\"status\":\"not_implemented\",\"state\":null}");
+                "{\"apiVersion\":1,\"operation\":\"loadLevel\",\"status\":\"invalid_json\",\"error\":{\"code\":\"missing_member\",\"byteOffset\":0,\"path\":\"/format\"},\"state\":null}");
     expect_json(game_rules_engine_load_level(engine, NULL, 0U),
                 "{\"apiVersion\":1,\"operation\":\"loadLevel\",\"status\":\"invalid_argument\",\"state\":null}");
 
@@ -86,7 +86,7 @@ int main(void)
     assert(rewind.accepted == 0U);
     assert(rewind.owned_storage != NULL);
 
-    /* Stage 02 will populate this graph; stage 01 owns and disposes its root. */
+    /* An independently allocated load result owner is safe to dispose. */
     load.status = GAME_RULES_LOAD_INVALID_LEVEL;
     load.owned_storage = game_rules_c_engine_allocate_result_storage(engine, 16U);
     assert(load.owned_storage != NULL);

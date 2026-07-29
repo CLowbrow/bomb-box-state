@@ -1,10 +1,9 @@
 # C17 candidate engine
 
-This directory is the self-contained production candidate for the C17 rewrite. Stage 01 preserves
-the frozen public ABI and implements allocation, destruction, result disposal, and no-level
-lifecycle responses. Level loading deliberately returns `not_implemented` through the legacy JSON
-surface; the typed load entry point returns `GAME_RULES_CALL_INVALID_ARGUMENT` because version 1 of
-the frozen typed ABI has no not-implemented operation status.
+This directory is the self-contained production candidate for the C17 rewrite. Stage 02 preserves
+the frozen public ABI and implements strict version-1 JSON decoding, typed loading, complete world
+schema validation, canonical immutable level ownership, initial fixture state, and atomic
+replacement. Movement, physical stabilization, explosions, and rewind history are later stages.
 
 The frozen creation API uses the C runtime allocator. The additive, versioned
 `game_rules/c_allocator_api.h` extension permits an embedding host or deterministic test to supply

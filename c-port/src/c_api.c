@@ -9,29 +9,12 @@
 #include <stdlib.h>
 #include <string.h>
 
-typedef struct game_rules_allocator {
-    void* context;
-    game_rules_allocate_v1_fn allocate;
-    game_rules_deallocate_v1_fn deallocate;
-} game_rules_allocator;
-
 typedef union game_rules_owned_header {
     struct {
-        game_rules_allocator allocator;
+        game_rules_c_allocator allocator;
     } value;
     max_align_t alignment;
 } game_rules_owned_header;
-
-typedef struct game_rules_session {
-    uint32_t marker;
-    void* level_storage;
-    void* history_storage;
-} game_rules_session;
-
-struct game_rules_engine {
-    game_rules_allocator allocator;
-    game_rules_session* session;
-};
 
 static void* system_allocate(void* context, size_t size)
 {
@@ -45,9 +28,9 @@ static void system_deallocate(void* context, void* allocation)
     free(allocation);
 }
 
-static game_rules_allocator system_allocator(void)
+static game_rules_c_allocator system_allocator(void)
 {
-    game_rules_allocator allocator;
+    game_rules_c_allocator allocator;
     allocator.context = NULL;
     allocator.allocate = system_allocate;
     allocator.deallocate = system_deallocate;
@@ -63,7 +46,7 @@ static int allocator_v1_is_valid(const game_rules_allocator_v1* allocator)
            allocator->deallocate != NULL;
 }
 
-static void* allocate_owned(const game_rules_allocator* allocator, size_t payload_size)
+void* game_rules_c_allocate_owned(const game_rules_c_allocator* allocator, size_t payload_size)
 {
     game_rules_owned_header* header;
     size_t allocation_size;
@@ -85,10 +68,10 @@ static void* allocate_owned(const game_rules_allocator* allocator, size_t payloa
     return (void*)(header + 1);
 }
 
-static void deallocate_owned(void* payload)
+void game_rules_c_deallocate_owned(void* payload)
 {
     game_rules_owned_header* header;
-    game_rules_allocator allocator;
+    game_rules_c_allocator allocator;
     if (payload == NULL) {
         return;
     }
@@ -97,10 +80,10 @@ static void deallocate_owned(void* payload)
     allocator.deallocate(allocator.context, header);
 }
 
-static char* copy_json_with_allocator(const game_rules_allocator* allocator, const char* value)
+static char* copy_json_with_allocator(const game_rules_c_allocator* allocator, const char* value)
 {
     const size_t length = strlen(value);
-    char* const copy = (char*)allocate_owned(allocator, length + 1U);
+    char* const copy = (char*)game_rules_c_allocate_owned(allocator, length + 1U);
     if (copy == NULL) {
         return NULL;
     }
@@ -110,7 +93,7 @@ static char* copy_json_with_allocator(const game_rules_allocator* allocator, con
 
 static char* copy_json_for_engine(const game_rules_engine* engine, const char* value)
 {
-    const game_rules_allocator allocator =
+    const game_rules_c_allocator allocator =
         engine == NULL ? system_allocator() : engine->allocator;
     return copy_json_with_allocator(&allocator, value);
 }
@@ -126,20 +109,20 @@ static const char* direction_name(uint32_t direction)
     }
 }
 
-static void destroy_session(game_rules_session* session)
+void game_rules_c_destroy_session(game_rules_session* session)
 {
     if (session == NULL) {
         return;
     }
-    deallocate_owned(session->history_storage);
-    deallocate_owned(session->level_storage);
-    deallocate_owned(session);
+    game_rules_c_deallocate_owned(session->history_storage);
+    game_rules_c_deallocate_owned(session->level_storage);
+    game_rules_c_deallocate_owned(session);
 }
 
-static game_rules_engine* create_engine(const game_rules_allocator allocator)
+static game_rules_engine* create_engine(const game_rules_c_allocator allocator)
 {
     game_rules_engine* const engine =
-        (game_rules_engine*)allocate_owned(&allocator, sizeof(*engine));
+        (game_rules_engine*)game_rules_c_allocate_owned(&allocator, sizeof(*engine));
     if (engine == NULL) {
         return NULL;
     }
@@ -155,7 +138,7 @@ uint32_t game_rules_api_version(void)
 
 const char* game_rules_engine_status(void)
 {
-    return "c17_lifecycle";
+    return "schema_ready";
 }
 
 uint32_t game_rules_allocator_api_version(void)
@@ -171,7 +154,7 @@ game_rules_engine* game_rules_engine_create(void)
 game_rules_engine*
 game_rules_engine_create_with_allocator_v1(const game_rules_allocator_v1* allocator)
 {
-    game_rules_allocator internal;
+    game_rules_c_allocator internal;
     if (!allocator_v1_is_valid(allocator)) {
         return NULL;
     }
@@ -186,9 +169,9 @@ void game_rules_engine_destroy(game_rules_engine* engine)
     if (engine == NULL) {
         return;
     }
-    destroy_session(engine->session);
+    game_rules_c_destroy_session(engine->session);
     engine->session = NULL;
-    deallocate_owned(engine);
+    game_rules_c_deallocate_owned(engine);
 }
 
 uint32_t game_rules_c_engine_replace_session(game_rules_engine* engine,
@@ -203,7 +186,7 @@ uint32_t game_rules_c_engine_replace_session(game_rules_engine* engine,
     }
 
     replacement =
-        (game_rules_session*)allocate_owned(&engine->allocator, sizeof(*replacement));
+        (game_rules_session*)game_rules_c_allocate_owned(&engine->allocator, sizeof(*replacement));
     if (replacement == NULL) {
         return GAME_RULES_CALL_ALLOCATION_FAILED;
     }
@@ -212,17 +195,17 @@ uint32_t game_rules_c_engine_replace_session(game_rules_engine* engine,
     replacement->history_storage = NULL;
 
     if (level_storage_size != 0U) {
-        replacement->level_storage = allocate_owned(&engine->allocator, level_storage_size);
+        replacement->level_storage = game_rules_c_allocate_owned(&engine->allocator, level_storage_size);
         if (replacement->level_storage == NULL) {
-            destroy_session(replacement);
+            game_rules_c_destroy_session(replacement);
             return GAME_RULES_CALL_ALLOCATION_FAILED;
         }
         memset(replacement->level_storage, 0, level_storage_size);
     }
     if (history_storage_size != 0U) {
-        replacement->history_storage = allocate_owned(&engine->allocator, history_storage_size);
+        replacement->history_storage = game_rules_c_allocate_owned(&engine->allocator, history_storage_size);
         if (replacement->history_storage == NULL) {
-            destroy_session(replacement);
+            game_rules_c_destroy_session(replacement);
             return GAME_RULES_CALL_ALLOCATION_FAILED;
         }
         memset(replacement->history_storage, 0, history_storage_size);
@@ -230,7 +213,7 @@ uint32_t game_rules_c_engine_replace_session(game_rules_engine* engine,
 
     previous = engine->session;
     engine->session = replacement;
-    destroy_session(previous);
+    game_rules_c_destroy_session(previous);
     return GAME_RULES_CALL_OK;
 }
 
@@ -243,14 +226,13 @@ void* game_rules_c_engine_allocate_result_storage(const game_rules_engine* engin
                                                   size_t storage_size)
 {
     /* Public result graphs use one contiguous, independently owned arena. */
-    return engine == NULL ? NULL : allocate_owned(&engine->allocator, storage_size);
+    return engine == NULL ? NULL : game_rules_c_allocate_owned(&engine->allocator, storage_size);
 }
 
 char* game_rules_engine_load_level(game_rules_engine* engine,
                                    const char* level_json,
                                    uint32_t level_json_length)
 {
-    (void)level_json_length;
     if (engine == NULL) {
         return copy_json_for_engine(
             NULL,
@@ -261,9 +243,7 @@ char* game_rules_engine_load_level(game_rules_engine* engine,
             engine,
             "{\"apiVersion\":1,\"operation\":\"loadLevel\",\"status\":\"invalid_argument\",\"state\":null}");
     }
-    return copy_json_for_engine(
-        engine,
-        "{\"apiVersion\":1,\"operation\":\"loadLevel\",\"status\":\"not_implemented\",\"state\":null}");
+    return game_rules_c_stage02_load_json(engine, level_json, level_json_length);
 }
 
 char* game_rules_engine_get_state(game_rules_engine* engine)
@@ -273,9 +253,7 @@ char* game_rules_engine_get_state(game_rules_engine* engine)
             NULL,
             "{\"apiVersion\":1,\"operation\":\"getState\",\"status\":\"invalid_engine\",\"state\":null}");
     }
-    return copy_json_for_engine(
-        engine,
-        "{\"apiVersion\":1,\"operation\":\"getState\",\"status\":\"no_level\",\"state\":null}");
+    return game_rules_c_stage02_get_state(engine);
 }
 
 char* game_rules_engine_move(game_rules_engine* engine, uint32_t direction)
@@ -319,7 +297,7 @@ char* game_rules_engine_rewind(game_rules_engine* engine)
 
 void game_rules_string_free(char* result)
 {
-    deallocate_owned(result);
+    game_rules_c_deallocate_owned(result);
 }
 
 uint32_t game_rules_data_api_version(void)
@@ -330,7 +308,6 @@ uint32_t game_rules_data_api_version(void)
 uint32_t game_rules_engine_get_state_data(const game_rules_engine* engine,
                                           game_rules_state_result* out_result)
 {
-    void* owner;
     if (out_result == NULL) {
         return GAME_RULES_CALL_INVALID_ARGUMENT;
     }
@@ -338,12 +315,7 @@ uint32_t game_rules_engine_get_state_data(const game_rules_engine* engine,
     if (engine == NULL) {
         return GAME_RULES_CALL_INVALID_ENGINE;
     }
-    owner = game_rules_c_engine_allocate_result_storage(engine, 1U);
-    if (owner == NULL) {
-        return GAME_RULES_CALL_ALLOCATION_FAILED;
-    }
-    out_result->owned_storage = owner;
-    return GAME_RULES_CALL_OK;
+    return game_rules_c_stage02_get_state_data(engine, out_result);
 }
 
 uint32_t game_rules_engine_load_level_data(game_rules_engine* engine,
@@ -360,8 +332,7 @@ uint32_t game_rules_engine_load_level_data(game_rules_engine* engine,
     if (engine == NULL) {
         return GAME_RULES_CALL_INVALID_ENGINE;
     }
-    /* Level decoding and validation are deliberately deferred to stage 02. */
-    return GAME_RULES_CALL_INVALID_ARGUMENT;
+    return game_rules_c_stage02_load_data(engine, level, out_result);
 }
 
 uint32_t game_rules_engine_move_data(game_rules_engine* engine,
@@ -429,7 +400,7 @@ static void dispose_result(void* owned_storage, void* result, size_t result_size
     if (result == NULL) {
         return;
     }
-    deallocate_owned(owned_storage);
+    game_rules_c_deallocate_owned(owned_storage);
     memset(result, 0, result_size);
 }
 
