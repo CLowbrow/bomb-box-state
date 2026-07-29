@@ -1,19 +1,21 @@
 # C17 rewrite status
 
-## Purpose and stage-00 boundary
+## Purpose and stage-01 boundary
 
 `c-port/` is the self-contained C17 production candidate. The C++ engine under `src/` and
 `include/` remains the frozen behavioral reference, `docs/rules.md` remains normative, and
-`include/game_rules/c_api.h` remains the ABI source of truth. Stage 00 implements infrastructure
-only: allocation, destruction, result disposal, and no-level responses. It contains no gameplay
-rules, level parser, validator, canonicalizer, resolved state, or history implementation.
+`include/game_rules/c_api.h` remains the ABI source of truth. Stage 01 completes the production
+lifecycle slice: allocator-backed creation/destruction, explicit session ownership, atomic
+replacement scaffolding, independent result ownership/disposal, and exact no-level responses. It
+contains no gameplay rules, level parser, validator, canonicalizer, resolved state, or history
+implementation.
 
 The candidate header is a byte-for-byte pinned copy at `c-port/include/game_rules/c_api.h`. The
 parent build target and CTest named `game_rules_c_header_drift_check` and
 `game_rules.candidate.header_drift` fail on any difference. A standalone `cmake -S c-port`
 configure does not inspect the parent header or any other parent path.
 
-The frozen typed ABI has no `not_implemented` call or operation status. Until stage 01, the legacy
+The frozen typed ABI has no `not_implemented` call or operation status. Until stage 02, the legacy
 JSON load operation returns the explicit non-conforming stage status `not_implemented`, while a
 well-formed typed load call returns `GAME_RULES_CALL_INVALID_ARGUMENT` without changing the
 engine. This is a tracked infrastructure limitation, not claimed parity and not a new normative
@@ -23,12 +25,13 @@ rule. Differential tests use the legacy JSON surface until typed level loading e
 
 ### Operations and ownership
 
-| Surface | Operation | Reference contract | Stage 00 |
+| Surface | Operation | Reference contract | Stage 01 |
 | --- | --- | --- | --- |
 | Shared | `game_rules_api_version`, `game_rules_data_api_version` | Independent version values, both currently 1 | matched |
 | Shared | `game_rules_engine_create` | Allocates one independent mutable session; null only on allocation failure | matched |
-| Shared | `game_rules_engine_destroy` | Accepts null; releases all engine-owned level and history state | matched for empty engines |
-| Legacy JSON | `game_rules_engine_status` | Static storage, never freed | candidate reports `c17_skeleton` to expose incompleteness |
+| Shared | `game_rules_engine_destroy` | Accepts null; releases all engine-owned level and history state | matched; empty engine and replacement scaffold covered |
+| C17 extension | `game_rules_engine_create_with_allocator_v1` | Additive, versioned custom allocator entry point | implemented and failure-injected |
+| Legacy JSON | `game_rules_engine_status` | Static storage, never freed | candidate reports `c17_lifecycle` to expose its current capability |
 | Legacy JSON | `load_level` | Parse, validate, canonicalize, stabilize, and atomically replace; invalid input preserves state/history | not implemented |
 | Legacy JSON | `get_state` | Complete current renderable snapshot or null | matched only with no level/null engine |
 | Legacy JSON | `move` | Complete rejection or turn with ordered ticks/events and authoritative state | matched only for no-level and invalid-direction gating |
@@ -38,14 +41,23 @@ rule. Differential tests use the legacy JSON surface until typed level loading e
 | Typed data | `get_state_data` | Owned immutable snapshot graph or `has_state == 0` | matched only with no level/null engine |
 | Typed data | `move_data` | Owned complete move result graph | matched only for no-level and invalid-direction gating |
 | Typed data | `rewind_data` | Owned complete rewind result graph | matched only for empty history |
-| Typed data | four `*_result_dispose` functions | Accept null, free `owned_storage`, and zero the result | matched for stage-00 allocations |
+| Typed data | four `*_result_dispose` functions | Accept null, free `owned_storage`, and zero the result | matched for stage-01 owners; repeated disposal after zeroing is safe |
 
-Legacy non-null strings are caller-owned `malloc` allocations. Typed results own one allocation
-graph through opaque `owned_storage`; callers initialize results to zero, do not copy an owning
-result, dispose before reuse, and dispose exactly once. Nested pointers must remain valid after
-later engine calls and engine destruction. Input arrays are borrowed only for the load call. The
-frozen ABI provides no custom allocator hook, so the C candidate uses the C runtime
-`malloc`/`free`; future internal allocator abstractions must preserve that public ownership model.
+Legacy non-null strings and typed `owned_storage` values are caller-owned allocations. A typed
+result graph uses one contiguous arena, so future nested arrays must point inside its
+`owned_storage` allocation and cannot require separate disposal. Each owner has a private aligned
+prefix containing a copy of its deallocator and context; nested pointers
+therefore remain valid after later calls, atomic session replacement, and engine destruction.
+Callers initialize results to zero, do not copy an owning result, dispose before reuse, and use the
+matching disposer. A disposer accepts null, frees a non-null owner, and zeros the result, so calling
+it again on that same cleared struct is safe. Input arrays remain borrowed only for a future load
+call.
+
+The frozen `c_api.h` remains byte-for-byte unchanged and its creation function uses the C runtime
+allocator. The additive `c_allocator_api.h` version-1 extension accepts allocate/deallocate
+callbacks. All engine, replacement-session, legacy-result, and typed-result allocations for such
+an engine use that allocator. The allocator context must outlive the engine and all outstanding
+results. No process-global allocator or mutable registry exists.
 
 ### Status inventory
 
@@ -134,20 +146,22 @@ state plus current snapshot.
 
 ## Feature-parity matrix
 
-Status meanings: **matched** is covered against the reference; **skeleton** is intentionally
-limited lifecycle infrastructure; **not started** has no production implementation in `c-port/`.
+Status meanings: **matched** is covered against the reference; **scaffolded** is production
+ownership infrastructure without level behavior; **not started** has no production implementation
+in `c-port/`.
 
 | Subsystem | Required behavior | Reference executable coverage | Candidate status and mapped tests |
 | --- | --- | --- | --- |
 | Frozen C ABI | Exact constants, layouts, prototypes, C compilation | `tests/consumer/c_api_header_smoke.c`; `tests/adapter/c_*` | **matched header**; build/CTest drift check; `c-port/tests/lifecycle_smoke.c` |
-| Engine lifetime | Independent instances, null-safe destroy, no global mutable state | `adapter/c_api_test.cpp`; `behavior/hardening_test.cpp`; lifecycle contract | **skeleton**; lifecycle smoke and `lifecycle-match.txt` |
-| Legacy result ownership | Allocated null-terminated JSON, null on allocation failure, explicit free | `adapter/c_api_test.cpp` | **skeleton matched** for stage-00 responses; lifecycle smoke |
-| Typed result ownership | Immutable independent graphs, disposal zeros, survival after engine destruction | `adapter/c_data_api_test.cpp` | **skeleton matched** only for empty results; lifecycle smoke |
+| Engine lifetime | Independent instances, null-safe destroy, no global mutable state | `adapter/c_api_test.cpp`; `behavior/hardening_test.cpp`; lifecycle contract | **matched for lifecycle slice**; `lifecycle_smoke.c`, `allocation_failure_test.c`, `lifecycle-match.txt` |
+| Allocator/failure transaction | Every owned allocation fails cleanly; replacement is allocate-then-swap | reference boundary allocation statuses and replacement atomicity tests | **matched/scaffolded**; failure at every stage-01 allocation index, overflow, leak/double-free counters |
+| Legacy result ownership | Allocated null-terminated JSON, null on allocation failure, explicit free | `adapter/c_api_test.cpp` | **matched for lifecycle responses**; allocation failure and post-destroy lifetime covered |
+| Typed result ownership | Immutable independent graphs, disposal zeros, survival after engine destruction | `adapter/c_data_api_test.cpp` | **matched for lifecycle results**; all four disposal paths, double-safe cleared disposal, post-replacement/destruction event view |
 | Level JSON codec | Strict v1 parse, resource limits, precise errors, canonical encoding | `behavior/level_json_test.cpp`; malformed contract load | **not started**; candidate runner proves byte input transport only |
 | Typed input decoding | Borrowed arrays; pointer/tag/enum checks; no partial mutation | `adapter/c_data_api_test.cpp` | **not started**; only top-level null checks exist |
 | World schema validation | All 21 errors and stable ordered reporting | `behavior/world_schema_test.cpp`; `behavior/level_json_test.cpp` | **not started** |
 | Canonicalization | Input-order independence and canonical static/dynamic arrays | `world_schema_test.cpp`; `player_push_test.cpp`; `falling_test.cpp`; conflict contracts | **not started** |
-| Load transaction | Validate before replace; initialization; invalid-load preservation; replacement isolation | `resolved_state_history_test.cpp`; `hardening_test.cpp`; lifecycle contract | **not started**; explicit differential mismatch |
+| Load transaction | Validate before replace; initialization; invalid-load preservation; replacement isolation | `resolved_state_history_test.cpp`; `hardening_test.cpp`; lifecycle contract | **ownership scaffolded** with allocation-complete swap and rollback; public load behavior not started; explicit differential mismatch |
 | Initialization/stabilization | Initial fixtures, win, gravity, slides, explosions until stable/terminal | `falling_test.cpp`; `fixtures_test.cpp`; `ramps_test.cpp`; `explosions_test.cpp` | **not started** |
 | Flat walking/axes | Four directions, axis mapping, legal support, rejection atomics | `behavior/flat_walking_test.cpp` | **not started** |
 | Player push | One eligible top entity, atomic push, heights, order independence | `behavior/player_push_test.cpp`; `falling_test.cpp` | **not started** |
@@ -156,11 +170,11 @@ limited lifecycle infrastructure; **not started** has no production implementati
 | Explosions/chains | Waves, height targeting, conflicts, settlement before next wave | `behavior/explosions_test.cpp`; `unit/explosions_test.cpp`; conflict contract | **not started** |
 | Switches/doors | AND colors, held-open doors, event ordering, rewind | `behavior/fixtures_test.cpp`; `unit/fixtures_test.cpp` | **not started** |
 | Teleporters/outcome | Eligibility, immediate terminal win, win precedence, terminal gating | `behavior/fixtures_test.cpp`; `ramps_test.cpp`; terminal contract | **not started** |
-| Resolved-state history | Root, repeated rewind, boundary, branch/no redo, terminal rewind | `behavior/resolved_state_history_test.cpp`; `hardening_test.cpp`; rewind-stress contract | **empty-history skeleton**; lifecycle smoke/match |
+| Resolved-state history | Root, repeated rewind, boundary, branch/no redo, terminal rewind | `behavior/resolved_state_history_test.cpp`; `hardening_test.cpp`; rewind-stress contract | **matched only for no-level empty history**; real history not started |
 | Simultaneous conflicts | Shared snapshots; no ID/container-order physics | `behavior/hardening_test.cpp`; explosion/slide conflict contracts | **not started** |
 | Differential transcript | Same operations/bytes through separate symbol spaces | existing contracts plus `tests/c-port/transcripts/lifecycle-match.txt` | **matched infrastructure**; reference/candidate runner and comparator CTests |
-| Native/sanitizer build | Strict C17, warnings, ASan/UBSan-ready | native presets and CI sanitizer guidance | **configured**; standalone/native builds; do not run sanitizer tests on Apple Silicon/macOS |
-| WebAssembly skeleton | C-only candidate can instantiate under Emscripten | existing JS/Wasm contract suite for reference | **smoke target added**; `game_rules_candidate_wasm_smoke` |
+| Native/sanitizer build | Strict C17, warnings, ASan/UBSan-ready | native presets and CI sanitizer guidance | **native green**; ASan/UBSan build green; runtime intentionally not executed on Apple Silicon/macOS |
+| WebAssembly lifecycle | C-only candidate lifecycle and ownership under Emscripten | existing JS/Wasm contract suite for reference | **green**; lifecycle, failure-injection, and post-destroy result smoke tests (3/3) |
 
 ## Differential harness
 
@@ -180,7 +194,8 @@ fails if the expected difference disappears, moves, or is preceded by another di
 
 Current proofs:
 
-- `game_rules.differential.lifecycle_match` compares nine no-level and destroy/recreate operations.
+- `game_rules.differential.lifecycle_match` compares 16 operations: no-level state, all four valid
+  directions, invalid direction, rewind, destroyed-engine calls, load gating, and repeated creation.
 - `game_rules.differential.gameplay_expected_incomplete` requires the browser vertical-slice load
   to differ at operation 1, `$.status`: reference `loaded`, candidate `not_implemented`.
 - `game_rules.reference_runner.browser_contract` separately checks reference output against every
@@ -190,13 +205,31 @@ Current proofs:
   transcript and level bytes, including repeated replacement and malformed JSON, without claiming
   parity.
 
-## Stage 01 starting point
+## Stage 01 verification and consciously deferred behavior
 
-Start stage 01 with the rule-neutral data boundary: add C value/storage types, strict level-format
-v1 decoding, all structural validation codes, and canonicalization under `c-port/`, with direct C
-tests ported from `behavior/level_json_test.cpp`, `behavior/world_schema_test.cpp`, and the typed
-adapter malformed-input cases. Vendor yyjson 0.12.0 and its license/provenance inside `c-port/`
-before using it. Do not implement stabilization, movement, or history in that slice. Once JSON and
-typed inputs produce the same canonical validated level, change the first differential milestone
-to a structurally invalid load (which requires no gameplay) before attempting a stable flat-level
-load and initialization in the following stage.
+- Standalone native C17 build with warnings-as-errors: 3/3 candidate tests passed.
+- Parent native debug suite: 119/119 tests passed; lifecycle differential parity matched all 16
+  operations.
+- Emscripten 6.0.3 build and Node execution: lifecycle, allocation-failure, and wasm smoke tests
+  passed (3/3).
+- The standalone ASan/UBSan configuration built successfully. Per repository policy, sanitizer
+  tests were not executed on this Apple Silicon/macOS host because the Apple sanitizer runtime is
+  not a supported verification environment; Ubuntu sanitizer CI remains required for a runtime
+  clean claim.
+- Legacy load with non-null bytes still returns `not_implemented`; typed load with non-null level
+  still returns `GAME_RULES_CALL_INVALID_ARGUMENT`. These deliberate non-parity statuses do not
+  mutate the replacement scaffold. No level, initialization, movement, or rewind-history behavior
+  has been ported.
+- `game_rules_engine_status()` deliberately reports `c17_lifecycle`, not the reference
+  `schema_ready`, until the schema boundary exists.
+
+## Precise stage 02 prerequisites
+
+Stage 02 must add the rule-neutral data boundary before any gameplay: C-owned value/storage types,
+strict level-format v1 decoding, all structural validation codes, and canonicalization under
+`c-port/`. It must vendor yyjson 0.12.0 and its license/provenance inside `c-port/`, port the
+relevant `behavior/level_json_test.cpp`, `behavior/world_schema_test.cpp`, and typed adapter
+malformed-input cases, and construct a complete replacement session before calling the existing
+allocate-then-swap commit seam. JSON and typed inputs must converge on the same canonical validated
+level. The next differential milestone is a structurally invalid load, which requires no gameplay;
+stabilization, real movement, and resolved-state history remain later stages.

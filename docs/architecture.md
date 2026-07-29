@@ -105,6 +105,15 @@ standalone configuration, production sources, public headers, candidate tests,
 and any future vendored dependencies cannot reach into the C++ checkout. The
 parent build performs a byte-for-byte drift check against the frozen C header.
 
+The frozen creation function uses the C runtime allocator. The C candidate also provides an
+additive version-1 allocator header, leaving the frozen ABI untouched. Engine/session storage and
+independent result graphs retain explicit allocator ownership. Each result graph is one contiguous
+arena whose nested views cannot require child frees, and it carries enough private owner metadata
+to be disposed after session replacement or engine destruction. Replacement
+storage is fully allocated before the active session pointer is swapped, so failure cannot expose
+a partially committed level. The allocator context is host-owned and must outlive its engine and
+outstanding results; the candidate keeps no global allocator or mutable engine registry.
+
 Differential execution uses separate reference and candidate runner processes,
 so their identical public C symbols never collide. Both consume the existing
 adapter-neutral contract transcript syntax and emit one canonical JSON result

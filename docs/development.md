@@ -147,7 +147,7 @@ For Unreal staging and platform-library requirements, see the
 
 ## C17 candidate and differential harness
 
-The stage-00 C candidate can be configured without the parent checkout:
+The stage-01 lifecycle C candidate can be configured without the parent checkout:
 
 ```sh
 cmake -S c-port -B out/c-port-native -G Ninja -DCMAKE_BUILD_TYPE=Debug -DBUILD_TESTING=ON

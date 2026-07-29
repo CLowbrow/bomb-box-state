@@ -54,6 +54,13 @@ finished; it releases the graph and zeros the result. Do not copy an owning resu
 Initialize a result to zero before its first call, and dispose it before reuse. Dispose functions
 accept null.
 
+The frozen shared ABI has no allocator parameter. The C17 candidate keeps it unchanged and adds
+the separately included, versioned `game_rules/c_allocator_api.h` extension. Engines created with
+`game_rules_engine_create_with_allocator_v1()` use the supplied callbacks for engine/session
+storage and every result returned by that engine. The allocator context must remain usable until
+the engine and all outstanding legacy and typed results have been released. The ordinary
+`game_rules_engine_create()` continues to use the C runtime allocator.
+
 The call return value reports boundary failures:
 
 - `GAME_RULES_CALL_OK`: the operation ran; inspect its operation-specific status or `has_state`;
