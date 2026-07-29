@@ -214,6 +214,20 @@ set_tests_properties(
     PROPERTIES LABELS "candidate;differential;parser;validation;integration;native"
 )
 
+add_test(
+    NAME game_rules.differential.stage03_load_state_parity
+    COMMAND
+        "${Python3_EXECUTABLE}"
+        "${GAME_RULES_C_COMPARATOR}"
+        "$<TARGET_FILE:game_rules_reference_runner>"
+        "$<TARGET_FILE:game_rules_candidate_runner>"
+        "${CMAKE_CURRENT_SOURCE_DIR}/c-port/stage03-load-state-parity.txt"
+)
+set_tests_properties(
+    game_rules.differential.stage03_load_state_parity
+    PROPERTIES LABELS "candidate;differential;initialization;snapshot;integration;native"
+)
+
 # This test succeeds only when the known movement-stage difference appears at the reviewed location. It
 # will fail if the comparator crashes, the runners fail, or a new earlier mismatch is introduced.
 add_test(

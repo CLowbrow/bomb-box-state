@@ -7,6 +7,8 @@ int main(void)
     game_rules_state_result state = {0};
     game_rules_move_result move = {0};
     game_rules_rewind_result rewind = {0};
+    game_rules_load_result load = {0};
+    game_rules_state_result loaded_state = {0};
     char* json;
     game_rules_engine* const engine = game_rules_engine_create();
     if (engine == 0) {
@@ -39,12 +41,53 @@ int main(void)
         game_rules_engine_destroy(engine);
         return 5;
     }
+
+    {
+        static const game_rules_cell cells[2] = {
+            {{0, 0}, GAME_RULES_CELL_FLAT, 0, 0},
+            {{1, 0}, GAME_RULES_CELL_FLAT, 1, 0}};
+        static const game_rules_entity entities[2] = {
+            {UINT64_MAX, GAME_RULES_ENTITY_BARREL, {0, 0}, 4},
+            {1U, GAME_RULES_ENTITY_PLAYER, {1, 0}, 2}};
+        const game_rules_level_definition level = {
+            {{0, 0}, GAME_RULES_HORIZONTAL_EAST, GAME_RULES_VERTICAL_NORTH},
+            2U, 1U, cells, 2U, 0, 0U, entities, 2U};
+        if (game_rules_engine_load_level_data(engine, &level, &load) !=
+                GAME_RULES_CALL_OK ||
+            load.tick_count != 2U ||
+            load.ticks[0].state_after.armed_barrel_count != 1U ||
+            load.ticks[0].state_after.armed_barrel_ids[0] != UINT64_MAX ||
+            load.state.resolved.entity_count != 1U ||
+            load.state.resolved.entities[0].id != 1U) {
+            game_rules_rewind_result_dispose(&rewind);
+            game_rules_move_result_dispose(&move);
+            game_rules_state_result_dispose(&state);
+            game_rules_engine_destroy(engine);
+            return 6;
+        }
+        if (game_rules_engine_get_state_data(engine, &loaded_state) != GAME_RULES_CALL_OK ||
+            !loaded_state.has_state || loaded_state.state.resolved.entity_count != 1U ||
+            loaded_state.state.resolved.entities == load.state.resolved.entities) {
+            game_rules_load_result_dispose(&load);
+            game_rules_rewind_result_dispose(&rewind);
+            game_rules_move_result_dispose(&move);
+            game_rules_state_result_dispose(&state);
+            game_rules_engine_destroy(engine);
+            return 7;
+        }
+    }
     game_rules_engine_destroy(engine);
     if (move.events[0].move_status != GAME_RULES_MOVE_NO_LEVEL) {
-        return 6;
+        return 8;
     }
+    if (load.ticks[0].state_after.armed_barrel_ids[0] != UINT64_MAX ||
+        loaded_state.state.resolved.entities[0].id != 1U) {
+        return 9;
+    }
+    game_rules_state_result_dispose(&loaded_state);
+    game_rules_load_result_dispose(&load);
     game_rules_rewind_result_dispose(&rewind);
     game_rules_move_result_dispose(&move);
     game_rules_state_result_dispose(&state);
-    return game_rules_api_version() == 1U ? 0 : 7;
+    return game_rules_api_version() == 1U ? 0 : 10;
 }

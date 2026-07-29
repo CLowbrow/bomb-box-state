@@ -11,6 +11,52 @@ typedef struct game_rules_c_allocator {
     void (*deallocate)(void* context, void* allocation);
 } game_rules_c_allocator;
 
+/* Canonical dynamic state. Counts never exceed the capacities owned by the session arena. */
+typedef struct game_rules_c_state {
+    game_rules_entity* entities;
+    uint32_t entity_count;
+    uint32_t entity_capacity;
+    uint64_t* armed_barrel_ids;
+    uint32_t armed_barrel_count;
+    uint32_t armed_barrel_capacity;
+    uint32_t* active_switch_colors;
+    uint32_t active_switch_color_count;
+    uint32_t active_switch_color_capacity;
+    game_rules_coordinate* open_doors;
+    uint32_t open_door_count;
+    uint32_t open_door_capacity;
+    uint32_t outcome;
+} game_rules_c_state;
+
+typedef struct game_rules_c_tick {
+    uint32_t index;
+    game_rules_event* events;
+    uint32_t event_count;
+    game_rules_c_state state_after;
+    /* One private arena owns events and every array reachable from state_after. */
+    void* owned_storage;
+} game_rules_c_tick;
+
+typedef struct game_rules_c_slide_candidate {
+    game_rules_coordinate source;
+    game_rules_coordinate destination;
+    int32_t destination_bottom_half_steps;
+    uint32_t first_entity;
+    uint32_t entity_count;
+} game_rules_c_slide_candidate;
+
+typedef struct game_rules_c_blast_target {
+    uint64_t id;
+    uint32_t kind;
+    game_rules_coordinate coordinate;
+    int32_t bottom_half_steps;
+    uint32_t impulses;
+    game_rules_coordinate destination;
+    uint32_t has_destination;
+    uint32_t movement_is_valid;
+    uint32_t destination_conflicts;
+} game_rules_c_blast_target;
+
 typedef struct game_rules_session {
     uint32_t marker;
     void* level_storage;
@@ -23,15 +69,21 @@ typedef struct game_rules_session {
     uint32_t cell_count;
     game_rules_fixture* fixtures;
     uint32_t fixture_count;
-    game_rules_entity* entities;
-    uint32_t entity_count;
-    uint32_t outcome;
-    uint32_t* active_colors;
-    uint32_t active_color_count;
-    game_rules_coordinate* open_doors;
-    uint32_t open_door_count;
-    game_rules_event* initial_events;
-    uint32_t initial_event_count;
+    uint32_t* fixture_index_by_cell;
+    /* Initial is immutable; every physical tick reads current and writes scratch, then swaps. */
+    game_rules_c_state initial_state;
+    game_rules_c_state current_state;
+    game_rules_c_state scratch_state;
+    game_rules_event* scratch_events;
+    uint32_t scratch_event_capacity;
+    game_rules_event* scratch_terminal_events;
+    uint32_t scratch_terminal_event_capacity;
+    game_rules_c_slide_candidate* scratch_slides;
+    game_rules_c_blast_target* scratch_targets;
+    uint64_t* scratch_source_ids;
+    game_rules_c_tick* initialization_ticks;
+    uint32_t initialization_tick_count;
+    uint32_t initialization_tick_capacity;
 } game_rules_session;
 
 struct game_rules_engine {
@@ -112,6 +164,10 @@ void game_rules_c_validate_level(const game_rules_c_level_view* level,
 void game_rules_c_validation_result_destroy(game_rules_c_validation_result* result);
 void game_rules_c_canonicalize_level(game_rules_c_owned_level* level);
 
+game_rules_session* game_rules_c_build_resolved_session(
+    const game_rules_c_allocator* allocator,
+    const game_rules_c_level_view* level);
+
 void game_rules_c_decode_level_json(const char* json,
                                     size_t json_length,
                                     const game_rules_c_allocator* allocator,
@@ -120,13 +176,13 @@ void game_rules_c_decode_result_destroy(game_rules_c_decode_result* result);
 const char* game_rules_c_json_error_name(uint32_t code);
 const char* game_rules_c_validation_error_name(uint32_t code);
 
-char* game_rules_c_stage02_load_json(game_rules_engine* engine,
+char* game_rules_c_stage03_load_json(game_rules_engine* engine,
                                      const char* json,
                                      uint32_t length);
-char* game_rules_c_stage02_get_state(game_rules_engine* engine);
-uint32_t game_rules_c_stage02_get_state_data(const game_rules_engine* engine,
+char* game_rules_c_stage03_get_state(game_rules_engine* engine);
+uint32_t game_rules_c_stage03_get_state_data(const game_rules_engine* engine,
                                              game_rules_state_result* result);
-uint32_t game_rules_c_stage02_load_data(game_rules_engine* engine,
+uint32_t game_rules_c_stage03_load_data(game_rules_engine* engine,
                                         const game_rules_level_definition* level,
                                         game_rules_load_result* result);
 void game_rules_c_destroy_session(game_rules_session* session);

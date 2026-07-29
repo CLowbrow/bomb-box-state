@@ -115,8 +115,10 @@ a partially committed level. The allocator context is host-owned and must outliv
 outstanding results; the candidate keeps no global allocator or mutable engine registry.
 
 The candidate owns a private pinned yyjson 0.12.0 copy, strict C17 decoder, shared typed level
-view, ordered validator, and canonical session representation. JSON and typed inputs converge before
-the allocate-then-swap commit. The parent checkout checks the candidate yyjson source, header, and
+view, ordered validator, and canonical session representation. Its supplied, current, and scratch
+resolved-state buffers implement immutable pre-tick initialization; retained initialization ticks
+own complete event and state snapshots. JSON and typed inputs converge before the
+allocate-then-swap commit. The parent checkout checks the candidate yyjson source, header, and
 license byte-for-byte against the reference pin, while standalone candidate builds use only files
 under `c-port/`.
 

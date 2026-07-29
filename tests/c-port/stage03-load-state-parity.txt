@@ -1,0 +1,22 @@
+# Stage 03 requires complete load and get-state parity for stable, unstable,
+# reordered, fixture-bearing, coordinate-variant, terminal, and empty-array levels.
+load|-|../contracts/browser_vertical_slice/v1/level.json
+get-state|-
+load|-|levels/reordered-valid.json
+get-state|-
+load|-|levels/initial-fixtures.json
+get-state|-
+load|-|levels/initial-fixture-loss.json
+get-state|-
+load|-|levels/coordinate-variant.json
+get-state|-
+load|-|../contracts/engine_hardening/v1/explosion-conflict-level.json
+get-state|-
+load|-|../contracts/engine_hardening/v1/explosion-conflict-level-reordered.json
+get-state|-
+load|-|../contracts/engine_hardening/v1/slide-conflict-level.json
+get-state|-
+load|-|../contracts/engine_hardening/v1/slide-conflict-level-reordered.json
+get-state|-
+load|-|../contracts/engine_hardening/v1/terminal-level.json
+get-state|-

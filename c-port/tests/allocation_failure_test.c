@@ -8,15 +8,18 @@
 #include <stdlib.h>
 #include <string.h>
 
-enum { MAX_TRACKED_ALLOCATIONS = 2048 };
+enum { MAX_TRACKED_ALLOCATIONS = 16384 };
 
 static const char valid_level_json[] =
     "{\"format\":\"game-rules-level\",\"version\":1,"
     "\"coordinateSystem\":{\"origin\":{\"x\":0,\"y\":0},\"positiveX\":\"east\",\"positiveY\":\"north\"},"
-    "\"width\":1,\"height\":1,\"cells\":[{\"coordinate\":{\"x\":0,\"y\":0},"
-    "\"type\":\"flat\",\"elevation\":0}],\"fixtures\":[],"
-    "\"entities\":[{\"id\":\"1\",\"type\":\"player\",\"coordinate\":{\"x\":0,\"y\":0},"
-    "\"bottomHalfSteps\":0}]}";
+    "\"width\":2,\"height\":1,\"cells\":[{\"coordinate\":{\"x\":0,\"y\":0},"
+    "\"type\":\"flat\",\"elevation\":0},{\"coordinate\":{\"x\":1,\"y\":0},"
+    "\"type\":\"flat\",\"elevation\":1}],\"fixtures\":[],"
+    "\"entities\":[{\"id\":\"18446744073709551615\",\"type\":\"barrel\","
+    "\"coordinate\":{\"x\":0,\"y\":0},\"bottomHalfSteps\":4},"
+    "{\"id\":\"1\",\"type\":\"player\",\"coordinate\":{\"x\":1,\"y\":0},"
+    "\"bottomHalfSteps\":2}]}";
 
 typedef struct tracked_allocation {
     void* pointer;
@@ -222,14 +225,18 @@ static void expect_atomic_replacement_failures(allocation_tracker* tracker,
     assert(tracker->live_count == baseline);
 }
 
-static void expect_stage02_load_failures(allocation_tracker* tracker,
+static void expect_stage03_load_failures(allocation_tracker* tracker,
                                          const game_rules_allocator_v1* allocator)
 {
-    const game_rules_cell cell = {{0, 0}, GAME_RULES_CELL_FLAT, 0, 0};
-    const game_rules_entity entity = {1, GAME_RULES_ENTITY_PLAYER, {0, 0}, 0};
+    const game_rules_cell cells[2] = {
+        {{0, 0}, GAME_RULES_CELL_FLAT, 0, 0},
+        {{1, 0}, GAME_RULES_CELL_FLAT, 1, 0}};
+    const game_rules_entity entities[2] = {
+        {UINT64_MAX, GAME_RULES_ENTITY_BARREL, {0, 0}, 4},
+        {1, GAME_RULES_ENTITY_PLAYER, {1, 0}, 2}};
     const game_rules_level_definition level = {
         {{0, 0}, GAME_RULES_HORIZONTAL_EAST, GAME_RULES_VERTICAL_NORTH},
-        1U, 1U, &cell, 1U, NULL, 0U, &entity, 1U};
+        2U, 1U, cells, 2U, NULL, 0U, entities, 2U};
     size_t json_attempts;
     size_t typed_attempts;
     size_t failure;
@@ -285,6 +292,9 @@ static void expect_stage02_load_failures(allocation_tracker* tracker,
     memset(&load, 0, sizeof(load));
     tracker_begin_success(tracker);
     assert(game_rules_engine_load_level_data(engine, &level, &load) == GAME_RULES_CALL_OK);
+    assert(load.tick_count == 2U);
+    assert(load.ticks[0].state_after.armed_barrel_count == 1U);
+    assert(load.ticks[0].state_after.armed_barrel_ids[0] == UINT64_MAX);
     typed_attempts = tracker->attempt;
     game_rules_load_result_dispose(&load);
     game_rules_engine_destroy(engine);
@@ -306,7 +316,7 @@ static void expect_stage02_load_failures(allocation_tracker* tracker,
 
 int main(void)
 {
-    allocation_tracker tracker = {0};
+    static allocation_tracker tracker;
     game_rules_allocator_v1 allocator = allocator_for(&tracker);
     game_rules_allocator_v1 invalid = allocator;
     game_rules_engine* engine;
@@ -356,7 +366,7 @@ int main(void)
     expect_atomic_replacement_failures(&tracker, engine);
     game_rules_engine_destroy(engine);
     assert(tracker.live_count == 0U);
-    expect_stage02_load_failures(&tracker, &allocator);
+    expect_stage03_load_failures(&tracker, &allocator);
 
     tracker_begin_success(&tracker);
     engine = game_rules_engine_create_with_allocator_v1(&allocator);

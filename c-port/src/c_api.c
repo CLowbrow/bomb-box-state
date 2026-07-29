@@ -111,9 +111,14 @@ static const char* direction_name(uint32_t direction)
 
 void game_rules_c_destroy_session(game_rules_session* session)
 {
+    uint32_t index;
     if (session == NULL) {
         return;
     }
+    for (index = 0U; index < session->initialization_tick_count; ++index) {
+        game_rules_c_deallocate_owned(session->initialization_ticks[index].owned_storage);
+    }
+    game_rules_c_deallocate_owned(session->initialization_ticks);
     game_rules_c_deallocate_owned(session->history_storage);
     game_rules_c_deallocate_owned(session->level_storage);
     game_rules_c_deallocate_owned(session);
@@ -190,9 +195,8 @@ uint32_t game_rules_c_engine_replace_session(game_rules_engine* engine,
     if (replacement == NULL) {
         return GAME_RULES_CALL_ALLOCATION_FAILED;
     }
+    memset(replacement, 0, sizeof(*replacement));
     replacement->marker = marker;
-    replacement->level_storage = NULL;
-    replacement->history_storage = NULL;
 
     if (level_storage_size != 0U) {
         replacement->level_storage = game_rules_c_allocate_owned(&engine->allocator, level_storage_size);
@@ -243,7 +247,7 @@ char* game_rules_engine_load_level(game_rules_engine* engine,
             engine,
             "{\"apiVersion\":1,\"operation\":\"loadLevel\",\"status\":\"invalid_argument\",\"state\":null}");
     }
-    return game_rules_c_stage02_load_json(engine, level_json, level_json_length);
+    return game_rules_c_stage03_load_json(engine, level_json, level_json_length);
 }
 
 char* game_rules_engine_get_state(game_rules_engine* engine)
@@ -253,7 +257,7 @@ char* game_rules_engine_get_state(game_rules_engine* engine)
             NULL,
             "{\"apiVersion\":1,\"operation\":\"getState\",\"status\":\"invalid_engine\",\"state\":null}");
     }
-    return game_rules_c_stage02_get_state(engine);
+    return game_rules_c_stage03_get_state(engine);
 }
 
 char* game_rules_engine_move(game_rules_engine* engine, uint32_t direction)
@@ -315,7 +319,7 @@ uint32_t game_rules_engine_get_state_data(const game_rules_engine* engine,
     if (engine == NULL) {
         return GAME_RULES_CALL_INVALID_ENGINE;
     }
-    return game_rules_c_stage02_get_state_data(engine, out_result);
+    return game_rules_c_stage03_get_state_data(engine, out_result);
 }
 
 uint32_t game_rules_engine_load_level_data(game_rules_engine* engine,
@@ -332,7 +336,7 @@ uint32_t game_rules_engine_load_level_data(game_rules_engine* engine,
     if (engine == NULL) {
         return GAME_RULES_CALL_INVALID_ENGINE;
     }
-    return game_rules_c_stage02_load_data(engine, level, out_result);
+    return game_rules_c_stage03_load_data(engine, level, out_result);
 }
 
 uint32_t game_rules_engine_move_data(game_rules_engine* engine,

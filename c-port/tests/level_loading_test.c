@@ -177,6 +177,128 @@ static void test_typed_boundary_and_ownership(void)
     game_rules_engine_destroy(engine);
 }
 
+static int coordinate_before_or_equal(game_rules_coordinate left,
+                                      game_rules_coordinate right)
+{
+    return left.y < right.y || (left.y == right.y && left.x <= right.x);
+}
+
+static void assert_resolved_invariants(const game_rules_resolved_state* state)
+{
+    uint32_t index;
+    assert((state->entity_count == 0U) == (state->entities == NULL));
+    assert((state->armed_barrel_count == 0U) == (state->armed_barrel_ids == NULL));
+    assert((state->active_switch_color_count == 0U) ==
+           (state->active_switch_colors == NULL));
+    assert((state->open_door_count == 0U) == (state->open_doors == NULL));
+    assert(state->outcome <= GAME_RULES_OUTCOME_LOST);
+    for (index = 1U; index < state->entity_count; ++index) {
+        const game_rules_entity* previous = &state->entities[index - 1U];
+        const game_rules_entity* current = &state->entities[index];
+        assert(coordinate_before_or_equal(previous->coordinate, current->coordinate));
+        if (previous->coordinate.x == current->coordinate.x &&
+            previous->coordinate.y == current->coordinate.y) {
+            assert(previous->bottom_half_steps < current->bottom_half_steps ||
+                   (previous->bottom_half_steps == current->bottom_half_steps &&
+                    previous->id < current->id));
+        }
+    }
+    for (index = 1U; index < state->armed_barrel_count; ++index)
+        assert(state->armed_barrel_ids[index - 1U] < state->armed_barrel_ids[index]);
+    for (index = 1U; index < state->active_switch_color_count; ++index)
+        assert(state->active_switch_colors[index - 1U] <
+               state->active_switch_colors[index]);
+    for (index = 1U; index < state->open_door_count; ++index)
+        assert(coordinate_before_or_equal(state->open_doors[index - 1U],
+                                          state->open_doors[index]));
+}
+
+static void test_initial_resolution_and_snapshot_graphs(void)
+{
+    game_rules_cell cells[8] = {
+        {{13, -3}, GAME_RULES_CELL_FLAT, 0, 0},
+        {{12, -3}, GAME_RULES_CELL_FLAT, 0, 0},
+        {{11, -3}, GAME_RULES_CELL_FLAT, 0, 0},
+        {{10, -3}, GAME_RULES_CELL_FLAT, 0, 0},
+        {{12, -4}, GAME_RULES_CELL_FLAT, 0, 0},
+        {{11, -4}, GAME_RULES_CELL_RAMP, 0, GAME_RULES_DIRECTION_WEST},
+        {{10, -4}, GAME_RULES_CELL_FLAT, 1, 0},
+        {{13, -4}, GAME_RULES_CELL_FLAT, 0, 0}};
+    game_rules_fixture fixtures[4] = {
+        {{13, -3}, GAME_RULES_FIXTURE_DOOR, GAME_RULES_COLOR_BLUE},
+        {{12, -3}, GAME_RULES_FIXTURE_DOOR, GAME_RULES_COLOR_RED},
+        {{11, -3}, GAME_RULES_FIXTURE_SWITCH, GAME_RULES_COLOR_RED},
+        {{10, -3}, GAME_RULES_FIXTURE_SWITCH, GAME_RULES_COLOR_BLUE}};
+    game_rules_entity entities[3] = {
+        {9U, GAME_RULES_ENTITY_BOX, {11, -3}, 0},
+        {UINT64_MAX, GAME_RULES_ENTITY_BOX, {11, -4}, 1},
+        {1U, GAME_RULES_ENTITY_PLAYER, {10, -3}, 0}};
+    game_rules_level_definition level = {
+        {{10, -4}, GAME_RULES_HORIZONTAL_WEST, GAME_RULES_VERTICAL_SOUTH},
+        4U, 2U, cells, 8U, fixtures, 4U, entities, 3U};
+    game_rules_engine* engine = game_rules_engine_create();
+    game_rules_load_result loaded = {0};
+    game_rules_state_result state = {0};
+    uint32_t tick_index;
+    assert(engine != NULL);
+    assert(game_rules_engine_load_level_data(engine, &level, &loaded) == GAME_RULES_CALL_OK);
+    assert(loaded.accepted && loaded.tick_count == 2U);
+    assert_resolved_invariants(&loaded.initial_state);
+    assert(loaded.initial_state.entities[0].id == UINT64_MAX);
+    assert(loaded.ticks[0].index == 0U && loaded.ticks[0].event_count == 4U);
+    assert(loaded.ticks[0].events[0].kind == GAME_RULES_EVENT_SWITCH_CHANGED);
+    assert(loaded.ticks[0].events[0].color == GAME_RULES_COLOR_RED);
+    assert(loaded.ticks[0].events[1].color == GAME_RULES_COLOR_BLUE);
+    assert(loaded.ticks[0].events[2].kind == GAME_RULES_EVENT_DOOR_OPENED);
+    assert(loaded.ticks[0].events[2].coordinate.x == 12);
+    assert(loaded.ticks[0].events[3].coordinate.x == 13);
+    assert(loaded.ticks[1].index == 1U && loaded.ticks[1].event_count == 1U);
+    assert(loaded.ticks[1].events[0].kind == GAME_RULES_EVENT_ENTITY_MOVED);
+    assert(loaded.ticks[1].events[0].movement_cause == GAME_RULES_MOVEMENT_SLIDE);
+    assert(loaded.ticks[1].events[0].entity_id == UINT64_MAX);
+    assert(loaded.ticks[1].events[0].to.x == 12);
+    for (tick_index = 0U; tick_index < loaded.tick_count; ++tick_index)
+        assert_resolved_invariants(&loaded.ticks[tick_index].state_after);
+    assert_resolved_invariants(&loaded.final_state);
+    assert_resolved_invariants(&loaded.state.resolved);
+    assert(loaded.final_state.active_switch_color_count == 2U);
+    assert(loaded.final_state.active_switch_colors[0] == GAME_RULES_COLOR_RED);
+    assert(loaded.final_state.active_switch_colors[1] == GAME_RULES_COLOR_BLUE);
+    assert(loaded.final_state.open_door_count == 2U);
+    assert(game_rules_engine_get_state_data(engine, &state) == GAME_RULES_CALL_OK);
+    assert(state.has_state && state.state.resolved.entities != loaded.state.resolved.entities);
+    assert(state.state.level.cells != loaded.state.level.cells);
+    assert(state.state.level.fixtures != loaded.state.level.fixtures);
+    game_rules_engine_destroy(engine);
+    assert(state.state.resolved.entities[0].id == UINT64_MAX);
+    assert(loaded.ticks[1].events[0].entity_id == UINT64_MAX);
+    game_rules_state_result_dispose(&state);
+    game_rules_load_result_dispose(&loaded);
+}
+
+static void test_empty_snapshot_collections(void)
+{
+    const game_rules_cell cell = {{0, 0}, GAME_RULES_CELL_FLAT, 0, 0};
+    const game_rules_entity entity = {1U, GAME_RULES_ENTITY_PLAYER, {0, 0}, 0};
+    const game_rules_level_definition level = {
+        {{0, 0}, GAME_RULES_HORIZONTAL_EAST, GAME_RULES_VERTICAL_NORTH},
+        1U, 1U, &cell, 1U, NULL, 0U, &entity, 1U};
+    game_rules_engine* engine = game_rules_engine_create();
+    game_rules_load_result loaded = {0};
+    assert(engine != NULL);
+    assert(game_rules_engine_load_level_data(engine, &level, &loaded) == GAME_RULES_CALL_OK);
+    assert(loaded.tick_count == 0U && loaded.ticks == NULL);
+    assert(loaded.error_count == 0U && loaded.errors == NULL);
+    assert(loaded.state.level.fixture_count == 0U && loaded.state.level.fixtures == NULL);
+    assert_resolved_invariants(&loaded.initial_state);
+    assert_resolved_invariants(&loaded.final_state);
+    assert(loaded.final_state.armed_barrel_ids == NULL);
+    assert(loaded.final_state.active_switch_colors == NULL);
+    assert(loaded.final_state.open_doors == NULL);
+    game_rules_load_result_dispose(&loaded);
+    game_rules_engine_destroy(engine);
+}
+
 static void test_all_validation_codes(void)
 {
     game_rules_cell cells[4] = {
@@ -253,6 +375,8 @@ int main(void)
 {
     test_json_format_errors();
     test_typed_boundary_and_ownership();
+    test_initial_resolution_and_snapshot_graphs();
+    test_empty_snapshot_collections();
     test_all_validation_codes();
     return 0;
 }

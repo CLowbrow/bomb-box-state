@@ -40,7 +40,8 @@ add_library(game_rules_state_c STATIC
     src/c_api.c
     src/level.c
     src/level_json.c
-    src/stage02.c)
+    src/state.c
+    src/stage03.c)
 add_library(GameRules::StateC ALIAS game_rules_state_c)
 target_compile_features(game_rules_state_c PUBLIC c_std_17)
 set_target_properties(

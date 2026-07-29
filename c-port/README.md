@@ -1,9 +1,10 @@
 # C17 candidate engine
 
-This directory is the self-contained production candidate for the C17 rewrite. Stage 02 preserves
+This directory is the self-contained production candidate for the C17 rewrite. Stage 03 preserves
 the frozen public ABI and implements strict version-1 JSON decoding, typed loading, complete world
-schema validation, canonical immutable level ownership, initial fixture state, and atomic
-replacement. Movement, physical stabilization, explosions, and rewind history are later stages.
+schema validation, canonical immutable level and resolved-state ownership, full physical level
+initialization, complete typed and JSON snapshots, and atomic replacement. Player commands and
+rewind history are later stages.
 
 The frozen creation API uses the C runtime allocator. The additive, versioned
 `game_rules/c_allocator_api.h` extension permits an embedding host or deterministic test to supply
@@ -12,8 +13,8 @@ session scaffold. Replacement builds all new storage before swapping it into the
 allocation failure leaves the prior session untouched.
 
 Every typed result owns a separate, contiguous allocation arena through `owned_storage`, and legacy
-JSON results are independent caller-owned allocations. Nested arrays and views added in later
-stages must point inside that arena rather than introduce separately freed child allocations. Each
+JSON results are independent caller-owned allocations. All nested arrays and views point inside
+that arena rather than introduce separately freed child allocations. Each
 allocation remembers its deallocator, so
 destroying or replacing an engine never invalidates an already returned result. A custom allocator
 context must remain usable until both the engine and all outstanding results have been released.
