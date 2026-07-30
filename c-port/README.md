@@ -1,10 +1,9 @@
 # C17 candidate engine
 
-This directory is the self-contained production candidate for the C17 rewrite. Stage 04 preserves
-the frozen public ABI and complete stage-03 load/state behavior, then adds typed and JSON cardinal
-decoding, transactional one-cell flat walking, and every rejection decidable before pushing or a
-secondary rule. Pushing, ramp traversal, movement-triggered fixture effects, derived command
-physics, and rewind history are later stages.
+This directory is the self-contained production candidate for the C17 rewrite. Stage 05 preserves
+the frozen public ABI and complete stage-04 load/state/walk behavior, then adds typed and JSON
+atomic one-piece pushes on already-supported flat terrain. Ramp traversal, movement-triggered
+fixture effects, derived command physics, and rewind history are later stages.
 
 The frozen creation API uses the C runtime allocator. The additive, versioned
 `game_rules/c_allocator_api.h` extension permits an embedding host or deterministic test to supply

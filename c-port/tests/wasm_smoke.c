@@ -7,6 +7,7 @@ int main(void)
     game_rules_state_result state = {0};
     game_rules_move_result move = {0};
     game_rules_move_result walk = {0};
+    game_rules_move_result push = {0};
     game_rules_rewind_result rewind = {0};
     game_rules_load_result load = {0};
     game_rules_state_result loaded_state = {0};
@@ -106,6 +107,42 @@ int main(void)
             return 12;
         }
     }
+    {
+        static const game_rules_cell cells[4] = {
+            {{0, 0}, GAME_RULES_CELL_FLAT, 0, 0},
+            {{1, 0}, GAME_RULES_CELL_FLAT, 0, 0},
+            {{2, 0}, GAME_RULES_CELL_FLAT, 0, 0},
+            {{3, 0}, GAME_RULES_CELL_FLAT, 0, 0}};
+        static const game_rules_entity entities[2] = {
+            {17U, GAME_RULES_ENTITY_PLAYER, {0, 0}, 0},
+            {4U, GAME_RULES_ENTITY_BOX, {1, 0}, 0}};
+        const game_rules_level_definition level = {
+            {{0, 0}, GAME_RULES_HORIZONTAL_EAST, GAME_RULES_VERTICAL_NORTH},
+            4U, 1U, cells, 4U, 0, 0U, entities, 2U};
+        game_rules_load_result replacement = {0};
+        if (game_rules_engine_load_level_data(engine, &level, &replacement) !=
+                GAME_RULES_CALL_OK || !replacement.accepted) {
+            return 14;
+        }
+        game_rules_load_result_dispose(&replacement);
+        json = game_rules_engine_move(engine, GAME_RULES_DIRECTION_EAST);
+        if (json == 0 || strstr(json, "\"status\":\"moved\"") == 0 ||
+            strstr(json, "\"entityId\":\"17\"") == 0 ||
+            strstr(json, "\"entityId\":\"4\"") == 0) {
+            game_rules_string_free(json);
+            return 15;
+        }
+        game_rules_string_free(json);
+        if (game_rules_engine_move_data(engine, GAME_RULES_DIRECTION_EAST, &push) !=
+                GAME_RULES_CALL_OK || !push.accepted || push.tick_count != 1U ||
+            push.ticks[0].event_count != 2U ||
+            push.ticks[0].events[0].entity_id != 17U ||
+            push.ticks[0].events[1].entity_id != 4U ||
+            push.state.resolved.entities[0].coordinate.x != 2 ||
+            push.state.resolved.entities[1].coordinate.x != 3) {
+            return 16;
+        }
+    }
     game_rules_engine_destroy(engine);
     if (move.events[0].move_status != GAME_RULES_MOVE_NO_LEVEL) {
         return 8;
@@ -119,6 +156,7 @@ int main(void)
     game_rules_rewind_result_dispose(&rewind);
     game_rules_move_result_dispose(&move);
     game_rules_move_result_dispose(&walk);
+    game_rules_move_result_dispose(&push);
     game_rules_state_result_dispose(&state);
     return game_rules_api_version() == 1U ? 0 : 13;
 }

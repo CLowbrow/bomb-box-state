@@ -183,6 +183,18 @@ set_tests_properties(
     PROPERTIES LABELS "candidate;contract;integration;native"
 )
 
+add_test(
+    NAME game_rules.candidate_runner.stage05_browser_push_contract
+    COMMAND
+        game_rules_candidate_runner
+        --check-expected
+        "${CMAKE_CURRENT_SOURCE_DIR}/c-port/stage05-browser-push-contract.txt"
+)
+set_tests_properties(
+    game_rules.candidate_runner.stage05_browser_push_contract
+    PROPERTIES LABELS "candidate;contract;movement;integration;native"
+)
+
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
 set(GAME_RULES_C_COMPARATOR "${PROJECT_SOURCE_DIR}/tools/c-port/compare_transcript.py")
 
@@ -242,15 +254,29 @@ set_tests_properties(
     PROPERTIES LABELS "candidate;differential;movement;integration;native"
 )
 
-# This test succeeds only when the known movement-stage difference appears at the reviewed location. It
-# will fail if the comparator crashes, the runners fail, or a new earlier mismatch is introduced.
+add_test(
+    NAME game_rules.differential.stage05_player_pushing_parity
+    COMMAND
+        "${Python3_EXECUTABLE}"
+        "${GAME_RULES_C_COMPARATOR}"
+        "$<TARGET_FILE:game_rules_reference_runner>"
+        "$<TARGET_FILE:game_rules_candidate_runner>"
+        "${CMAKE_CURRENT_SOURCE_DIR}/c-port/stage05-player-pushing-parity.txt"
+)
+set_tests_properties(
+    game_rules.differential.stage05_player_pushing_parity
+    PROPERTIES LABELS "candidate;differential;movement;integration;native"
+)
+
+# The stage-05 push now matches operation 3. Real resolved-state history remains a later stage, so
+# this pins the next reviewed difference at the browser contract's rewind.
 add_test(
     NAME game_rules.differential.gameplay_expected_incomplete
     COMMAND
         "${Python3_EXECUTABLE}"
         "${GAME_RULES_C_COMPARATOR}"
         --expect-difference
-        --expected-operation 3
+        --expected-operation 4
         --expected-path "$.status"
         "$<TARGET_FILE:game_rules_reference_runner>"
         "$<TARGET_FILE:game_rules_candidate_runner>"

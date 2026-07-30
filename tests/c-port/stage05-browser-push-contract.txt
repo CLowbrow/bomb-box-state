@@ -1,0 +1,3 @@
+# Stage-05 subset of the frozen browser contract; rewind remains out of scope.
+load|../contracts/browser_vertical_slice/v1/load.expected.json|../contracts/browser_vertical_slice/v1/level.json
+move|../contracts/browser_vertical_slice/v1/move-east.expected.json|east

@@ -442,13 +442,20 @@ void game_rules_c_plan_flat_move(game_rules_session* session,
                                  game_rules_c_command_transaction* transaction)
 {
     const game_rules_entity* player = NULL;
+    const game_rules_entity* push_target = NULL;
+    const game_rules_entity* destination_top = NULL;
     game_rules_entity* next_player = NULL;
+    game_rules_entity* next_pushed = NULL;
     const game_rules_cell* source_cell;
     const game_rules_cell* destination_cell;
+    const game_rules_cell* pushed_destination_cell;
     const game_rules_fixture* source_fixture;
     const game_rules_fixture* destination_fixture;
+    const game_rules_fixture* pushed_destination_fixture;
     game_rules_coordinate destination;
+    game_rules_coordinate pushed_destination;
     int32_t destination_support;
+    int32_t pushed_destination_support;
     uint32_t destination_entity_count = 0U;
     uint32_t index;
     game_rules_event* moved;
@@ -509,10 +516,147 @@ void game_rules_c_plan_flat_move(game_rules_session* session,
         int64_t top;
         if (!same_coordinate(entity->coordinate, destination)) continue;
         ++destination_entity_count;
+        if (destination_top == NULL ||
+            entity->bottom_half_steps > destination_top->bottom_half_steps) {
+            destination_top = entity;
+        }
+        if (entity->bottom_half_steps == player->bottom_half_steps &&
+            (entity->kind == GAME_RULES_ENTITY_BOX ||
+             entity->kind == GAME_RULES_ENTITY_BARREL)) {
+            push_target = entity;
+        }
         top = (int64_t)entity->bottom_half_steps + 2;
         if (top > destination_support && top <= INT32_MAX) {
             destination_support = (int32_t)top;
         }
+    }
+
+    if (push_target != NULL) {
+        game_rules_event* pushed;
+        if (push_target != destination_top) {
+            reject_flat_move(session, transaction,
+                             GAME_RULES_MOVE_STACKED_PUSH_TARGET);
+            return;
+        }
+        if (destination_fixture != NULL &&
+            destination_fixture->kind == GAME_RULES_FIXTURE_EXIT) {
+            reject_flat_move(session, transaction,
+                             GAME_RULES_MOVE_TELEPORTER_RESTRICTION);
+            return;
+        }
+        if (!step(session, push_target->coordinate, direction,
+                  &pushed_destination)) {
+            reject_flat_move(session, transaction,
+                             GAME_RULES_MOVE_WORLD_BOUNDARY);
+            return;
+        }
+        pushed_destination_cell = find_cell(session, pushed_destination);
+        if (pushed_destination_cell == NULL ||
+            pushed_destination_cell->kind != GAME_RULES_CELL_FLAT) {
+            reject_flat_move(session, transaction,
+                             GAME_RULES_MOVE_UNSUPPORTED_GEOMETRY);
+            return;
+        }
+        pushed_destination_fixture = find_fixture(session, pushed_destination);
+        if (pushed_destination_fixture != NULL &&
+            pushed_destination_fixture->kind == GAME_RULES_FIXTURE_EXIT) {
+            reject_flat_move(session, transaction,
+                             GAME_RULES_MOVE_TELEPORTER_RESTRICTION);
+            return;
+        }
+        if (pushed_destination_fixture != NULL &&
+            pushed_destination_fixture->kind == GAME_RULES_FIXTURE_DOOR &&
+            !contains_door(&session->current_state, pushed_destination)) {
+            reject_flat_move(session, transaction, GAME_RULES_MOVE_CLOSED_DOOR);
+            return;
+        }
+        if (!volume_is_clear(&session->current_state, pushed_destination,
+                             push_target->bottom_half_steps)) {
+            reject_flat_move(session, transaction, GAME_RULES_MOVE_OCCUPIED);
+            return;
+        }
+        pushed_destination_support = support_half_steps(pushed_destination_cell);
+        if (pushed_destination_support > push_target->bottom_half_steps) {
+            reject_flat_move(session, transaction, GAME_RULES_MOVE_LEDGE);
+            return;
+        }
+        for (index = 0U; index < session->current_state.entity_count; ++index) {
+            const game_rules_entity* entity = &session->current_state.entities[index];
+            int64_t top;
+            if (!same_coordinate(entity->coordinate, pushed_destination)) continue;
+            top = (int64_t)entity->bottom_half_steps + 2;
+            if (top <= push_target->bottom_half_steps &&
+                top > pushed_destination_support) {
+                pushed_destination_support = (int32_t)top;
+            }
+        }
+        if (pushed_destination_support != push_target->bottom_half_steps) {
+            /* The horizontal tick is legal, but gravity belongs to a later stage. */
+            reject_flat_move(session, transaction,
+                             GAME_RULES_MOVE_UNSUPPORTED_GEOMETRY);
+            return;
+        }
+        if ((source_fixture != NULL &&
+             source_fixture->kind == GAME_RULES_FIXTURE_SWITCH) ||
+            (destination_fixture != NULL &&
+             destination_fixture->kind == GAME_RULES_FIXTURE_SWITCH) ||
+            (pushed_destination_fixture != NULL &&
+             pushed_destination_fixture->kind == GAME_RULES_FIXTURE_SWITCH) ||
+            (source_fixture != NULL &&
+             source_fixture->kind == GAME_RULES_FIXTURE_DOOR &&
+             !contains_color(&session->current_state, source_fixture->color))) {
+            /* Movement-triggered fixture derivation belongs to a later stage. */
+            reject_flat_move(session, transaction,
+                             GAME_RULES_MOVE_UNSUPPORTED_GEOMETRY);
+            return;
+        }
+        if (!state_copy(&session->scratch_state, &session->current_state)) {
+            reject_flat_move(session, transaction,
+                             GAME_RULES_MOVE_UNSUPPORTED_GEOMETRY);
+            return;
+        }
+        for (index = 0U; index < session->scratch_state.entity_count; ++index) {
+            game_rules_entity* entity = &session->scratch_state.entities[index];
+            if (entity->id == player->id) next_player = entity;
+            if (entity->id == push_target->id) next_pushed = entity;
+        }
+        if (next_player == NULL || next_pushed == NULL) {
+            reject_flat_move(session, transaction,
+                             GAME_RULES_MOVE_UNSUPPORTED_GEOMETRY);
+            return;
+        }
+        next_player->coordinate = destination;
+        next_pushed->coordinate = pushed_destination;
+        qsort(session->scratch_state.entities, session->scratch_state.entity_count,
+              sizeof(game_rules_entity), entity_compare);
+
+        moved = &session->scratch_events[0];
+        memset(moved, 0, sizeof(*moved));
+        moved->kind = GAME_RULES_EVENT_ENTITY_MOVED;
+        moved->entity_id = player->id;
+        moved->from = player->coordinate;
+        moved->to = destination;
+        moved->old_bottom_half_steps = player->bottom_half_steps;
+        moved->new_bottom_half_steps = player->bottom_half_steps;
+        moved->movement_cause = GAME_RULES_MOVEMENT_PLAYER;
+
+        pushed = &session->scratch_events[1];
+        memset(pushed, 0, sizeof(*pushed));
+        pushed->kind = GAME_RULES_EVENT_ENTITY_MOVED;
+        pushed->entity_id = push_target->id;
+        pushed->from = push_target->coordinate;
+        pushed->to = pushed_destination;
+        pushed->old_bottom_half_steps = push_target->bottom_half_steps;
+        pushed->new_bottom_half_steps = push_target->bottom_half_steps;
+        pushed->movement_cause = GAME_RULES_MOVEMENT_PLAYER;
+
+        transaction->status = GAME_RULES_MOVE_MOVED;
+        transaction->accepted = 1U;
+        transaction->initial_state = &session->current_state;
+        transaction->final_state = &session->scratch_state;
+        transaction->tick_events = moved;
+        transaction->tick_event_count = 2U;
+        return;
     }
 
     if (destination_fixture != NULL &&
