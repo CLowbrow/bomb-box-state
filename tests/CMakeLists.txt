@@ -394,6 +394,19 @@ set_tests_properties(
     PROPERTIES LABELS "candidate;differential;history;lifecycle;replacement;stress;terminal;integration;native"
 )
 
+add_test(
+    NAME game_rules.differential.c17_randomized_valid_levels
+    COMMAND
+        "${Python3_EXECUTABLE}"
+        "${CMAKE_CURRENT_SOURCE_DIR}/c-port/randomized_valid_levels_test.py"
+        "$<TARGET_FILE:game_rules_reference_runner>"
+        "$<TARGET_FILE:game_rules_candidate_runner>"
+)
+set_tests_properties(
+    game_rules.differential.c17_randomized_valid_levels
+    PROPERTIES LABELS "candidate;differential;determinism;fuzz;integration;native"
+)
+
 # This small consumer stays framework-free and is compiled with the same
 # no-exceptions/no-RTTI policy as the core. It proves that the public C++ and C
 # headers remain usable under the engine's production compilation constraints.

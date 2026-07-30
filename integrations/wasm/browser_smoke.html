@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Game rules WebAssembly browser smoke</title>
+</head>
+<body>
+  <pre id="result">RUNNING</pre>
+  <script type="module">
+    const result = document.querySelector("#result");
+    try {
+      const { default: createGameRulesModule } = await import("./game_rules.mjs");
+      const module = await createGameRulesModule();
+      const engine = module.gameRules.createEngine();
+      try {
+        const level = {
+          format: "game-rules-level",
+          version: 1,
+          coordinateSystem: {
+            origin: { x: 0, y: 0 },
+            positiveX: "east",
+            positiveY: "north",
+          },
+          width: 3,
+          height: 1,
+          cells: [0, 1, 2].map((x) => ({
+            coordinate: { x, y: 0 },
+            type: "flat",
+            elevation: 0,
+          })),
+          fixtures: [],
+          entities: [{
+            id: "1",
+            type: "player",
+            coordinate: { x: 0, y: 0 },
+            bottomHalfSteps: 0,
+          }],
+        };
+        const loaded = engine.loadLevel(level);
+        const moved = engine.move("east");
+        const rewound = engine.rewind();
+        const state = engine.getState();
+        if (loaded.status !== "loaded"
+            || moved.status !== "moved"
+            || rewound.status !== "rewound"
+            || state.state.entities[0].coordinate.x !== 0) {
+          throw new Error("browser result mismatch");
+        }
+      } finally {
+        engine.destroy();
+      }
+      result.textContent = "PASS: C17 WebAssembly load/move/rewind/state";
+      document.title = "PASS";
+    } catch (error) {
+      result.textContent = `FAIL: ${error.stack || error}`;
+      document.title = "FAIL";
+    }
+  </script>
+</body>
+</html>

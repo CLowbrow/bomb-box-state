@@ -102,8 +102,14 @@ ctest --preset wasm-debug
 
 The ES module and `.wasm` file are generated under
 `out/build/wasm-debug/wasm/`. The test runs the same authored contract scenarios
-used by the native C runner. The generated JavaScript interface is documented
-in the [embedding API](embedding-api.md).
+used by the native C runner. The production module links the C17
+`GameRules::StateC` archive directly; configuration fails if that target is
+replaced by the C++ reference library. The generated JavaScript interface is
+documented in the [embedding API](embedding-api.md).
+
+`browser_smoke.html` is copied beside the generated module for a real-browser
+load/move/rewind/state smoke check. Serve that output directory over HTTP; ES
+module and wasm loading are not reliable from a `file:` URL.
 
 The vendored yyjson object is compiled at `-O1` even in an Emscripten debug
 build. At `-O0`, current Emscripten releases lower its reader beyond

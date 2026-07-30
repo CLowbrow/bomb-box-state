@@ -37,6 +37,13 @@ cmake --build out/c-port-native
 ctest --test-dir out/c-port-native --output-on-failure
 ```
 
+The standalone tree includes ABI size/alignment/offset and C/C++ header probes,
+typed/JSON boundary fuzz cases, and exhaustive allocation-index injection in
+addition to the gameplay suites. A C++ compiler is optional and is used only
+for the consumer-header probe; the library and all production sources remain
+C17. A nested build regression also proves that `BUILD_TESTING=OFF` exposes
+only the library and install targets, not candidate test executables.
+
 Sanitizer-ready configuration (execute tests on a supported Linux host, not this Apple Silicon
 macOS host):
 
@@ -53,3 +60,8 @@ emcmake cmake -S c-port -B out/c-port-wasm -G Ninja -DBUILD_TESTING=ON
 cmake --build out/c-port-wasm
 ctest --test-dir out/c-port-wasm --output-on-failure
 ```
+
+The parent WebAssembly build additionally produces
+`out/build/wasm-debug/wasm/browser_smoke.html`, which imports the generated ES
+module in a real browser. The parent link target has a configure-time guard
+requiring `GameRules::StateC` directly.

@@ -26,8 +26,10 @@ The same rules implementation is available through several thin boundaries:
   explicitly owned immutable results are suitable for direct Odin bindings.
 - The same header retains the version 1 caller-owned JSON API used by the
   existing WebAssembly adapter.
-- `integrations/wasm` exports the C boundary and adds JavaScript ownership,
-  parsing, and lifecycle checks.
+- `integrations/wasm` links `GameRules::StateC` directly, exports the frozen C
+  boundary, and adds JavaScript ownership, parsing, and lifecycle checks. Its
+  configure-time link guard prevents the production module from silently
+  falling back to the C++ reference engine.
 - `integrations/unreal` is a plugin scaffold for staging a platform-compatible
   core build into Unreal Engine.
 

@@ -119,15 +119,15 @@ pointer address, hash order, allocator order, wall clock, platform API, or unspe
 
 ## Public contract inventory
 
-| Surface | Stage-10 status |
-| --- | --- |
-| API versions, create/destroy, null handling | matched |
-| Custom allocator extension | implemented; load, snapshot, move, history growth, rewind, and replacement allocation sites are failure-injected |
-| `game_rules_engine_status` | matched: `schema_ready` |
-| Legacy JSON load/get-state | complete stage-03 behavior matched |
-| Typed load/get-state | complete stage-03 owned graphs matched |
-| Move | flat and ramp walking/pushing plus whole-stack slides, gravity, explosion closure, fixture effects, crushing, win, and loss matched |
-| Rewind | complete typed and JSON parity, including repeat, branch, terminal, empty, replacement, and ownership behavior |
+| Surface | Audit status | Executable evidence |
+| --- | --- | --- |
+| API versions, create/destroy, null handling | passed | lifecycle, ABI-layout, C-header, C++-header, and boundary-fuzz tests |
+| Custom allocator extension | passed | allocation injection walks every successful allocation index for JSON and typed load, get-state, move/resolution, rewind, history growth, and replacement; every failure checks rollback and live allocations |
+| `game_rules_engine_status` | passed: `schema_ready` | lifecycle and differential lifecycle tests |
+| Legacy JSON load/get-state | passed | stage-03 differential, malformed-input boundary fuzz, and ownership tests |
+| Typed load/get-state | passed | stage-03 differential, typed pointer/count/tag boundary fuzz, ABI-layout, and ownership tests |
+| Move | passed | stage-04 through stage-09 authored differential corpora plus generated valid-level differential transcripts |
+| Rewind | passed | stage-10 browser, hardening, stress, and 2,312-operation seeded history/lifecycle differential corpora |
 
 The frozen candidate header and pinned private yyjson 0.12.0 source, header, and license remain
 byte-for-byte identical to the reference copies. No yyjson symbol or type crosses the public ABI.
@@ -214,36 +214,67 @@ failure checks current state, history depth, the live-allocation baseline, safe 
 invalid-free count. Dedicated typed tests retain load, move, state, rewind, replacement, and
 terminal results across later operations and engine destruction.
 
-## Stage-10 verification
+## Stage-11 independent audit verification
 
-- Standalone strict C17 native build with warnings as errors: 11/11 tests passed.
-- Parent native debug suite: 143/143 tests passed.
+### Passed
+
+- Standalone strict C17 native build with warnings as errors: 15/15 tests passed.
+- Parent native debug suite: 148/148 tests passed.
 - The complete 47-operation stage-09 explosion differential corpus passed 100 consecutive
   executions; each execution includes eight fixed seeds, reassigned IDs, reordered arrays, and
   an identical repeated load for every seed.
 - The 2,312-operation seeded history/lifecycle differential passed 100 consecutive executions;
   every execution also performs an internal byte-for-byte candidate repeat.
-- Emscripten 6.0.3 plus Node 26.5.0: standalone 11/11 and parent 12/12 tests passed.
+- Eight additional generated valid-level seeds matched for 2,096 complete reference/candidate
+  operations. Canonical and reordered inputs, `C` and `en_US.UTF-8` locales, and repeated candidate
+  serialization were identical.
+- Emscripten 6.0.3 plus Node 26.5.0: parent 15/15 tests passed.
   The WebAssembly smoke executable covers canonical fixture derivation, door traversal, a legal
   exit win, terminal rejection, the existing three-tick barrel push/fall/explosion command, and a
   separate three-tick multi-barrel chain reaction. The suite includes six-tick allocation failure
-  injection plus the dedicated falling, ramp, fixture, explosion, and history/lifecycle matrices.
+  injection plus the dedicated falling, ramp, fixture, explosion, history/lifecycle, ABI-layout,
+  and parser/boundary-fuzz matrices.
+- The production WebAssembly link now consumes `c-port/libgame_rules_state_c.a` directly. Its wasm
+  symbol table contains no C++ runtime, standard-library, RTTI, exception, or operator-new/delete
+  symbols. The real in-app browser smoke passed load, move, rewind, and state retrieval with no
+  console errors or warnings.
 - Parent and standalone ASan/UBSan configurations build successfully.
-- Per repository policy, sanitizer tests are not executed on this Apple Silicon/macOS host because
-  the Apple sanitizer runtime stalls during test discovery. Runtime sanitizer execution remains an
-  Ubuntu CI or other known-working Linux handoff.
+- Clang static analysis reported one infeasible null-dereference path in `ticks_json`: its only
+  caller has already returned on the allocation failure needed to make the session null. No warning
+  was suppressed. Apple `leaks --atExit` reported zero leaks for allocation-failure, boundary-fuzz,
+  explosion, and history executables.
+- A copy containing only `c-port/` configured and built outside the repository, passed 15/15 tests,
+  installed its archive, headers, notices, and yyjson license, and linked standalone strict C and
+  C++ consumers. No symlink, parent-relative include, absolute source path, reference-source
+  dependency, or missing vendored license was found. Its nested library-only regression also
+  proved that `BUILD_TESTING=OFF` does not expose candidate test executables.
 
-No normative-rule, architecture, public-ABI, reference-implementation, or golden-output conflict
-was found. The frozen rules, ABI, reference files, and authored expected outputs were not changed.
-The only incomplete verification item is sanitizer runtime execution: both parent and standalone
-ASan/UBSan configurations build, but repository policy forbids running them on this Apple
-Silicon/macOS host because the Apple runtime stalls during GoogleTest discovery. Stage 11 must run
-those tests in the Ubuntu sanitizer CI job or another known-working Linux environment.
+### Unavailable or blocked on this host
 
-## Stage-11 independent audit input
+- ASan/UBSan runtime execution is blocked by repository policy on Apple Silicon/macOS because the
+  Apple sanitizer runtime stalls during test discovery. The existing Ubuntu CI job is the required
+  runtime handoff; only both sanitizer builds and non-sanitizer leak checks passed locally.
+- No second native compiler family or native 32-bit runner is installed. `/usr/bin/gcc` is an
+  AppleClang alias. Emscripten supplied an independent wasm32 build/layout/test result, but it is
+  not evidence for native GCC or native ILP32 execution.
+- A packaged Unreal build was not available. Static C and C++ consumers prove the intended thin
+  wrapper boundary, but the checked-in Unreal scaffold still stages the C++ reference archive and
+  is not a candidate integration test.
+- The deterministic parser/ABI fuzz corpus passed, but no long-running coverage-guided fuzzing
+  campaign was available in this checkout.
 
-Audit the uncommitted stage-10 diff without changing the frozen API, rules, C++ reference, or
-authored expected outputs. Re-run the exact commands in `c-port/README.md`, plus:
+### Disputed checks
+
+- None. No normative-rule, frozen-ABI, reference-implementation, or authored-golden conflict was
+  found, so no golden output or normative rule was changed.
+
+The frozen rules, ABI, reference implementation, and authored expected outputs were not changed.
+See `docs/c-port-audit.md` for findings, exact commands, remaining risks, and recommendations.
+
+## Repeat-audit commands
+
+To reproduce the longest differential checks without changing the frozen API, rules, C++
+reference, or authored expected outputs, run the exact commands in `c-port/README.md`, plus:
 
 ```sh
 ctest --preset native-debug -R game_rules.differential.stage10_seeded_history_lifecycle \

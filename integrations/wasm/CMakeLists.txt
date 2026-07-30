@@ -1,15 +1,31 @@
-add_executable(game_rules_wasm wasm_entry.cpp)
-target_link_libraries(game_rules_wasm PRIVATE GameRules::State)
-target_compile_features(game_rules_wasm PRIVATE cxx_std_20)
+add_executable(game_rules_wasm wasm_entry.c)
+target_link_libraries(game_rules_wasm PRIVATE GameRules::StateC)
+target_compile_features(game_rules_wasm PRIVATE c_std_17)
+
+# The production WebAssembly module must exercise the C17 candidate directly.
+# Keep this as a configure-time release guard so a future link regression cannot
+# be hidden by passing the same JavaScript contract against the C++ reference.
+get_target_property(_game_rules_wasm_link_libraries game_rules_wasm LINK_LIBRARIES)
+if(NOT _game_rules_wasm_link_libraries STREQUAL "GameRules::StateC")
+    message(FATAL_ERROR
+        "game_rules_wasm must link GameRules::StateC directly; got: "
+        "${_game_rules_wasm_link_libraries}")
+endif()
 
 set_target_properties(
     game_rules_wasm
     PROPERTIES
-        CXX_EXTENSIONS OFF
+        C_EXTENSIONS OFF
         OUTPUT_NAME game_rules
         SUFFIX ".mjs"
         RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/wasm"
         LINK_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/wasm_api.js"
+)
+
+configure_file(
+    "${CMAKE_CURRENT_SOURCE_DIR}/browser_smoke.html"
+    "${CMAKE_BINARY_DIR}/wasm/browser_smoke.html"
+    COPYONLY
 )
 
 target_link_options(

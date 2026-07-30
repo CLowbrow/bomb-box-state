@@ -73,6 +73,7 @@ endfunction()
 
 game_rules_c_apply_options(game_rules_state_c)
 
+if(BUILD_TESTING)
 add_executable(game_rules_candidate_lifecycle_smoke tests/lifecycle_smoke.c)
 target_link_libraries(game_rules_candidate_lifecycle_smoke PRIVATE GameRules::StateC)
 target_include_directories(game_rules_candidate_lifecycle_smoke PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
@@ -144,7 +145,44 @@ target_compile_features(game_rules_candidate_history PRIVATE c_std_17)
 set_target_properties(game_rules_candidate_history PROPERTIES C_EXTENSIONS OFF)
 game_rules_c_apply_options(game_rules_candidate_history)
 
-if(BUILD_TESTING)
+add_executable(game_rules_candidate_abi_layout tests/abi_layout_test.c)
+target_link_libraries(game_rules_candidate_abi_layout PRIVATE GameRules::StateC)
+target_compile_features(game_rules_candidate_abi_layout PRIVATE c_std_17)
+set_target_properties(game_rules_candidate_abi_layout PROPERTIES C_EXTENSIONS OFF)
+game_rules_c_apply_options(game_rules_candidate_abi_layout)
+
+add_executable(game_rules_candidate_boundary_fuzz tests/boundary_fuzz_test.c)
+target_link_libraries(game_rules_candidate_boundary_fuzz PRIVATE GameRules::StateC)
+target_compile_features(game_rules_candidate_boundary_fuzz PRIVATE c_std_17)
+set_target_properties(game_rules_candidate_boundary_fuzz PROPERTIES C_EXTENSIONS OFF)
+game_rules_c_apply_options(game_rules_candidate_boundary_fuzz)
+
+include(CheckLanguage)
+check_language(CXX)
+if(CMAKE_CXX_COMPILER)
+    enable_language(CXX)
+    add_executable(game_rules_candidate_cpp_header tests/header_cpp_compatibility_test.cpp)
+    target_link_libraries(game_rules_candidate_cpp_header PRIVATE GameRules::StateC)
+    target_compile_features(game_rules_candidate_cpp_header PRIVATE cxx_std_17)
+    set_target_properties(game_rules_candidate_cpp_header PROPERTIES CXX_EXTENSIONS OFF)
+    game_rules_c_apply_options(game_rules_candidate_cpp_header)
+endif()
+
+    if(NOT EMSCRIPTEN)
+        add_test(
+            NAME game_rules.candidate.no_test_targets
+            COMMAND
+                "${CMAKE_COMMAND}"
+                "-DSOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}"
+                "-DBINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}/library-only-audit"
+                "-DGENERATOR=${CMAKE_GENERATOR}"
+                -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/no_test_targets.cmake"
+        )
+        set_tests_properties(
+            game_rules.candidate.no_test_targets
+            PROPERTIES LABELS "candidate;native;build;extraction"
+        )
+    endif()
     add_test(NAME game_rules.candidate.lifecycle COMMAND game_rules_candidate_lifecycle_smoke)
     add_test(NAME game_rules.candidate.allocation_failure COMMAND game_rules_candidate_allocation_failure)
     add_test(NAME game_rules.candidate.level_loading COMMAND game_rules_candidate_level_loading)
@@ -155,6 +193,11 @@ if(BUILD_TESTING)
     add_test(NAME game_rules.candidate.fixtures COMMAND game_rules_candidate_fixtures)
     add_test(NAME game_rules.candidate.explosions COMMAND game_rules_candidate_explosions)
     add_test(NAME game_rules.candidate.history COMMAND game_rules_candidate_history)
+    add_test(NAME game_rules.candidate.abi_layout COMMAND game_rules_candidate_abi_layout)
+    add_test(NAME game_rules.candidate.boundary_fuzz COMMAND game_rules_candidate_boundary_fuzz)
+    if(TARGET game_rules_candidate_cpp_header)
+        add_test(NAME game_rules.candidate.cpp_header COMMAND game_rules_candidate_cpp_header)
+    endif()
     if(EMSCRIPTEN)
         set_tests_properties(game_rules.candidate.lifecycle PROPERTIES LABELS "candidate;wasm")
         set_tests_properties(game_rules.candidate.allocation_failure PROPERTIES LABELS "candidate;wasm")
@@ -166,6 +209,11 @@ if(BUILD_TESTING)
         set_tests_properties(game_rules.candidate.fixtures PROPERTIES LABELS "candidate;wasm;movement;fixtures")
         set_tests_properties(game_rules.candidate.explosions PROPERTIES LABELS "candidate;wasm;movement;explosions")
         set_tests_properties(game_rules.candidate.history PROPERTIES LABELS "candidate;wasm;history;lifecycle")
+        set_tests_properties(game_rules.candidate.abi_layout PROPERTIES LABELS "candidate;wasm;abi;contract")
+        set_tests_properties(game_rules.candidate.boundary_fuzz PROPERTIES LABELS "candidate;wasm;fuzz;parser;abi")
+        if(TARGET game_rules_candidate_cpp_header)
+            set_tests_properties(game_rules.candidate.cpp_header PROPERTIES LABELS "candidate;wasm;abi;contract")
+        endif()
         find_program(GAME_RULES_C_NODE_EXECUTABLE node)
         if(GAME_RULES_C_NODE_EXECUTABLE)
             add_test(
@@ -185,6 +233,11 @@ if(BUILD_TESTING)
         set_tests_properties(game_rules.candidate.fixtures PROPERTIES LABELS "candidate;native;movement;fixtures")
         set_tests_properties(game_rules.candidate.explosions PROPERTIES LABELS "candidate;native;movement;explosions")
         set_tests_properties(game_rules.candidate.history PROPERTIES LABELS "candidate;native;history;lifecycle")
+        set_tests_properties(game_rules.candidate.abi_layout PROPERTIES LABELS "candidate;native;abi;contract")
+        set_tests_properties(game_rules.candidate.boundary_fuzz PROPERTIES LABELS "candidate;native;fuzz;parser;abi")
+        if(TARGET game_rules_candidate_cpp_header)
+            set_tests_properties(game_rules.candidate.cpp_header PROPERTIES LABELS "candidate;native;abi;contract")
+        endif()
         add_test(NAME game_rules.candidate.wasm_smoke COMMAND game_rules_candidate_wasm_smoke)
         set_tests_properties(game_rules.candidate.wasm_smoke PROPERTIES LABELS "candidate;native;wasm-smoke")
     endif()
