@@ -1,9 +1,9 @@
 # C17 candidate engine
 
-This directory is the self-contained production candidate for the C17 rewrite. Stage 07 preserves
-the frozen public ABI and complete stage-06 causal closure, then adds oriented ramp traversal,
-ramp-aware pushing, and deterministic automatic whole-stack sliding. Rewind history remains a
-later stage.
+This directory is the self-contained production candidate for the C17 rewrite. Stage 08 preserves
+the frozen public ABI and complete stage-07 ramp causal closure, then proves the full switch, door,
+exit teleporter, and win contract across movement, pushing, gravity, sliding, explosions, snapshots,
+failure atomicity, and WebAssembly smoke coverage. Rewind history remains a later stage.
 
 The frozen creation API uses the C runtime allocator. The additive, versioned
 `game_rules/c_allocator_api.h` extension permits an embedding host or deterministic test to supply

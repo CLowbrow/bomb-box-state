@@ -308,6 +308,20 @@ set_tests_properties(
     PROPERTIES LABELS "candidate;differential;movement;ramps;integration;native"
 )
 
+add_test(
+    NAME game_rules.differential.stage08_fixtures_parity
+    COMMAND
+        "${Python3_EXECUTABLE}"
+        "${GAME_RULES_C_COMPARATOR}"
+        "$<TARGET_FILE:game_rules_reference_runner>"
+        "$<TARGET_FILE:game_rules_candidate_runner>"
+        "${CMAKE_CURRENT_SOURCE_DIR}/c-port/stage08-fixtures-parity.txt"
+)
+set_tests_properties(
+    game_rules.differential.stage08_fixtures_parity
+    PROPERTIES LABELS "candidate;differential;movement;gravity;ramps;fixtures;terminal;integration;native"
+)
+
 # The stage-05 push now matches operation 3. Real resolved-state history remains a later stage, so
 # this pins the next reviewed difference at the browser contract's rewind.
 add_test(

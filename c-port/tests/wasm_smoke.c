@@ -9,6 +9,9 @@ int main(void)
     game_rules_move_result walk = {0};
     game_rules_move_result push = {0};
     game_rules_move_result fall = {0};
+    game_rules_move_result fixture_walk = {0};
+    game_rules_move_result fixture_win = {0};
+    game_rules_move_result terminal = {0};
     game_rules_rewind_result rewind = {0};
     game_rules_load_result load = {0};
     game_rules_state_result loaded_state = {0};
@@ -170,6 +173,54 @@ int main(void)
             return 18;
         }
     }
+    {
+        static const game_rules_cell cells[3] = {
+            {{0, 0}, GAME_RULES_CELL_FLAT, 0, 0},
+            {{1, 0}, GAME_RULES_CELL_FLAT, 0, 0},
+            {{2, 0}, GAME_RULES_CELL_FLAT, 0, 0}};
+        static const game_rules_fixture fixtures[3] = {
+            {{2, 0}, GAME_RULES_FIXTURE_EXIT, GAME_RULES_COLOR_YELLOW},
+            {{1, 0}, GAME_RULES_FIXTURE_DOOR, GAME_RULES_COLOR_RED},
+            {{0, 0}, GAME_RULES_FIXTURE_SWITCH, GAME_RULES_COLOR_RED}};
+        static const game_rules_entity player =
+            {1U, GAME_RULES_ENTITY_PLAYER, {0, 0}, 0};
+        const game_rules_level_definition level = {
+            {{0, 0}, GAME_RULES_HORIZONTAL_EAST, GAME_RULES_VERTICAL_NORTH},
+            3U, 1U, cells, 3U, fixtures, 3U, &player, 1U};
+        game_rules_load_result replacement = {0};
+        if (game_rules_engine_load_level_data(engine, &level, &replacement) !=
+                GAME_RULES_CALL_OK || !replacement.accepted ||
+            replacement.tick_count != 1U ||
+            replacement.ticks[0].event_count != 2U ||
+            replacement.ticks[0].events[0].kind !=
+                GAME_RULES_EVENT_SWITCH_CHANGED ||
+            replacement.ticks[0].events[1].kind != GAME_RULES_EVENT_DOOR_OPENED ||
+            replacement.final_state.active_switch_color_count != 1U ||
+            replacement.final_state.open_door_count != 1U) {
+            return 19;
+        }
+        game_rules_load_result_dispose(&replacement);
+        if (game_rules_engine_move_data(engine, GAME_RULES_DIRECTION_EAST,
+                                        &fixture_walk) != GAME_RULES_CALL_OK ||
+            !fixture_walk.accepted || fixture_walk.tick_count != 1U ||
+            fixture_walk.final_state.open_door_count != 1U) {
+            return 20;
+        }
+        if (game_rules_engine_move_data(engine, GAME_RULES_DIRECTION_EAST,
+                                        &fixture_win) != GAME_RULES_CALL_OK ||
+            !fixture_win.accepted || fixture_win.tick_count != 1U ||
+            fixture_win.ticks[0].event_count != 2U ||
+            fixture_win.ticks[0].events[1].kind != GAME_RULES_EVENT_LEVEL_WON ||
+            fixture_win.final_state.outcome != GAME_RULES_OUTCOME_WON) {
+            return 21;
+        }
+        if (game_rules_engine_move_data(engine, GAME_RULES_DIRECTION_WEST,
+                                        &terminal) != GAME_RULES_CALL_OK ||
+            terminal.accepted || terminal.status != GAME_RULES_MOVE_LEVEL_TERMINAL ||
+            terminal.state.resolved.outcome != GAME_RULES_OUTCOME_WON) {
+            return 22;
+        }
+    }
     game_rules_engine_destroy(engine);
     if (move.events[0].move_status != GAME_RULES_MOVE_NO_LEVEL) {
         return 8;
@@ -185,6 +236,9 @@ int main(void)
     game_rules_move_result_dispose(&walk);
     game_rules_move_result_dispose(&push);
     game_rules_move_result_dispose(&fall);
+    game_rules_move_result_dispose(&fixture_walk);
+    game_rules_move_result_dispose(&fixture_win);
+    game_rules_move_result_dispose(&terminal);
     game_rules_state_result_dispose(&state);
     return game_rules_api_version() == 1U ? 0 : 13;
 }

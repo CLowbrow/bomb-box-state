@@ -1,13 +1,16 @@
 # C17 rewrite status
 
-## Stage-07 boundary
+## Stage-08 boundary
 
 `c-port/` is the self-contained C17 production candidate. The C++ engine remains the frozen
 behavioral reference, `docs/rules.md` remains normative, and `include/game_rules/c_api.h` remains
 the ABI source of truth.
 
-Stage 07 retains the complete stage-06 movement and causal-closure boundary and adds oriented ramp
-traversal, ramp pushing, and automatic whole-stack sliding through both public APIs:
+Stage 08 retains the complete stage-07 ramp and causal-closure boundary and establishes switches,
+doors, exit teleporters, and terminal wins as a separately proven production boundary through both
+public APIs. The fixture algorithms were already present in the candidate because earlier movement
+stages needed fixture-aware blocking and stabilization; stage 08 removes the staging drift by
+exercising their complete contract rather than treating that incidental coverage as completion:
 
 - strict version-1 JSON and typed input decoding from stage 02;
 - all 21 ordered world-schema validation errors;
@@ -31,7 +34,15 @@ traversal, ramp pushing, and automatic whole-stack sliding through both public A
   crushing loss rules, and canonical simultaneous-column ordering;
 - command-time explosion waves needed to close falling-barrel turns, including blast-driven falls,
   chain arming, support removal, fixture recomputation, and terminal loss;
-- movement- and gravity-triggered switch, door, and exit effects; and
+- palette-ordered active switch derivation with AND behavior across multiple same-color switches;
+- row-major effectively open doors, including active colors, occupied-door holding, closing after
+  the final occupant leaves, and deterministic open/close changes around simultaneous effects;
+- exact fixture event timing after movement, pushing, falling, sliding, and explosion ticks, with
+  switch changes before coordinate-ordered door changes and fixture changes before terminal loss;
+- closed-door and exit-column restrictions for player movement, pushes, ramp slides, gravity
+  stabilization, and blast pops;
+- legal floor-height exit activation, immediate and movement-triggered wins, win precedence, and
+  terminal movement rejection; and
 - exact pre-secondary-rule rejections for invalid direction, no level, world boundary, ledges,
   recursive or overlapping occupancy, non-top push targets, closed doors, ineligible teleporters,
   unsupported geometry, and terminal levels.
@@ -92,7 +103,7 @@ pointer address, hash order, allocator order, wall clock, platform API, or unspe
 
 ## Public contract inventory
 
-| Surface | Stage-07 status |
+| Surface | Stage-08 status |
 | --- | --- |
 | API versions, create/destroy, null handling | matched |
 | Custom allocator extension | implemented; accepted load, snapshot, and move allocation sites are failure-injected |
@@ -135,6 +146,11 @@ Current proofs:
   direction and coordinate orientation, endpoint and chain traversal, lateral lanes, downhill and
   ramp-exit pushes, stack heights, blocked retries, doors, exits, conflicts, ledges,
   fall-then-slide, slide-then-fall, maximum/reassigned IDs, and reordered input arrays.
+- `game_rules.differential.stage08_fixtures_parity`: all 43 load/get-state/move operations match for
+  every color, multiple same-color switches and doors, simultaneous activation/deactivation,
+  canonical palette and door-coordinate order, held doors, multi-tick push/fall activation,
+  explosion-driven fixture changes, fixture-aware walking/pushing/sliding, exit restrictions,
+  immediate and movement-triggered wins, terminal commands, and reordered fixture/entity input.
 - `game_rules.candidate_runner.stage05_browser_push_contract`: the candidate matches the existing
   authored load and move golden outputs without modifying them.
 - `game_rules.candidate_runner.stage07_hardening_conflicts_contract`: canonical and reordered
@@ -144,7 +160,11 @@ Current proofs:
   history remains later-stage work.
 
 Candidate C tests verify complete initial, tick, event, final, snapshot, acceptance, status, and
-outcome fields as well as result ownership and pointer/count invariants. The falling corpus covers
+outcome fields as well as result ownership and pointer/count invariants. The dedicated fixture
+suite covers all palette colors, multiple same-color switches and doors, canonical fixture and
+event order, independent immutable typed views, simultaneous switch/door changes, AND behavior,
+held-door falls and closing, multi-tick gravity activation, loss ordering, exit-height rejection,
+wins, and terminal commands. The falling corpus covers
 initial multi-column compaction, ramp-center landing before the deferred slide phase, direct crush
 planning, box stacks, tall drops, barrel chains, and terminal repetition. Allocation injection
 walks every allocation in multi-tick JSON and typed falling-barrel commands; every failure checks
@@ -152,30 +172,35 @@ the complete pre-command entity and armed-barrel state before a successful retry
 ramp matrix covers all sixteen low-direction/coordinate-orientation combinations, exact half-step
 endpoint events and snapshots, connected chains, and whole-stack retries. Ramp allocation
 injection walks every JSON and typed allocation in a three-tick push/slide/slide command.
+Fixture allocation injection walks every JSON and typed allocation in a two-tick
+push/fall/switch/door command, checks the complete pre-command entity and fixture state at every
+failure, and verifies deterministic successful retry.
 
-## Stage-07 verification
+## Stage-08 verification
 
-- Standalone strict C17 native build with warnings as errors: 8/8 tests passed.
-- Parent native debug suite: 135/135 tests passed.
-- The complete stage-07 ramp differential corpus passed 100 consecutive executions.
-- Emscripten 6.0.3 plus Node 26.5.0: standalone 8/8 and parent 9/9 tests passed.
-  The WebAssembly smoke executable now performs a three-tick barrel push/fall/explosion command,
-  and the suite includes multi-tick allocation failure plus the dedicated falling and ramp
-  matrices.
+- Standalone strict C17 native build with warnings as errors: 9/9 tests passed.
+- Parent native debug suite: 137/137 tests passed.
+- The complete 43-operation stage-08 fixture differential corpus passed 100 consecutive
+  executions.
+- Emscripten 6.0.3 plus Node 26.5.0: standalone 9/9 and parent 10/10 tests passed.
+  The WebAssembly smoke executable covers canonical fixture derivation, door traversal, a legal
+  exit win, and terminal rejection in addition to the existing three-tick barrel
+  push/fall/explosion command. The suite includes multi-tick allocation failure plus the dedicated
+  falling, ramp, and fixture matrices.
 - Parent and standalone ASan/UBSan configurations build successfully.
 - Per repository policy, sanitizer tests are not executed on this Apple Silicon/macOS host because
   the Apple sanitizer runtime stalls during test discovery. Runtime sanitizer execution remains an
   Ubuntu CI or other known-working Linux handoff.
 
-The initial request excluded command-time explosions while also requiring every falling-barrel
-scenario; that conflict was resolved explicitly in favor of complete command-time causal closure.
-No remaining normative-rule, architecture, public-ABI, reference-implementation, or golden-output
-conflict was found. Those frozen files and outputs were not changed.
+No normative-rule, architecture, public-ABI, reference-implementation, or golden-output conflict
+was found. Stage numbering in this document had drifted by prematurely grouping fixture behavior
+into stage 07 and naming rewind as stage 08; the explicit stage-08 fixture command is now the
+documented boundary. The frozen rules, ABI, reference files, and golden outputs were not changed.
 
-## Stage-08 starting point
+## Stage-09 starting point
 
-Stage 08 should add real resolved-state history and rewind without reopening the completed
-stage-03 through stage-07 behavior:
+Stage 09 should add real resolved-state history and rewind without reopening the completed
+stage-03 through stage-08 behavior:
 
 1. Replace the one-byte history scaffold with owned canonical resolved-state entries.
 2. Reserve the next history entry before planning a command, commit it only with the completed
@@ -187,5 +212,5 @@ stage-03 through stage-07 behavior:
 5. Preserve the completed ramp traversal, pushing, whole-stack sliding, and causal-order behavior
    while history storage is added.
 
-Keep the stage-02 through stage-07 differential corpora intact, keep the C++ engine and public ABI
+Keep the stage-02 through stage-08 differential corpora intact, keep the C++ engine and public ABI
 frozen, and continue to stop on unresolved specification conflicts.

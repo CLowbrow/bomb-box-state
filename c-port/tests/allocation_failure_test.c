@@ -21,6 +21,19 @@ static const char valid_level_json[] =
     "{\"id\":\"1\",\"type\":\"player\",\"coordinate\":{\"x\":1,\"y\":0},"
     "\"bottomHalfSteps\":2}]}";
 
+static const char fixture_move_level_json[] =
+    "{\"format\":\"game-rules-level\",\"version\":1,"
+    "\"coordinateSystem\":{\"origin\":{\"x\":0,\"y\":0},\"positiveX\":\"east\",\"positiveY\":\"north\"},"
+    "\"width\":4,\"height\":1,\"cells\":["
+    "{\"coordinate\":{\"x\":0,\"y\":0},\"type\":\"flat\",\"elevation\":2},"
+    "{\"coordinate\":{\"x\":1,\"y\":0},\"type\":\"flat\",\"elevation\":2},"
+    "{\"coordinate\":{\"x\":2,\"y\":0},\"type\":\"flat\",\"elevation\":0},"
+    "{\"coordinate\":{\"x\":3,\"y\":0},\"type\":\"flat\",\"elevation\":0}],"
+    "\"fixtures\":[{\"coordinate\":{\"x\":2,\"y\":0},\"type\":\"switch\",\"color\":\"green\"},"
+    "{\"coordinate\":{\"x\":3,\"y\":0},\"type\":\"door\",\"color\":\"green\"}],"
+    "\"entities\":[{\"id\":\"1\",\"type\":\"player\",\"coordinate\":{\"x\":0,\"y\":0},\"bottomHalfSteps\":4},"
+    "{\"id\":\"8\",\"type\":\"box\",\"coordinate\":{\"x\":1,\"y\":0},\"bottomHalfSteps\":4}]}";
+
 typedef struct tracked_allocation {
     void* pointer;
     int live;
@@ -717,6 +730,152 @@ static void expect_stage07_ramp_failures(allocation_tracker* tracker,
     }
 }
 
+static void assert_fixture_command_unmodified(const game_rules_engine* engine)
+{
+    assert(engine->session->current_state.entity_count == 2U);
+    assert(engine->session->current_state.entities[0].id == 1U);
+    assert(engine->session->current_state.entities[0].coordinate.x == 0);
+    assert(engine->session->current_state.entities[0].bottom_half_steps == 4);
+    assert(engine->session->current_state.entities[1].id == 8U);
+    assert(engine->session->current_state.entities[1].coordinate.x == 1);
+    assert(engine->session->current_state.entities[1].bottom_half_steps == 4);
+    assert(engine->session->current_state.active_switch_color_count == 0U);
+    assert(engine->session->current_state.open_door_count == 0U);
+    assert(engine->session->current_state.outcome == GAME_RULES_OUTCOME_ONGOING);
+}
+
+static void expect_stage08_fixture_failures(allocation_tracker* tracker,
+                                            const game_rules_allocator_v1* allocator)
+{
+    const game_rules_cell cells[4] = {
+        {{0, 0}, GAME_RULES_CELL_FLAT, 2, 0},
+        {{1, 0}, GAME_RULES_CELL_FLAT, 2, 0},
+        {{2, 0}, GAME_RULES_CELL_FLAT, 0, 0},
+        {{3, 0}, GAME_RULES_CELL_FLAT, 0, 0}};
+    const game_rules_fixture fixtures[2] = {
+        {{2, 0}, GAME_RULES_FIXTURE_SWITCH, GAME_RULES_COLOR_GREEN},
+        {{3, 0}, GAME_RULES_FIXTURE_DOOR, GAME_RULES_COLOR_GREEN}};
+    const game_rules_entity entities[2] = {
+        {1U, GAME_RULES_ENTITY_PLAYER, {0, 0}, 4},
+        {8U, GAME_RULES_ENTITY_BOX, {1, 0}, 4}};
+    const game_rules_level_definition level = {
+        {{0, 0}, GAME_RULES_HORIZONTAL_EAST, GAME_RULES_VERTICAL_NORTH},
+        4U, 1U, cells, 4U, fixtures, 2U, entities, 2U};
+    game_rules_engine* engine;
+    game_rules_load_result load = {0};
+    game_rules_move_result move;
+    char* json;
+    size_t attempts;
+    size_t failure;
+
+    tracker_begin_success(tracker);
+    engine = game_rules_engine_create_with_allocator_v1(allocator);
+    assert(engine != NULL);
+    assert(game_rules_engine_load_level_data(engine, &level, &load) ==
+           GAME_RULES_CALL_OK);
+    game_rules_load_result_dispose(&load);
+    tracker_begin_success(tracker);
+    json = game_rules_engine_move(engine, GAME_RULES_DIRECTION_EAST);
+    assert(json != NULL);
+    assert(strstr(json, "\"index\":1") != NULL);
+    assert(strstr(json, "\"type\":\"switchChanged\",\"color\":\"green\",\"active\":true") != NULL);
+    assert(strstr(json, "\"type\":\"doorOpened\",\"coordinate\":{\"x\":3,\"y\":0},\"color\":\"green\"") != NULL);
+    attempts = tracker->attempt;
+    game_rules_string_free(json);
+    game_rules_engine_destroy(engine);
+
+    for (failure = 0U; failure < attempts; ++failure) {
+        size_t baseline;
+        tracker_begin_success(tracker);
+        engine = game_rules_engine_create_with_allocator_v1(allocator);
+        assert(engine != NULL);
+        assert(game_rules_engine_load_level_data(engine, &level, &load) ==
+               GAME_RULES_CALL_OK);
+        game_rules_load_result_dispose(&load);
+        baseline = tracker->live_count;
+        tracker_begin_failure(tracker, failure);
+        assert(game_rules_engine_move(engine, GAME_RULES_DIRECTION_EAST) == NULL);
+        assert_fixture_command_unmodified(engine);
+        assert(tracker->live_count == baseline);
+        tracker_begin_success(tracker);
+        json = game_rules_engine_move(engine, GAME_RULES_DIRECTION_EAST);
+        assert(json != NULL && strstr(json, "\"index\":1") != NULL);
+        game_rules_string_free(json);
+        game_rules_engine_destroy(engine);
+        assert(tracker->invalid_free_count == 0U);
+    }
+
+    tracker_begin_success(tracker);
+    engine = game_rules_engine_create_with_allocator_v1(allocator);
+    assert(engine != NULL);
+    assert(game_rules_engine_load_level_data(engine, &level, &load) ==
+           GAME_RULES_CALL_OK);
+    game_rules_load_result_dispose(&load);
+    tracker_begin_success(tracker);
+    memset(&move, 0, sizeof(move));
+    assert(game_rules_engine_move_data(engine, GAME_RULES_DIRECTION_EAST, &move) ==
+           GAME_RULES_CALL_OK);
+    assert(move.accepted && move.tick_count == 2U);
+    assert(move.ticks[1].event_count == 3U);
+    assert(move.final_state.active_switch_color_count == 1U);
+    assert(move.final_state.active_switch_colors[0] == GAME_RULES_COLOR_GREEN);
+    assert(move.final_state.open_door_count == 1U);
+    assert(move.final_state.open_doors[0].x == 3);
+    attempts = tracker->attempt;
+    game_rules_move_result_dispose(&move);
+    game_rules_engine_destroy(engine);
+
+    for (failure = 0U; failure < attempts; ++failure) {
+        size_t baseline;
+        tracker_begin_success(tracker);
+        engine = game_rules_engine_create_with_allocator_v1(allocator);
+        assert(engine != NULL);
+        assert(game_rules_engine_load_level_data(engine, &level, &load) ==
+               GAME_RULES_CALL_OK);
+        game_rules_load_result_dispose(&load);
+        baseline = tracker->live_count;
+        memset(&move, 0xA5, sizeof(move));
+        tracker_begin_failure(tracker, failure);
+        assert(game_rules_engine_move_data(engine, GAME_RULES_DIRECTION_EAST, &move) ==
+               GAME_RULES_CALL_ALLOCATION_FAILED);
+        assert(bytes_are_zero(&move, sizeof(move)));
+        assert_fixture_command_unmodified(engine);
+        assert(tracker->live_count == baseline);
+        tracker_begin_success(tracker);
+        assert(game_rules_engine_move_data(engine, GAME_RULES_DIRECTION_EAST, &move) ==
+               GAME_RULES_CALL_OK);
+        assert(move.accepted && move.tick_count == 2U);
+        assert(move.final_state.active_switch_color_count == 1U);
+        assert(move.final_state.open_door_count == 1U);
+        game_rules_move_result_dispose(&move);
+        game_rules_engine_destroy(engine);
+        assert(tracker->invalid_free_count == 0U);
+    }
+
+    /* Exercise fixture-bearing JSON load allocation sites as well as move sites. */
+    tracker_begin_success(tracker);
+    engine = game_rules_engine_create_with_allocator_v1(allocator);
+    assert(engine != NULL);
+    tracker_begin_success(tracker);
+    json = game_rules_engine_load_level(engine, fixture_move_level_json,
+                                        (uint32_t)strlen(fixture_move_level_json));
+    assert(json != NULL && strstr(json, "\"status\":\"loaded\"") != NULL);
+    attempts = tracker->attempt;
+    game_rules_string_free(json);
+    game_rules_engine_destroy(engine);
+    for (failure = 0U; failure < attempts; ++failure) {
+        tracker_begin_success(tracker);
+        engine = game_rules_engine_create_with_allocator_v1(allocator);
+        assert(engine != NULL);
+        tracker_begin_failure(tracker, failure);
+        assert(game_rules_engine_load_level(engine, fixture_move_level_json,
+                                            (uint32_t)strlen(fixture_move_level_json)) == NULL);
+        assert(game_rules_c_engine_session_marker(engine) == 0U);
+        game_rules_engine_destroy(engine);
+        assert(tracker->invalid_free_count == 0U);
+    }
+}
+
 int main(void)
 {
     static allocation_tracker tracker;
@@ -774,6 +933,7 @@ int main(void)
     expect_stage05_push_failures(&tracker, &allocator);
     expect_stage06_fall_failures(&tracker, &allocator);
     expect_stage07_ramp_failures(&tracker, &allocator);
+    expect_stage08_fixture_failures(&tracker, &allocator);
 
     tracker_begin_success(&tracker);
     engine = game_rules_engine_create_with_allocator_v1(&allocator);
