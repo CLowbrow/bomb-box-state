@@ -1,0 +1,125 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Game-rules level format version 1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "format",
+    "version",
+    "coordinateSystem",
+    "width",
+    "height",
+    "cells",
+    "fixtures",
+    "entities"
+  ],
+  "properties": {
+    "format": {"const": "game-rules-level"},
+    "version": {"const": 1},
+    "coordinateSystem": {"$ref": "#/$defs/coordinateSystem"},
+    "width": {"type": "integer", "minimum": 1, "maximum": 4294967295},
+    "height": {"type": "integer", "minimum": 1, "maximum": 4294967295},
+    "cells": {
+      "type": "array",
+      "items": {"oneOf": [{"$ref": "#/$defs/flatCell"}, {"$ref": "#/$defs/rampCell"}]}
+    },
+    "fixtures": {
+      "type": "array",
+      "items": {
+        "oneOf": [
+          {"$ref": "#/$defs/switch"},
+          {"$ref": "#/$defs/door"},
+          {"$ref": "#/$defs/exit"}
+        ]
+      }
+    },
+    "entities": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/entity"}
+    }
+  },
+  "$defs": {
+    "int32": {"type": "integer", "minimum": -2147483648, "maximum": 2147483647},
+    "coordinate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["x", "y"],
+      "properties": {
+        "x": {"$ref": "#/$defs/int32"},
+        "y": {"$ref": "#/$defs/int32"}
+      }
+    },
+    "coordinateSystem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["origin", "positiveX", "positiveY"],
+      "properties": {
+        "origin": {"$ref": "#/$defs/coordinate"},
+        "positiveX": {"enum": ["east", "west"]},
+        "positiveY": {"enum": ["north", "south"]}
+      }
+    },
+    "flatCell": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["coordinate", "type", "elevation"],
+      "properties": {
+        "coordinate": {"$ref": "#/$defs/coordinate"},
+        "type": {"const": "flat"},
+        "elevation": {"type": "integer", "minimum": -1073741824, "maximum": 1073741823}
+      }
+    },
+    "rampCell": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["coordinate", "type", "lowDirection", "lowElevation"],
+      "properties": {
+        "coordinate": {"$ref": "#/$defs/coordinate"},
+        "type": {"const": "ramp"},
+        "lowDirection": {"enum": ["north", "east", "south", "west"]},
+        "lowElevation": {"type": "integer", "minimum": -1073741824, "maximum": 1073741822}
+      }
+    },
+    "switch": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["coordinate", "type", "color"],
+      "properties": {
+        "coordinate": {"$ref": "#/$defs/coordinate"},
+        "type": {"const": "switch"},
+        "color": {"$ref": "#/$defs/color"}
+      }
+    },
+    "door": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["coordinate", "type", "color"],
+      "properties": {
+        "coordinate": {"$ref": "#/$defs/coordinate"},
+        "type": {"const": "door"},
+        "color": {"$ref": "#/$defs/color"}
+      }
+    },
+    "exit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["coordinate", "type"],
+      "properties": {
+        "coordinate": {"$ref": "#/$defs/coordinate"},
+        "type": {"const": "exit"}
+      }
+    },
+    "color": {"enum": ["red", "green", "blue", "yellow"]},
+    "entity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "type", "coordinate", "bottomHalfSteps"],
+      "properties": {
+        "id": {"type": "string", "pattern": "^[1-9][0-9]{0,19}$"},
+        "type": {"enum": ["player", "box", "barrel"]},
+        "coordinate": {"$ref": "#/$defs/coordinate"},
+        "bottomHalfSteps": {"$ref": "#/$defs/int32"}
+      }
+    }
+  }
+}

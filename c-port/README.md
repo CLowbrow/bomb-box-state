@@ -1,67 +1,88 @@
-# C17 candidate engine
+# Game rules state — C17 library
 
-This directory is the self-contained production candidate for the C17 rewrite. Stage 10 preserves
-the frozen public ABI and complete stage-09 rules boundary, then completes undo-only resolved-state
-history, repeated and terminal rewind, branching, replacement isolation, independent result
-lifetimes, and allocation-failure rollback across native and WebAssembly builds.
+This directory is an extraction-ready standalone distribution of the deterministic, headless
+game-rules engine. Production code is portable C17. The stable public boundary is
+`include/game_rules/c_api.h`; the additive allocator extension is
+`include/game_rules/c_allocator_api.h`. Repository or game-title changes must not rename the
+public symbols, the `game_rules_state_c` archive, or the `GameRules::StateC` CMake target.
 
-The frozen creation API uses the C runtime allocator. The additive, versioned
-`game_rules/c_allocator_api.h` extension permits an embedding host or deterministic test to supply
-allocate/deallocate callbacks without changing `c_api.h`. An engine explicitly owns its active
-session scaffold. Replacement builds all new storage before swapping it into the engine, and
-allocation failure leaves the prior session untouched. Movement similarly plans into scratch,
-allocates the complete caller-owned response, and swaps authoritative state only on success.
+The host owns rendering, animation, audio, input mapping, persistence, and scheduling. Each engine
+instance owns one independent loaded level, resolved state, and undo-only history. The core uses no
+filesystem, environment, clock, thread, randomness, renderer, Unreal, or Emscripten API.
 
-Every typed result owns a separate, contiguous allocation arena through `owned_storage`, and legacy
-JSON results are independent caller-owned allocations. All nested arrays and views point inside
-that arena rather than introduce separately freed child allocations. Each
-allocation remembers its deallocator, so
-destroying or replacing an engine never invalidates an already returned result. A custom allocator
-context must remain usable until both the engine and all outstanding results have been released.
-Accepted commands resolve inside private working state buffers and retain immutable per-tick
-snapshots before either serializer allocates its result. Only a complete result commits the final
-state to the session. No renderer, filesystem, environment, clock, thread, randomness, or platform
-API is used.
+## Build and test
 
-Every accepted move owns one canonical pre-command history arena regardless of tick count. A
-rejected move owns none. Move history and complete results are allocated before current state is
-committed; rewind results are allocated before the top entry is restored and consumed. Valid
-replacement destroys the old chain only after the new session and response are complete, while an
-invalid or allocation-failed replacement retains the old level, current state, and chain.
-
-Standalone native verification:
+Requirements are CMake 3.25 or newer, Ninja, a C17 compiler, and an optional C++17 compiler for the
+public-header compatibility probe.
 
 ```sh
-cmake -S c-port -B out/c-port-native -G Ninja -DCMAKE_BUILD_TYPE=Debug -DBUILD_TESTING=ON
-cmake --build out/c-port-native
-ctest --test-dir out/c-port-native --output-on-failure
+cmake --preset native-debug
+cmake --build --preset native-debug
+ctest --preset native-debug
 ```
 
-The standalone tree includes ABI size/alignment/offset and C/C++ header probes,
-typed/JSON boundary fuzz cases, and exhaustive allocation-index injection in
-addition to the gameplay suites. A C++ compiler is optional and is used only
-for the consumer-header probe; the library and all production sources remain
-C17. A nested build regression also proves that `BUILD_TESTING=OFF` exposes
-only the library and install targets, not candidate test executables.
-
-Sanitizer-ready configuration (execute tests on a supported Linux host, not this Apple Silicon
-macOS host):
+The preset enables strict warnings as errors, all candidate-only behavior/ABI/ownership tests, and
+the embedding smoke example. A library-only build is:
 
 ```sh
-cmake -S c-port -B out/c-port-sanitized -G Ninja -DCMAKE_BUILD_TYPE=Debug \
-  -DBUILD_TESTING=ON -DGAME_RULES_C_ENABLE_SANITIZERS=ON
-cmake --build out/c-port-sanitized
+cmake -S . -B out/build/library -G Ninja -DCMAKE_BUILD_TYPE=Release \
+  -DBUILD_TESTING=OFF -DGAME_RULES_C_BUILD_EXAMPLES=OFF \
+  -DGAME_RULES_C_WARNINGS_AS_ERRORS=ON
+cmake --build out/build/library
+cmake --install out/build/library --prefix out/install
 ```
 
-WebAssembly smoke build:
+On a supported Linux host, run the sanitizer preset:
 
 ```sh
-emcmake cmake -S c-port -B out/c-port-wasm -G Ninja -DBUILD_TESTING=ON
-cmake --build out/c-port-wasm
-ctest --test-dir out/c-port-wasm --output-on-failure
+cmake --preset native-sanitized
+cmake --build --preset native-sanitized
+ctest --preset native-sanitized
 ```
 
-The parent WebAssembly build additionally produces
-`out/build/wasm-debug/wasm/browser_smoke.html`, which imports the generated ES
-module in a real browser. The parent link target has a configure-time guard
-requiring `GameRules::StateC` directly.
+Repository policy for the source checkout from which this package was extracted forbids executing
+the Apple sanitizer runtime on Apple Silicon/macOS because test discovery stalls there. The
+standalone CI therefore executes ASan/UBSan on Ubuntu.
+
+## WebAssembly
+
+Install Emscripten and Node, then run the same production source and candidate-only suite as wasm32:
+
+```sh
+emcmake cmake --preset wasm-debug
+cmake --build --preset wasm-debug
+ctest --preset wasm-debug
+```
+
+The wasm CTest suite runs the generated C executables through Node. It covers the full C test
+corpus, ABI layout, allocation failures, and the native/wasm smoke example without a C++ runtime.
+A browser or JavaScript adapter may wrap the retained version-1 JSON ABI; adapter ownership and
+presentation behavior remain outside this library.
+
+## Consume with CMake
+
+Use `add_subdirectory()` or install the package and call `find_package(GameRulesStateC CONFIG)`.
+Both provide the stable `GameRules::StateC` target:
+
+```cmake
+find_package(GameRulesStateC CONFIG REQUIRED)
+target_link_libraries(host PRIVATE GameRules::StateC)
+```
+
+The installed package contains `libgame_rules_state_c.a`, both public headers, CMake package
+metadata, project and third-party licenses, provenance, and documentation.
+
+## Contracts and documentation
+
+- [Architecture](docs/architecture.md)
+- [C, Odin, wasm, and ownership API](docs/embedding-api.md)
+- [Level format](docs/level-format.md) and [JSON Schema](docs/level-format.schema.json)
+- [Normative rules](docs/rules.md)
+- [Unreal embedding](docs/unreal-embedding.md)
+- [Release readiness](docs/release-readiness.md)
+- [Transition-period differential parity](docs/parity-transition.md)
+- [Exact extraction manifest](docs/extraction-manifest.md)
+
+yyjson 0.12.0 is the sole vendored source dependency. Its unmodified files, license, pinned
+checksums, private-symbol configuration, and update procedure are under `vendor/yyjson/` and in
+`THIRD_PARTY_NOTICES.md`.

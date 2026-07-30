@@ -184,3 +184,44 @@ python3 tools/c-port/compare_transcript.py \
 Normal comparison exits nonzero at the first difference and now reports all five operations as
 matched. See `c-port/README.md` for sanitizer-ready and Emscripten commands, and
 `docs/c-port-status.md` for the feature matrix and stage-11 audit inputs.
+
+## Future extracted-C dependency integration
+
+This extraction stage does not change any consumer or remove the C++ reference. After the
+standalone C repository exists locally and its reviewed commit is known, perform the dependency
+migration in a separate change:
+
+1. Add a cache path for transition testing and replace only the current
+   `add_subdirectory(c-port)` source location:
+
+   ```cmake
+   set(GAME_RULES_C_SOURCE_DIR "" CACHE PATH
+       "Path to a reviewed game-rules C17 source checkout")
+   if(NOT GAME_RULES_C_SOURCE_DIR)
+       message(FATAL_ERROR "Set GAME_RULES_C_SOURCE_DIR to the extracted C17 checkout")
+   endif()
+   add_subdirectory(
+       "${GAME_RULES_C_SOURCE_DIR}"
+       "${CMAKE_BINARY_DIR}/_deps/game-rules-state-c"
+       EXCLUDE_FROM_ALL
+   )
+   ```
+
+2. Replace parent drift-check paths rooted at `c-port/` with
+   `${GAME_RULES_C_SOURCE_DIR}/include/game_rules/c_api.h` and
+   `${GAME_RULES_C_SOURCE_DIR}/vendor/yyjson/`. Keep comparing those inputs to the frozen
+   parent header and yyjson pin during the transition.
+3. Leave all existing links to the stable `GameRules::StateC` target unchanged. In particular,
+   keep the candidate differential runner and wasm link guard intact.
+4. Configure with an explicit reviewed checkout, then run the full native, 100-repeat
+   differential, sanitizer-CI, wasm, browser, and install-consumer verification recorded in
+   `docs/c-port-status.md`.
+5. After parity passes against the external checkout, replace the cache-path mechanism with the
+   project's chosen pinned dependency mechanism (submodule, package manager, or CMake
+   `FetchContent` using an immutable commit). That choice and remote creation require their own
+   reviewed change.
+
+Only after this dependency step and final transition verification may a later change consider
+removing the in-tree extracted copy or changing production ownership. The C++ implementation,
+reference runner, golden outputs, and differential tooling remain in this repository until that
+separate decision.

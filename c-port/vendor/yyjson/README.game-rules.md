@@ -2,8 +2,8 @@
 
 `yyjson.c`, `yyjson.h`, and `LICENSE` are unmodified upstream files from
 [ibireme/yyjson](https://github.com/ibireme/yyjson), release tag `0.12.0`.
-They were copied from the reference repository's pinned vendor directory on
-2026-07-28 so the extracted C17 candidate remains self-contained.
+They were copied from the audited reference repository's pinned vendor directory on
+2026-07-28 so this standalone C17 package remains self-contained.
 
 Upstream archive SHA-256:
 
@@ -23,5 +23,5 @@ The implementation is included only through `src/level_json_yyjson.c`, which
 gives upstream functions internal linkage. No yyjson type or symbol enters a
 public header. To update, replace all three upstream files together, review the
 release and license, update these hashes, and run the native and WebAssembly
-parser/load suites. The parent repository additionally compares these files
-byte-for-byte with its reference pinned copy.
+parser/load suites. During transition, the originating repository additionally compares these
+files byte-for-byte with its reference pin.

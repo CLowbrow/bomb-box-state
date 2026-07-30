@@ -271,6 +271,125 @@ terminal results across later operations and engine destruction.
 The frozen rules, ABI, reference implementation, and authored expected outputs were not changed.
 See `docs/c-port-audit.md` for findings, exact commands, remaining risks, and recommendations.
 
+## Extraction packaging and isolated-boundary verification
+
+The extraction preconditions were rechecked on 2026-07-30. The checkout was on the dedicated
+`c-rewrite` branch; stages 00 through 10 retained complete differential parity; the stage-11
+audit explicitly recommended **Separate-repository extraction: GO**; and this status contained no
+incomplete or disputed behavior. The frozen C header and three yyjson pin files still matched
+their parent reference copies byte-for-byte before packaging.
+
+`c-port/` is now the extraction-ready standalone root. The packaging change adds root licensing,
+strict native/wasm presets, standalone CI, an installed CMake package exporting
+`GameRules::StateC`, a native/wasm embedding smoke example, architecture/embedding/level/rules
+documentation, a release checklist, Unreal guidance, and transition-period differential
+instructions. No gameplay source, frozen ABI declaration, normative rule, golden output, C++
+reference source, differential input, or current production consumer was changed or removed.
+
+### Isolated evidence
+
+The final intended 47-file tree was copied without symlinks to
+`/private/tmp/game-rules-c17-extraction.B2gpNp`. That path is temporary evidence and is not a
+source or build input.
+
+- `cmake --preset native-debug`, `cmake --build --preset native-debug`, and
+  `ctest --preset native-debug`: strict AppleClang 17 C17 build passed; 16/16 candidate-only,
+  ABI, library-only, C++-header, and smoke tests passed.
+- `cmake --install out/build/native-debug --prefix out/install`: installed the static archive,
+  two public headers, `GameRulesStateC` package config/targets, project license, third-party
+  notices, yyjson license/provenance, README, and all standalone docs.
+- Direct `/usr/bin/cc -std=c17 -Wall -Wextra -Wpedantic -Werror` and
+  `/usr/bin/c++ -std=c++17 -Wall -Wextra -Wpedantic -Werror` consumers compiled, linked against
+  the installed archive, and ran successfully.
+- A clean consumer using `find_package(GameRulesStateC CONFIG REQUIRED)` linked
+  `GameRules::StateC` from the install prefix and ran successfully.
+- `nm -gU` found the stable `game_rules_` exports; `nm -u`, `strings`, and `otool -L`
+  found no C++ standard-library, RTTI, exception, operator-new/delete, or C++ runtime dependency.
+- `cmake --preset native-sanitized` and `cmake --build --preset native-sanitized` passed.
+  Runtime execution remains intentionally unavailable on this Apple Silicon/macOS host under
+  repository policy; Ubuntu CI remains the required sanitizer runtime gate.
+- Emscripten 6.0.3 and Node 26.5.0: `emcmake cmake --preset wasm-debug`,
+  `cmake --build --preset wasm-debug`, and `ctest --preset wasm-debug` passed 15/15 wasm32
+  tests, including ABI layout and the embedding smoke. The first sandboxed link attempt could not
+  write the Homebrew Emscripten SDK cache; the authorized retry changed no source and passed.
+- Source scans found no symlink, parent-relative include, C++ source/header/runtime reference,
+  old-checkout absolute path, untracked SDK path, or reference-runner/golden-data dependency in a
+  production, test, example, or build file.
+- The machine comparison between the manifest and isolated tree reported 47 paths on each side
+  and no difference. A recursive diff, excluding generated `out/`, found the isolated source
+  byte-identical to `c-port/`.
+- The required parent `cmake --preset native-debug`, build, and CTest verification passed 148/148,
+  including all retained C++ reference, authored contract, and differential tests. The standalone
+  example defaults off when `c-port/` is embedded as a subdirectory, so current parent consumers
+  and test inventory remain unchanged.
+
+An initial isolated copy at `/private/tmp/game-rules-c17-extraction.p9hUzj` correctly rejected
+the newly added smoke example because it called the frozen status function with an engine
+argument. The example, not the ABI, was corrected; the final clean copy above was created afresh
+and is the evidence of record.
+
+### Exact extraction file manifest
+
+Every path below is relative to the future standalone root. The classifications and exclusions
+are documented in `c-port/docs/extraction-manifest.md`.
+
+```text
+.github/workflows/ci.yml
+.gitignore
+CMakeLists.txt
+CMakePresets.json
+LICENSE
+README.md
+THIRD_PARTY_NOTICES.md
+cmake/GameRulesStateCConfig.cmake.in
+docs/architecture.md
+docs/embedding-api.md
+docs/extraction-manifest.md
+docs/level-format.md
+docs/level-format.schema.json
+docs/parity-transition.md
+docs/release-readiness.md
+docs/rules.md
+docs/unreal-embedding.md
+examples/engine_smoke.c
+include/game_rules/c_allocator_api.h
+include/game_rules/c_api.h
+src/api_operations.c
+src/c_api.c
+src/c_api_internal.h
+src/level.c
+src/level_json.c
+src/level_json_yyjson.c
+src/level_json_yyjson.h
+src/state.c
+tests/abi_layout_test.c
+tests/allocation_failure_test.c
+tests/boundary_fuzz_test.c
+tests/explosions_test.c
+tests/falling_test.c
+tests/fixtures_test.c
+tests/flat_walking_test.c
+tests/header_cpp_compatibility_test.cpp
+tests/history_test.c
+tests/level_loading_test.c
+tests/library_only_build_test.cmake
+tests/lifecycle_test.c
+tests/player_pushing_test.c
+tests/ramps_test.c
+tests/wasm_smoke_test.c
+vendor/yyjson/LICENSE
+vendor/yyjson/README.game-rules.md
+vendor/yyjson/yyjson.c
+vendor/yyjson/yyjson.h
+```
+
+Reference-vs-candidate runners, comparator scripts, generated differential levels/transcripts,
+reviewed golden outputs, C++ implementation files, and build products are intentionally excluded.
+They remain in the C++ checkout. `c-port/docs/parity-transition.md` records how to rerun parity
+with externally supplied runner paths, and `docs/development.md` records the exact future
+dependency integration step. This extraction stage does not initialize a repository, create a
+remote, commit, push, switch consumers, or delete the reference.
+
 ## Repeat-audit commands
 
 To reproduce the longest differential checks without changing the frozen API, rules, C++

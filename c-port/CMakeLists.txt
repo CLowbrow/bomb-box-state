@@ -4,7 +4,7 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
     project(
         GameRulesStateC
         VERSION 0.1.0
-        DESCRIPTION "C17 candidate for the deterministic game-rules state engine"
+        DESCRIPTION "Portable C17 deterministic game-rules state engine"
         LANGUAGES C
     )
     include(CTest)
@@ -16,11 +16,18 @@ if(DEFINED GAME_RULES_ENABLE_SANITIZERS AND GAME_RULES_ENABLE_SANITIZERS)
     set(_game_rules_c_sanitizers_default ON)
 endif()
 option(GAME_RULES_C_ENABLE_SANITIZERS
-       "Enable AddressSanitizer and UndefinedBehaviorSanitizer for the C candidate"
+       "Enable AddressSanitizer and UndefinedBehaviorSanitizer"
        ${_game_rules_c_sanitizers_default})
 option(GAME_RULES_C_WARNINGS_AS_ERRORS
-       "Treat C candidate compiler warnings as errors"
+       "Treat project compiler warnings as errors"
        OFF)
+set(_game_rules_c_examples_default OFF)
+if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
+    set(_game_rules_c_examples_default ON)
+endif()
+option(GAME_RULES_C_BUILD_EXAMPLES
+       "Build standalone embedding smoke examples"
+       ${_game_rules_c_examples_default})
 
 add_library(game_rules_c_yyjson OBJECT src/level_json_yyjson.c)
 target_compile_features(game_rules_c_yyjson PRIVATE c_std_99)
@@ -48,6 +55,7 @@ set_target_properties(
     game_rules_state_c
     PROPERTIES
         C_EXTENSIONS OFF
+        EXPORT_NAME StateC
         POSITION_INDEPENDENT_CODE ON
 )
 target_include_directories(
@@ -68,10 +76,23 @@ function(game_rules_c_apply_options target)
             target_compile_options(${target} PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
             target_link_options(${target} PRIVATE -fsanitize=address,undefined)
         endif()
+    elseif(MSVC)
+        target_compile_options(${target} PRIVATE /W4)
+        if(GAME_RULES_C_WARNINGS_AS_ERRORS)
+            target_compile_options(${target} PRIVATE /WX)
+        endif()
     endif()
 endfunction()
 
 game_rules_c_apply_options(game_rules_state_c)
+
+if(GAME_RULES_C_BUILD_EXAMPLES)
+    add_executable(game_rules_c_engine_smoke examples/engine_smoke.c)
+    target_link_libraries(game_rules_c_engine_smoke PRIVATE GameRules::StateC)
+    target_compile_features(game_rules_c_engine_smoke PRIVATE c_std_17)
+    set_target_properties(game_rules_c_engine_smoke PROPERTIES C_EXTENSIONS OFF)
+    game_rules_c_apply_options(game_rules_c_engine_smoke)
+endif()
 
 if(BUILD_TESTING)
 add_executable(game_rules_candidate_lifecycle_smoke tests/lifecycle_test.c)
@@ -221,6 +242,11 @@ endif()
                 COMMAND "${GAME_RULES_C_NODE_EXECUTABLE}" $<TARGET_FILE:game_rules_candidate_wasm_smoke>
             )
             set_tests_properties(game_rules.candidate.wasm_smoke PROPERTIES LABELS "candidate;wasm")
+            if(TARGET game_rules_c_engine_smoke)
+                add_test(NAME game_rules.example.engine_smoke
+                         COMMAND "${GAME_RULES_C_NODE_EXECUTABLE}" $<TARGET_FILE:game_rules_c_engine_smoke>)
+                set_tests_properties(game_rules.example.engine_smoke PROPERTIES LABELS "example;wasm")
+            endif()
         endif()
     else()
         set_tests_properties(game_rules.candidate.lifecycle PROPERTIES LABELS "candidate;native")
@@ -240,14 +266,40 @@ endif()
         endif()
         add_test(NAME game_rules.candidate.wasm_smoke COMMAND game_rules_candidate_wasm_smoke)
         set_tests_properties(game_rules.candidate.wasm_smoke PROPERTIES LABELS "candidate;native;wasm-smoke")
+        if(TARGET game_rules_c_engine_smoke)
+            add_test(NAME game_rules.example.engine_smoke COMMAND game_rules_c_engine_smoke)
+            set_tests_properties(game_rules.example.engine_smoke PROPERTIES LABELS "example;native")
+        endif()
     endif()
 endif()
 
 if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
-    install(TARGETS game_rules_state_c ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}")
+    include(CMakePackageConfigHelpers)
+    configure_package_config_file(
+        cmake/GameRulesStateCConfig.cmake.in
+        "${CMAKE_CURRENT_BINARY_DIR}/GameRulesStateCConfig.cmake"
+        INSTALL_DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/GameRulesStateC"
+    )
+    write_basic_package_version_file(
+        "${CMAKE_CURRENT_BINARY_DIR}/GameRulesStateCConfigVersion.cmake"
+        VERSION "${PROJECT_VERSION}"
+        COMPATIBILITY SameMajorVersion
+    )
+    install(TARGETS game_rules_state_c EXPORT GameRulesStateCTargets
+            ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}")
+    install(EXPORT GameRulesStateCTargets
+            FILE GameRulesStateCTargets.cmake
+            NAMESPACE GameRules::
+            DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/GameRulesStateC")
+    install(FILES
+            "${CMAKE_CURRENT_BINARY_DIR}/GameRulesStateCConfig.cmake"
+            "${CMAKE_CURRENT_BINARY_DIR}/GameRulesStateCConfigVersion.cmake"
+            DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/GameRulesStateC")
     install(FILES include/game_rules/c_api.h DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/game_rules")
     install(FILES include/game_rules/c_allocator_api.h DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/game_rules")
-    install(FILES THIRD_PARTY_NOTICES.md DESTINATION "${CMAKE_INSTALL_DATADIR}/GameRulesStateC")
+    install(FILES README.md LICENSE THIRD_PARTY_NOTICES.md
+            DESTINATION "${CMAKE_INSTALL_DATADIR}/GameRulesStateC")
+    install(DIRECTORY docs/ DESTINATION "${CMAKE_INSTALL_DATADIR}/GameRulesStateC/docs")
     install(FILES vendor/yyjson/LICENSE vendor/yyjson/README.game-rules.md
             DESTINATION "${CMAKE_INSTALL_DATADIR}/GameRulesStateC/licenses")
 endif()
