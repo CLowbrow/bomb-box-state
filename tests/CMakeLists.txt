@@ -160,19 +160,19 @@ set_tests_properties(
 )
 
 add_test(
-    NAME game_rules.candidate_runner.stage10_browser_contract
+    NAME game_rules.candidate_runner.browser_contract
     COMMAND
         game_rules_candidate_runner
         --check-expected
         "${CMAKE_CURRENT_SOURCE_DIR}/contracts/browser_vertical_slice/v1/contract.txt"
 )
 set_tests_properties(
-    game_rules.candidate_runner.stage10_browser_contract
+    game_rules.candidate_runner.browser_contract
     PROPERTIES LABELS "candidate;contract;history;integration;native"
 )
 
 add_test(
-    NAME game_rules.candidate_runner.stage10_hardening_contract
+    NAME game_rules.candidate_runner.hardening_contract
     COMMAND
         game_rules_candidate_runner
         --check-expected
@@ -181,31 +181,31 @@ add_test(
         "${CMAKE_CURRENT_SOURCE_DIR}/contracts/engine_hardening/v1/rewind-stress.txt"
 )
 set_tests_properties(
-    game_rules.candidate_runner.stage10_hardening_contract
+    game_rules.candidate_runner.hardening_contract
     PROPERTIES LABELS "candidate;contract;history;lifecycle;terminal;integration;native"
 )
 
 add_test(
-    NAME game_rules.candidate_runner.stage05_browser_push_contract
+    NAME game_rules.candidate_runner.browser_push_contract
     COMMAND
         game_rules_candidate_runner
         --check-expected
-        "${CMAKE_CURRENT_SOURCE_DIR}/c-port/stage05-browser-push-contract.txt"
+        "${CMAKE_CURRENT_SOURCE_DIR}/c-port/browser-push-contract.txt"
 )
 set_tests_properties(
-    game_rules.candidate_runner.stage05_browser_push_contract
+    game_rules.candidate_runner.browser_push_contract
     PROPERTIES LABELS "candidate;contract;movement;integration;native"
 )
 
 add_test(
-    NAME game_rules.candidate_runner.stage09_explosion_conflicts_contract
+    NAME game_rules.candidate_runner.explosion_conflicts_contract
     COMMAND
         game_rules_candidate_runner
         --check-expected
         "${CMAKE_CURRENT_SOURCE_DIR}/contracts/engine_hardening/v1/conflicts.txt"
 )
 set_tests_properties(
-    game_rules.candidate_runner.stage09_explosion_conflicts_contract
+    game_rules.candidate_runner.explosion_conflicts_contract
     PROPERTIES LABELS "candidate;contract;movement;ramps;explosions;integration;native"
 )
 
@@ -213,16 +213,16 @@ find_package(Python3 REQUIRED COMPONENTS Interpreter)
 set(GAME_RULES_C_COMPARATOR "${PROJECT_SOURCE_DIR}/tools/c-port/compare_transcript.py")
 
 add_test(
-    NAME game_rules.differential.lifecycle_match
+    NAME game_rules.differential.lifecycle_parity
     COMMAND
         "${Python3_EXECUTABLE}"
         "${GAME_RULES_C_COMPARATOR}"
         "$<TARGET_FILE:game_rules_reference_runner>"
         "$<TARGET_FILE:game_rules_candidate_runner>"
-        "${CMAKE_CURRENT_SOURCE_DIR}/c-port/transcripts/lifecycle-match.txt"
+        "${CMAKE_CURRENT_SOURCE_DIR}/c-port/transcripts/lifecycle-parity.txt"
 )
 set_tests_properties(
-    game_rules.differential.lifecycle_match
+    game_rules.differential.lifecycle_parity
     PROPERTIES LABELS "candidate;differential;integration;native"
 )
 
@@ -241,91 +241,91 @@ set_tests_properties(
 )
 
 add_test(
-    NAME game_rules.differential.stage03_load_state_parity
+    NAME game_rules.differential.load_state_parity
     COMMAND
         "${Python3_EXECUTABLE}"
         "${GAME_RULES_C_COMPARATOR}"
         "$<TARGET_FILE:game_rules_reference_runner>"
         "$<TARGET_FILE:game_rules_candidate_runner>"
-        "${CMAKE_CURRENT_SOURCE_DIR}/c-port/stage03-load-state-parity.txt"
+        "${CMAKE_CURRENT_SOURCE_DIR}/c-port/load-state-parity.txt"
 )
 set_tests_properties(
-    game_rules.differential.stage03_load_state_parity
+    game_rules.differential.load_state_parity
     PROPERTIES LABELS "candidate;differential;initialization;snapshot;integration;native"
 )
 
 add_test(
-    NAME game_rules.differential.stage04_flat_walking_parity
+    NAME game_rules.differential.flat_walking_parity
     COMMAND
         "${Python3_EXECUTABLE}"
         "${GAME_RULES_C_COMPARATOR}"
         "$<TARGET_FILE:game_rules_reference_runner>"
         "$<TARGET_FILE:game_rules_candidate_runner>"
-        "${CMAKE_CURRENT_SOURCE_DIR}/c-port/stage04-flat-walking-parity.txt"
+        "${CMAKE_CURRENT_SOURCE_DIR}/c-port/flat-walking-parity.txt"
 )
 set_tests_properties(
-    game_rules.differential.stage04_flat_walking_parity
+    game_rules.differential.flat_walking_parity
     PROPERTIES LABELS "candidate;differential;movement;integration;native"
 )
 
 add_test(
-    NAME game_rules.differential.stage05_player_pushing_parity
+    NAME game_rules.differential.player_pushing_parity
     COMMAND
         "${Python3_EXECUTABLE}"
         "${GAME_RULES_C_COMPARATOR}"
         "$<TARGET_FILE:game_rules_reference_runner>"
         "$<TARGET_FILE:game_rules_candidate_runner>"
-        "${CMAKE_CURRENT_SOURCE_DIR}/c-port/stage05-player-pushing-parity.txt"
+        "${CMAKE_CURRENT_SOURCE_DIR}/c-port/player-pushing-parity.txt"
 )
 set_tests_properties(
-    game_rules.differential.stage05_player_pushing_parity
+    game_rules.differential.player_pushing_parity
     PROPERTIES LABELS "candidate;differential;movement;integration;native"
 )
 
 add_test(
-    NAME game_rules.differential.stage06_gravity_parity
+    NAME game_rules.differential.gravity_parity
     COMMAND
         "${Python3_EXECUTABLE}"
         "${GAME_RULES_C_COMPARATOR}"
         "$<TARGET_FILE:game_rules_reference_runner>"
         "$<TARGET_FILE:game_rules_candidate_runner>"
-        "${CMAKE_CURRENT_SOURCE_DIR}/c-port/stage06-gravity-parity.txt"
+        "${CMAKE_CURRENT_SOURCE_DIR}/c-port/gravity-parity.txt"
 )
 set_tests_properties(
-    game_rules.differential.stage06_gravity_parity
+    game_rules.differential.gravity_parity
     PROPERTIES LABELS "candidate;differential;movement;gravity;integration;native"
 )
 
 add_test(
-    NAME game_rules.differential.stage07_ramps_parity
+    NAME game_rules.differential.ramps_parity
     COMMAND
         "${Python3_EXECUTABLE}"
         "${GAME_RULES_C_COMPARATOR}"
         "$<TARGET_FILE:game_rules_reference_runner>"
         "$<TARGET_FILE:game_rules_candidate_runner>"
-        "${CMAKE_CURRENT_SOURCE_DIR}/c-port/stage07-ramps-parity.txt"
+        "${CMAKE_CURRENT_SOURCE_DIR}/c-port/ramps-parity.txt"
 )
 set_tests_properties(
-    game_rules.differential.stage07_ramps_parity
+    game_rules.differential.ramps_parity
     PROPERTIES LABELS "candidate;differential;movement;ramps;integration;native"
 )
 
 add_test(
-    NAME game_rules.differential.stage08_fixtures_parity
+    NAME game_rules.differential.fixtures_parity
     COMMAND
         "${Python3_EXECUTABLE}"
         "${GAME_RULES_C_COMPARATOR}"
         "$<TARGET_FILE:game_rules_reference_runner>"
         "$<TARGET_FILE:game_rules_candidate_runner>"
-        "${CMAKE_CURRENT_SOURCE_DIR}/c-port/stage08-fixtures-parity.txt"
+        "${CMAKE_CURRENT_SOURCE_DIR}/c-port/fixtures-parity.txt"
 )
 set_tests_properties(
-    game_rules.differential.stage08_fixtures_parity
+    game_rules.differential.fixtures_parity
     PROPERTIES LABELS "candidate;differential;movement;gravity;ramps;fixtures;terminal;integration;native"
 )
 
 add_test(
-    NAME game_rules.differential.stage09_explosions_parity
+    NAME game_rules.differential.explosions_parity
     COMMAND
         "${Python3_EXECUTABLE}"
         "${CMAKE_CURRENT_SOURCE_DIR}/c-port/explosion_differential_test.py"
@@ -334,12 +334,12 @@ add_test(
         "${GAME_RULES_C_COMPARATOR}"
 )
 set_tests_properties(
-    game_rules.differential.stage09_explosions_parity
+    game_rules.differential.explosions_parity
     PROPERTIES LABELS "candidate;differential;movement;gravity;ramps;fixtures;explosions;terminal;integration;native"
 )
 
 add_test(
-    NAME game_rules.differential.stage10_browser_history_parity
+    NAME game_rules.differential.browser_history_parity
     COMMAND
         "${Python3_EXECUTABLE}"
         "${GAME_RULES_C_COMPARATOR}"
@@ -348,12 +348,12 @@ add_test(
         "${CMAKE_CURRENT_SOURCE_DIR}/contracts/browser_vertical_slice/v1/contract.txt"
 )
 set_tests_properties(
-    game_rules.differential.stage10_browser_history_parity
+    game_rules.differential.browser_history_parity
     PROPERTIES LABELS "candidate;differential;history;integration;native"
 )
 
 add_test(
-    NAME game_rules.differential.stage10_hardening_lifecycle_parity
+    NAME game_rules.differential.hardening_lifecycle_parity
     COMMAND
         "${Python3_EXECUTABLE}"
         "${GAME_RULES_C_COMPARATOR}"
@@ -362,12 +362,12 @@ add_test(
         "${CMAKE_CURRENT_SOURCE_DIR}/contracts/engine_hardening/v1/lifecycle.txt"
 )
 set_tests_properties(
-    game_rules.differential.stage10_hardening_lifecycle_parity
+    game_rules.differential.hardening_lifecycle_parity
     PROPERTIES LABELS "candidate;differential;history;lifecycle;terminal;integration;native"
 )
 
 add_test(
-    NAME game_rules.differential.stage10_rewind_stress_parity
+    NAME game_rules.differential.rewind_stress_parity
     COMMAND
         "${Python3_EXECUTABLE}"
         "${GAME_RULES_C_COMPARATOR}"
@@ -376,12 +376,12 @@ add_test(
         "${CMAKE_CURRENT_SOURCE_DIR}/contracts/engine_hardening/v1/rewind-stress.txt"
 )
 set_tests_properties(
-    game_rules.differential.stage10_rewind_stress_parity
+    game_rules.differential.rewind_stress_parity
     PROPERTIES LABELS "candidate;differential;history;stress;terminal;integration;native"
 )
 
 add_test(
-    NAME game_rules.differential.stage10_seeded_history_lifecycle
+    NAME game_rules.differential.seeded_history_lifecycle
     COMMAND
         "${Python3_EXECUTABLE}"
         "${CMAKE_CURRENT_SOURCE_DIR}/c-port/history_differential_test.py"
@@ -390,7 +390,7 @@ add_test(
         "${GAME_RULES_C_COMPARATOR}"
 )
 set_tests_properties(
-    game_rules.differential.stage10_seeded_history_lifecycle
+    game_rules.differential.seeded_history_lifecycle
     PROPERTIES LABELS "candidate;differential;history;lifecycle;replacement;stress;terminal;integration;native"
 )
 
@@ -410,7 +410,7 @@ set_tests_properties(
 # This small consumer stays framework-free and is compiled with the same
 # no-exceptions/no-RTTI policy as the core. It proves that the public C++ and C
 # headers remain usable under the engine's production compilation constraints.
-add_executable(game_rules_production_mode_smoke consumer/production_mode_smoke.cpp)
+add_executable(game_rules_production_mode_smoke consumer/production_mode_test.cpp)
 target_link_libraries(game_rules_production_mode_smoke PRIVATE GameRules::State)
 target_compile_features(game_rules_production_mode_smoke PRIVATE cxx_std_20)
 set_target_properties(game_rules_production_mode_smoke PROPERTIES CXX_EXTENSIONS OFF)
@@ -421,7 +421,7 @@ add_test(NAME game_rules.consumer.production_mode COMMAND game_rules_production_
 set_tests_properties(game_rules.consumer.production_mode PROPERTIES LABELS "consumer;native")
 
 # Compile the public boundary as C (not C++) while using the C++ linker for the implementation.
-add_executable(game_rules_c_header_smoke consumer/c_api_header_smoke.c)
+add_executable(game_rules_c_header_smoke consumer/c_api_header_test.c)
 target_link_libraries(game_rules_c_header_smoke PRIVATE GameRules::State)
 target_compile_features(game_rules_c_header_smoke PRIVATE c_std_99)
 set_target_properties(game_rules_c_header_smoke PROPERTIES C_EXTENSIONS OFF LINKER_LANGUAGE CXX)

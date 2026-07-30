@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate long deterministic stage-10 history/lifecycle sequences and compare engines."""
+"""Generate long deterministic history/lifecycle sequences and compare engines."""
 
 from __future__ import annotations
 
@@ -76,7 +76,7 @@ def main() -> int:
     malformed = contracts / "engine_hardening" / "v1" / "malformed.json"
     loss_level = repository / "tests" / "c-port" / "levels" / "fall-chain-loss.json"
 
-    with tempfile.TemporaryDirectory(prefix="game-rules-stage10-") as temporary:
+    with tempfile.TemporaryDirectory(prefix="game-rules-history-") as temporary:
         root = Path(temporary)
         open_level = root / "open-level.json"
         replacement_level = root / "replacement-level.json"
@@ -89,7 +89,7 @@ def main() -> int:
         level_paths = [open_level, replacement_level, stress_level,
                        terminal_level, browser_level, loss_level]
         directions = ["north", "east", "south", "west", "invalid"]
-        lines = ["# Generated stage-10 mixed history, replacement, and lifecycle corpus."]
+        lines = ["# Generated mixed history, replacement, and lifecycle corpus."]
 
         for seed in SEEDS:
             randomizer = random.Random(seed)
@@ -131,7 +131,7 @@ def main() -> int:
 
             lines.extend(["destroy-engine|-", "create-engine|-", f"load|-|{open_level}"])
 
-        transcript = root / "stage10-history-lifecycle.txt"
+        transcript = root / "history-lifecycle.txt"
         transcript.write_text("\n".join(lines) + "\n", encoding="utf-8")
         operation_count = sum(1 for line in lines if line and not line.startswith("#"))
 

@@ -1,4 +1,4 @@
-# Stage 03 requires complete load and get-state parity for stable, unstable,
+# Complete load and get-state parity for stable, unstable,
 # reordered, fixture-bearing, coordinate-variant, terminal, and empty-array levels.
 load|-|../contracts/browser_vertical_slice/v1/level.json
 get-state|-

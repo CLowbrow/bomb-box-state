@@ -1,4 +1,4 @@
-# Stage 06: post-command gravity, landing, explosion closure, and terminal gating.
+# Post-command gravity, landing, explosion closure, and terminal gating.
 load|-|levels/fall-stack.json
 move|-|east
 load|-|levels/fall-top-stack.json

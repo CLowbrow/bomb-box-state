@@ -486,7 +486,7 @@ static void errors_json(builder* output,
     text(output, "]");
 }
 
-char* game_rules_c_stage03_get_state(game_rules_engine* engine)
+char* game_rules_c_get_state_json(game_rules_engine* engine)
 {
     builder output = {0};
     output.allocator = engine->allocator;
@@ -498,9 +498,9 @@ char* game_rules_c_stage03_get_state(game_rules_engine* engine)
     return finish(&output);
 }
 
-char* game_rules_c_stage03_load_json(game_rules_engine* engine,
-                                     const char* json,
-                                     uint32_t length)
+char* game_rules_c_load_json(game_rules_engine* engine,
+                             const char* json,
+                             uint32_t length)
 {
     game_rules_c_decode_result decoded;
     game_rules_session* replacement = NULL;
@@ -580,7 +580,7 @@ static uint32_t plan_command(game_rules_engine* engine,
     return GAME_RULES_CALL_OK;
 }
 
-char* game_rules_c_stage04_move_json(game_rules_engine* engine, uint32_t direction)
+char* game_rules_c_move_json(game_rules_engine* engine, uint32_t direction)
 {
     game_rules_c_command_transaction transaction;
     game_rules_event no_level_event;
@@ -655,7 +655,7 @@ char* game_rules_c_stage04_move_json(game_rules_engine* engine, uint32_t directi
     return response;
 }
 
-char* game_rules_c_stage10_rewind_json(game_rules_engine* engine)
+char* game_rules_c_rewind_json(game_rules_engine* engine)
 {
     game_rules_session* const session = engine->session;
     const game_rules_c_history_entry* const history =
@@ -919,8 +919,8 @@ static game_rules_c_level_view level_view(const game_rules_level_definition* lev
     return view;
 }
 
-uint32_t game_rules_c_stage03_get_state_data(const game_rules_engine* engine,
-                                             game_rules_state_result* result)
+uint32_t game_rules_c_get_state_data(const game_rules_engine* engine,
+                                     game_rules_state_result* result)
 {
     layout measure = {0};
     layout arena = {0};
@@ -947,9 +947,9 @@ uint32_t game_rules_c_stage03_get_state_data(const game_rules_engine* engine,
     return GAME_RULES_CALL_OK;
 }
 
-uint32_t game_rules_c_stage03_load_data(game_rules_engine* engine,
-                                        const game_rules_level_definition* level,
-                                        game_rules_load_result* result)
+uint32_t game_rules_c_load_data(game_rules_engine* engine,
+                                const game_rules_level_definition* level,
+                                game_rules_load_result* result)
 {
     game_rules_c_level_view view;
     game_rules_c_validation_result validation;
@@ -1048,9 +1048,9 @@ static void move_graph(layout* arena,
     }
 }
 
-uint32_t game_rules_c_stage04_move_data(game_rules_engine* engine,
-                                        uint32_t direction,
-                                        game_rules_move_result* result)
+uint32_t game_rules_c_move_data(game_rules_engine* engine,
+                                uint32_t direction,
+                                game_rules_move_result* result)
 {
     game_rules_c_command_transaction transaction;
     game_rules_event no_level_event;
@@ -1125,8 +1125,8 @@ static void rewind_graph(layout* arena,
     }
 }
 
-uint32_t game_rules_c_stage10_rewind_data(game_rules_engine* engine,
-                                          game_rules_rewind_result* result)
+uint32_t game_rules_c_rewind_data(game_rules_engine* engine,
+                                  game_rules_rewind_result* result)
 {
     game_rules_session* const session = engine->session;
     game_rules_c_history_entry* const history =

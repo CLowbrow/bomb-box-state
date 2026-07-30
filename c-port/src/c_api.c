@@ -242,7 +242,7 @@ char* game_rules_engine_load_level(game_rules_engine* engine,
             engine,
             "{\"apiVersion\":1,\"operation\":\"loadLevel\",\"status\":\"invalid_argument\",\"state\":null}");
     }
-    return game_rules_c_stage03_load_json(engine, level_json, level_json_length);
+    return game_rules_c_load_json(engine, level_json, level_json_length);
 }
 
 char* game_rules_engine_get_state(game_rules_engine* engine)
@@ -252,7 +252,7 @@ char* game_rules_engine_get_state(game_rules_engine* engine)
             NULL,
             "{\"apiVersion\":1,\"operation\":\"getState\",\"status\":\"invalid_engine\",\"state\":null}");
     }
-    return game_rules_c_stage03_get_state(engine);
+    return game_rules_c_get_state_json(engine);
 }
 
 char* game_rules_engine_move(game_rules_engine* engine, uint32_t direction)
@@ -262,7 +262,7 @@ char* game_rules_engine_move(game_rules_engine* engine, uint32_t direction)
             NULL,
             "{\"apiVersion\":1,\"operation\":\"move\",\"status\":\"invalid_engine\",\"state\":null}");
     }
-    return game_rules_c_stage04_move_json(engine, direction);
+    return game_rules_c_move_json(engine, direction);
 }
 
 char* game_rules_engine_rewind(game_rules_engine* engine)
@@ -272,7 +272,7 @@ char* game_rules_engine_rewind(game_rules_engine* engine)
             NULL,
             "{\"apiVersion\":1,\"operation\":\"rewind\",\"status\":\"invalid_engine\",\"state\":null}");
     }
-    return game_rules_c_stage10_rewind_json(engine);
+    return game_rules_c_rewind_json(engine);
 }
 
 void game_rules_string_free(char* result)
@@ -295,7 +295,7 @@ uint32_t game_rules_engine_get_state_data(const game_rules_engine* engine,
     if (engine == NULL) {
         return GAME_RULES_CALL_INVALID_ENGINE;
     }
-    return game_rules_c_stage03_get_state_data(engine, out_result);
+    return game_rules_c_get_state_data(engine, out_result);
 }
 
 uint32_t game_rules_engine_load_level_data(game_rules_engine* engine,
@@ -312,7 +312,7 @@ uint32_t game_rules_engine_load_level_data(game_rules_engine* engine,
     if (engine == NULL) {
         return GAME_RULES_CALL_INVALID_ENGINE;
     }
-    return game_rules_c_stage03_load_data(engine, level, out_result);
+    return game_rules_c_load_data(engine, level, out_result);
 }
 
 uint32_t game_rules_engine_move_data(game_rules_engine* engine,
@@ -326,7 +326,7 @@ uint32_t game_rules_engine_move_data(game_rules_engine* engine,
     if (engine == NULL) {
         return GAME_RULES_CALL_INVALID_ENGINE;
     }
-    return game_rules_c_stage04_move_data(engine, direction, out_result);
+    return game_rules_c_move_data(engine, direction, out_result);
 }
 
 uint32_t game_rules_engine_rewind_data(game_rules_engine* engine,
@@ -339,7 +339,7 @@ uint32_t game_rules_engine_rewind_data(game_rules_engine* engine,
     if (engine == NULL) {
         return GAME_RULES_CALL_INVALID_ENGINE;
     }
-    return game_rules_c_stage10_rewind_data(engine, out_result);
+    return game_rules_c_rewind_data(engine, out_result);
 }
 
 static void dispose_result(void* owned_storage, void* result, size_t result_size)

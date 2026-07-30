@@ -1,4 +1,4 @@
-# Stage 08: switches, doors, exit teleporters, fixture/physics interactions, and wins.
+# Switches, doors, exit teleporters, fixture/physics interactions, and wins.
 load|-|levels/fixture-all-colors.json
 get-state|-
 load|-|levels/fixture-all-colors-reordered.json

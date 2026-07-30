@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate deterministic stage-09 explosion scenarios and compare both engines."""
+"""Generate deterministic explosion scenarios and compare both engines."""
 
 from __future__ import annotations
 
@@ -222,10 +222,10 @@ def main() -> int:
     ]
     authored = authored_scenarios()
     authored_by_name = {name: value for name, value, moves in authored if not moves}
-    with tempfile.TemporaryDirectory(prefix="game-rules-stage09-") as temporary:
+    with tempfile.TemporaryDirectory(prefix="game-rules-explosions-") as temporary:
         root = Path(temporary)
-        transcript = root / "stage09-explosions.txt"
-        lines = ["# Generated stage-09 explosion parity and deterministic-seed corpus."]
+        transcript = root / "explosions.txt"
+        lines = ["# Generated explosion parity and deterministic-seed corpus."]
         equivalent_pairs: list[tuple[int, int]] = []
         operation_count = 0
 

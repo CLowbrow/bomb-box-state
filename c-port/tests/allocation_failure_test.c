@@ -238,8 +238,8 @@ static void expect_atomic_replacement_failures(allocation_tracker* tracker,
     assert(tracker->live_count == baseline);
 }
 
-static void expect_stage03_load_failures(allocation_tracker* tracker,
-                                         const game_rules_allocator_v1* allocator)
+static void expect_load_failures(allocation_tracker* tracker,
+                                 const game_rules_allocator_v1* allocator)
 {
     const game_rules_cell cells[2] = {
         {{0, 0}, GAME_RULES_CELL_FLAT, 0, 0},
@@ -327,8 +327,8 @@ static void expect_stage03_load_failures(allocation_tracker* tracker,
     }
 }
 
-static void expect_stage04_move_failures(allocation_tracker* tracker,
-                                         const game_rules_allocator_v1* allocator)
+static void expect_flat_move_failures(allocation_tracker* tracker,
+                                      const game_rules_allocator_v1* allocator)
 {
     const game_rules_cell cells[3] = {
         {{0, 0}, GAME_RULES_CELL_FLAT, 0, 0},
@@ -412,8 +412,8 @@ static void expect_stage04_move_failures(allocation_tracker* tracker,
     assert(tracker->invalid_free_count == 0U);
 }
 
-static void expect_stage05_push_failures(allocation_tracker* tracker,
-                                         const game_rules_allocator_v1* allocator)
+static void expect_push_failures(allocation_tracker* tracker,
+                                 const game_rules_allocator_v1* allocator)
 {
     const game_rules_cell cells[4] = {
         {{0, 0}, GAME_RULES_CELL_FLAT, 0, 0},
@@ -525,8 +525,8 @@ static void expect_stage05_push_failures(allocation_tracker* tracker,
     assert(tracker->invalid_free_count == 0U);
 }
 
-static void expect_stage06_fall_failures(allocation_tracker* tracker,
-                                         const game_rules_allocator_v1* allocator)
+static void expect_fall_failures(allocation_tracker* tracker,
+                                 const game_rules_allocator_v1* allocator)
 {
     const game_rules_cell cells[3] = {
         {{0, 0}, GAME_RULES_CELL_FLAT, 2, 0},
@@ -629,8 +629,8 @@ static void expect_stage06_fall_failures(allocation_tracker* tracker,
     }
 }
 
-static void expect_stage07_ramp_failures(allocation_tracker* tracker,
-                                         const game_rules_allocator_v1* allocator)
+static void expect_ramp_failures(allocation_tracker* tracker,
+                                 const game_rules_allocator_v1* allocator)
 {
     const game_rules_cell cells[5] = {
         {{0, 0}, GAME_RULES_CELL_FLAT, 0, 0},
@@ -752,8 +752,8 @@ static void assert_fixture_command_unmodified(const game_rules_engine* engine)
     assert(engine->session->current_state.outcome == GAME_RULES_OUTCOME_ONGOING);
 }
 
-static void expect_stage08_fixture_failures(allocation_tracker* tracker,
-                                            const game_rules_allocator_v1* allocator)
+static void expect_fixture_failures(allocation_tracker* tracker,
+                                    const game_rules_allocator_v1* allocator)
 {
     const game_rules_cell cells[4] = {
         {{0, 0}, GAME_RULES_CELL_FLAT, 2, 0},
@@ -884,7 +884,7 @@ static void expect_stage08_fixture_failures(allocation_tracker* tracker,
     }
 }
 
-static void assert_stage09_explosion_command_unmodified(
+static void assert_explosion_command_unmodified(
     const game_rules_engine* engine)
 {
     const game_rules_c_state* state = &engine->session->current_state;
@@ -907,7 +907,7 @@ static void assert_stage09_explosion_command_unmodified(
     assert(state->outcome == GAME_RULES_OUTCOME_ONGOING);
 }
 
-static void expect_stage09_explosion_failures(
+static void expect_explosion_failures(
     allocation_tracker* tracker,
     const game_rules_allocator_v1* allocator)
 {
@@ -961,7 +961,7 @@ static void expect_stage09_explosion_failures(
         baseline = tracker->live_count;
         tracker_begin_failure(tracker, failure);
         assert(game_rules_engine_move(engine, GAME_RULES_DIRECTION_EAST) == NULL);
-        assert_stage09_explosion_command_unmodified(engine);
+        assert_explosion_command_unmodified(engine);
         assert(tracker->live_count == baseline);
         tracker_begin_success(tracker);
         json = game_rules_engine_move(engine, GAME_RULES_DIRECTION_EAST);
@@ -1000,7 +1000,7 @@ static void expect_stage09_explosion_failures(
         assert(game_rules_engine_move_data(engine, GAME_RULES_DIRECTION_EAST, &move) ==
                GAME_RULES_CALL_ALLOCATION_FAILED);
         assert(bytes_are_zero(&move, sizeof(move)));
-        assert_stage09_explosion_command_unmodified(engine);
+        assert_explosion_command_unmodified(engine);
         assert(tracker->live_count == baseline);
         tracker_begin_success(tracker);
         assert(game_rules_engine_move_data(engine, GAME_RULES_DIRECTION_EAST, &move) ==
@@ -1014,7 +1014,7 @@ static void expect_stage09_explosion_failures(
     }
 }
 
-static void expect_stage10_history_failures(
+static void expect_history_failures(
     allocation_tracker* tracker,
     const game_rules_allocator_v1* allocator)
 {
@@ -1261,14 +1261,14 @@ int main(void)
     expect_atomic_replacement_failures(&tracker, engine);
     game_rules_engine_destroy(engine);
     assert(tracker.live_count == 0U);
-    expect_stage03_load_failures(&tracker, &allocator);
-    expect_stage04_move_failures(&tracker, &allocator);
-    expect_stage05_push_failures(&tracker, &allocator);
-    expect_stage06_fall_failures(&tracker, &allocator);
-    expect_stage07_ramp_failures(&tracker, &allocator);
-    expect_stage08_fixture_failures(&tracker, &allocator);
-    expect_stage09_explosion_failures(&tracker, &allocator);
-    expect_stage10_history_failures(&tracker, &allocator);
+    expect_load_failures(&tracker, &allocator);
+    expect_flat_move_failures(&tracker, &allocator);
+    expect_push_failures(&tracker, &allocator);
+    expect_fall_failures(&tracker, &allocator);
+    expect_ramp_failures(&tracker, &allocator);
+    expect_fixture_failures(&tracker, &allocator);
+    expect_explosion_failures(&tracker, &allocator);
+    expect_history_failures(&tracker, &allocator);
 
     tracker_begin_success(&tracker);
     engine = game_rules_engine_create_with_allocator_v1(&allocator);

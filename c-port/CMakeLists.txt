@@ -41,7 +41,7 @@ add_library(game_rules_state_c STATIC
     src/level.c
     src/level_json.c
     src/state.c
-    src/stage03.c)
+    src/api_operations.c)
 add_library(GameRules::StateC ALIAS game_rules_state_c)
 target_compile_features(game_rules_state_c PUBLIC c_std_17)
 set_target_properties(
@@ -74,7 +74,7 @@ endfunction()
 game_rules_c_apply_options(game_rules_state_c)
 
 if(BUILD_TESTING)
-add_executable(game_rules_candidate_lifecycle_smoke tests/lifecycle_smoke.c)
+add_executable(game_rules_candidate_lifecycle_smoke tests/lifecycle_test.c)
 target_link_libraries(game_rules_candidate_lifecycle_smoke PRIVATE GameRules::StateC)
 target_include_directories(game_rules_candidate_lifecycle_smoke PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
 target_compile_features(game_rules_candidate_lifecycle_smoke PRIVATE c_std_17)
@@ -88,7 +88,7 @@ target_compile_features(game_rules_candidate_allocation_failure PRIVATE c_std_17
 set_target_properties(game_rules_candidate_allocation_failure PROPERTIES C_EXTENSIONS OFF)
 game_rules_c_apply_options(game_rules_candidate_allocation_failure)
 
-add_executable(game_rules_candidate_wasm_smoke tests/wasm_smoke.c)
+add_executable(game_rules_candidate_wasm_smoke tests/wasm_smoke_test.c)
 target_link_libraries(game_rules_candidate_wasm_smoke PRIVATE GameRules::StateC)
 target_compile_features(game_rules_candidate_wasm_smoke PRIVATE c_std_17)
 set_target_properties(game_rules_candidate_wasm_smoke PROPERTIES C_EXTENSIONS OFF)
@@ -170,16 +170,16 @@ endif()
 
     if(NOT EMSCRIPTEN)
         add_test(
-            NAME game_rules.candidate.no_test_targets
+            NAME game_rules.candidate.library_only_build
             COMMAND
                 "${CMAKE_COMMAND}"
                 "-DSOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}"
                 "-DBINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}/library-only-audit"
                 "-DGENERATOR=${CMAKE_GENERATOR}"
-                -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/no_test_targets.cmake"
+                -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/library_only_build_test.cmake"
         )
         set_tests_properties(
-            game_rules.candidate.no_test_targets
+            game_rules.candidate.library_only_build
             PROPERTIES LABELS "candidate;native;build;extraction"
         )
     endif()

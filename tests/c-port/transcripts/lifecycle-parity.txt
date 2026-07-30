@@ -1,4 +1,4 @@
-# Stage-01 lifecycle/no-level operations intentionally shared by reference and candidate.
+# Lifecycle and no-level operations intentionally shared by reference and candidate.
 get-state|../../contracts/engine_hardening/v1/no-level-state.expected.json
 move|-|north
 move|../../contracts/engine_hardening/v1/no-level-move-east.expected.json|east

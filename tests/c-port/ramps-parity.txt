@@ -1,4 +1,4 @@
-# Stage 07: oriented traversal, ramp pushes, whole-stack slides, and causal closure.
+# Oriented traversal, ramp pushes, whole-stack slides, and causal closure.
 load|-|levels/ramp-low-west-en.json
 move|-|east
 move|-|east

@@ -74,7 +74,7 @@ now state which engine the final wasm path links.
 
 The standalone production tree registered tests conditionally but created every C test executable
 unconditionally, so the documented library-only setting still compiled audit programs. The new
-self-test at `c-port/tests/no_test_targets.cmake:1` first failed by successfully building
+self-test at `c-port/tests/library_only_build_test.cmake:1` first failed by successfully building
 `game_rules_candidate_lifecycle_smoke` from an `OFF` configuration. Candidate test targets are now
 scoped under `BUILD_TESTING` in `c-port/CMakeLists.txt:76-260`; the same regression passes and the
 library-only build exposes no candidate test target.
@@ -88,10 +88,10 @@ No additional ownership defect was found.
   independently disposable after replacement or engine destruction.
 - Session construction frees every partial allocation and publishes only the completed replacement
   (`c-port/src/c_api.c:180-214`). JSON and typed replacement commit only after the complete result
-  exists (`c-port/src/stage03.c:506-558`, `c-port/src/stage03.c:956-983`).
+  exists (`c-port/src/api_operations.c:506-558`, `c-port/src/api_operations.c:956-983`).
 - A move prepares history before resolution and links history plus swaps state only at final commit
   (`c-port/src/state.c:1497-1502`, `c-port/src/state.c:1593-1601`). Rewind serializes its result before
-  consuming history (`c-port/src/stage03.c:1132-1154`).
+  consuming history (`c-port/src/api_operations.c:1132-1154`).
 - Allocation injection walks every successful allocation index for JSON and typed load, get-state,
   move/resolution, rewind, history growth, and replacement. Every injected failure verifies state,
   history, live-allocation baseline, retry, and invalid-free count
@@ -122,7 +122,7 @@ No additional ownership defect was found.
 - Parent and standalone ASan/UBSan builds complete. Their runtime tests were not run because
   `AGENTS.md` explicitly forbids `ctest --preset native-sanitized` on this Apple Silicon/macOS host.
   This is an unavailable check, not a pass.
-- Clang static analysis emitted one null-dereference warning at `c-port/src/stage03.c:452`.
+- Clang static analysis emitted one null-dereference warning at `c-port/src/api_operations.c:452`.
   Investigation showed the only caller at line 543 is reached only after replacement construction
   at lines 515-520 returned non-null; allocation failure returns first. The warning is infeasible
   and was not suppressed.
@@ -160,7 +160,7 @@ ctest --preset native-debug --output-on-failure
 # 148/148 passed
 
 ctest --preset native-debug \
-  -R 'game_rules.differential.stage09_explosions_parity|game_rules.differential.stage10_seeded_history_lifecycle' \
+  -R 'game_rules.differential.explosions_parity|game_rules.differential.seeded_history_lifecycle' \
   --repeat until-fail:100 --output-on-failure --quiet
 # exit 0
 

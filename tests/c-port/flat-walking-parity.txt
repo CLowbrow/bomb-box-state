@@ -1,4 +1,4 @@
-# Stage 04: cardinal flat walking and all rejections decidable before pushing or secondary rules.
+# Cardinal flat walking and all rejections decidable before pushing or secondary rules.
 load|-|levels/flat-walk-grid.json
 move|-|north
 move|-|east

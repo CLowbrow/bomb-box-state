@@ -139,50 +139,50 @@ treats object order as non-semantic while preserving every array order.
 
 Current proofs:
 
-- `game_rules.differential.lifecycle_match`: all 16 no-level and lifecycle operations match.
+- `game_rules.differential.lifecycle_parity`: all 16 no-level and lifecycle operations match.
 - `game_rules.differential.level_load_parity`: all 18 stage-02 decode, validation, canonical-state,
   replacement, and preservation operations match.
-- `game_rules.differential.stage03_load_state_parity`: all 20 load/get-state operations match for
+- `game_rules.differential.load_state_parity`: all 20 load/get-state operations match for
   stable, unstable, reordered, fixture-bearing, coordinate-variant, terminal, and empty worlds.
-- `game_rules.differential.stage04_flat_walking_parity`: all 34 load/move operations match for all
+- `game_rules.differential.flat_walking_parity`: all 34 load/move operations match for all
   cardinal directions, non-zero origins, both axis orientations, repeated commands, board edges,
   both ledge directions, compatible stack support, occupied push contact, closed doors, ineligible
   teleporters, unsupported ramp entry, malformed direction, terminal state, and reordered
   equivalent input.
-- `game_rules.differential.stage05_player_pushing_parity`: all 40 load/move operations match for
+- `game_rules.differential.player_pushing_parity`: all 40 load/move operations match for
   boxes and barrels in every cardinal direction, repeated pushes, reversed axes and non-zero
   origins, maximum entity IDs, top-of-stack selection, exact-height destination support, reordered
   source arrays and entity IDs, recursive occupancy, world edges, higher terrain, closed, active,
   and held-open doors, teleporters, unsupported ramp entry, and the frozen browser push.
-- `game_rules.differential.stage06_gravity_parity`: all 23 load/move operations match for lower
+- `game_rules.differential.gravity_parity`: all 23 load/move operations match for lower
   terrain, landing on stacks, top-of-stack removal, tall drops, gravity-triggered fixtures, barrel
   arming and explosion closure, chain loss, repeated terminal commands, simultaneous post-blast
   falls, teleporter win and terminal gating, maximum entity IDs, and reordered cells and entities.
-- `game_rules.differential.stage07_ramps_parity`: all 52 load/move operations match for every low
+- `game_rules.differential.ramps_parity`: all 52 load/move operations match for every low
   direction and coordinate orientation, endpoint and chain traversal, lateral lanes, downhill and
   ramp-exit pushes, stack heights, blocked retries, doors, exits, conflicts, ledges,
   fall-then-slide, slide-then-fall, maximum/reassigned IDs, and reordered input arrays.
-- `game_rules.differential.stage08_fixtures_parity`: all 43 load/get-state/move operations match for
+- `game_rules.differential.fixtures_parity`: all 43 load/get-state/move operations match for
   every color, multiple same-color switches and doors, simultaneous activation/deactivation,
   canonical palette and door-coordinate order, held doors, multi-tick push/fall activation,
   explosion-driven fixture changes, fixture-aware walking/pushing/sliding, exit restrictions,
   immediate and movement-triggered wins, terminal commands, and reordered fixture/entity input.
-- `game_rules.differential.stage09_explosions_parity`: all 47 generated load/move operations match
+- `game_rules.differential.explosions_parity`: all 47 generated load/move operations match
   for every authored explosion behavior, simultaneous source and destination conflicts, same-cell
   and adjacent chains, blast-height stack pops, fixture changes, crushing, ramp connectivity,
   blast-to-fall-to-slide closure, terminal outcomes, eight fixed stress seeds, reassigned IDs,
   reordered arrays, and identical repeated-seed execution.
-- `game_rules.candidate_runner.stage10_browser_contract`: all five browser vertical-slice
+- `game_rules.candidate_runner.browser_contract`: all five browser vertical-slice
   operations, including rewind and the following state snapshot, match their authored outputs.
-- `game_rules.candidate_runner.stage10_hardening_contract`: lifecycle, conflict, replacement,
+- `game_rules.candidate_runner.hardening_contract`: lifecycle, conflict, replacement,
   terminal, and 33-operation rewind-stress scripts match every authored output.
-- `game_rules.differential.stage10_seeded_history_lifecycle`: 2,312 operations across eight fixed
+- `game_rules.differential.seeded_history_lifecycle`: 2,312 operations across eight fixed
   seeds mix accepted and blocked moves, invalid directions, repeated rewinds, branches, valid and
   malformed replacement, snapshots, terminal states, engine destruction, and recreation. Both
   engines match, and two identical candidate executions are byte-identical.
-- `game_rules.candidate_runner.stage05_browser_push_contract`: the candidate matches the existing
+- `game_rules.candidate_runner.browser_push_contract`: the candidate matches the existing
   authored load and move golden outputs without modifying them.
-- `game_rules.candidate_runner.stage09_explosion_conflicts_contract`: canonical and reordered
+- `game_rules.candidate_runner.explosion_conflicts_contract`: canonical and reordered
   explosion conflicts, plus the existing whole-stack slide conflicts, match the authored golden
   outputs without modification.
 
@@ -277,7 +277,7 @@ To reproduce the longest differential checks without changing the frozen API, ru
 reference, or authored expected outputs, run the exact commands in `c-port/README.md`, plus:
 
 ```sh
-ctest --preset native-debug -R game_rules.differential.stage10_seeded_history_lifecycle \
+ctest --preset native-debug -R game_rules.differential.seeded_history_lifecycle \
   --repeat until-fail:100 --output-on-failure
 python3 tests/c-port/history_differential_test.py \
   out/build/native-debug/tests/game_rules_reference_runner \

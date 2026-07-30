@@ -1,4 +1,4 @@
-# Stage 05: atomic one-piece pushes on already-supported flat terrain.
+# Atomic one-piece pushes on already-supported flat terrain.
 load|-|levels/push-cardinal.json
 move|-|north
 move|-|south

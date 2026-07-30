@@ -207,22 +207,22 @@ void game_rules_c_decode_result_destroy(game_rules_c_decode_result* result);
 const char* game_rules_c_json_error_name(uint32_t code);
 const char* game_rules_c_validation_error_name(uint32_t code);
 
-char* game_rules_c_stage03_load_json(game_rules_engine* engine,
-                                     const char* json,
-                                     uint32_t length);
-char* game_rules_c_stage03_get_state(game_rules_engine* engine);
-uint32_t game_rules_c_stage03_get_state_data(const game_rules_engine* engine,
-                                             game_rules_state_result* result);
-uint32_t game_rules_c_stage03_load_data(game_rules_engine* engine,
-                                        const game_rules_level_definition* level,
-                                        game_rules_load_result* result);
-char* game_rules_c_stage04_move_json(game_rules_engine* engine, uint32_t direction);
-uint32_t game_rules_c_stage04_move_data(game_rules_engine* engine,
-                                        uint32_t direction,
-                                        game_rules_move_result* result);
-char* game_rules_c_stage10_rewind_json(game_rules_engine* engine);
-uint32_t game_rules_c_stage10_rewind_data(game_rules_engine* engine,
-                                          game_rules_rewind_result* result);
+char* game_rules_c_load_json(game_rules_engine* engine,
+                             const char* json,
+                             uint32_t length);
+char* game_rules_c_get_state_json(game_rules_engine* engine);
+uint32_t game_rules_c_get_state_data(const game_rules_engine* engine,
+                                     game_rules_state_result* result);
+uint32_t game_rules_c_load_data(game_rules_engine* engine,
+                                const game_rules_level_definition* level,
+                                game_rules_load_result* result);
+char* game_rules_c_move_json(game_rules_engine* engine, uint32_t direction);
+uint32_t game_rules_c_move_data(game_rules_engine* engine,
+                                uint32_t direction,
+                                game_rules_move_result* result);
+char* game_rules_c_rewind_json(game_rules_engine* engine);
+uint32_t game_rules_c_rewind_data(game_rules_engine* engine,
+                                  game_rules_rewind_result* result);
 void game_rules_c_plan_player_move(game_rules_session* session,
                                    uint32_t direction,
                                    game_rules_c_command_transaction* transaction);
