@@ -1,9 +1,9 @@
 # C17 candidate engine
 
-This directory is the self-contained production candidate for the C17 rewrite. Stage 06 preserves
-the frozen public ABI and complete stage-05 walking/pushing behavior, then adds atomic multi-tick
-gravity, falling, landing, crushing, explosion closure, fixture effects, and terminal outcomes for
-flat-terrain commands. Ramp traversal/sliding and rewind history remain later stages.
+This directory is the self-contained production candidate for the C17 rewrite. Stage 07 preserves
+the frozen public ABI and complete stage-06 causal closure, then adds oriented ramp traversal,
+ramp-aware pushing, and deterministic automatic whole-stack sliding. Rewind history remains a
+later stage.
 
 The frozen creation API uses the C runtime allocator. The additive, versioned
 `game_rules/c_allocator_api.h` extension permits an embedding host or deterministic test to supply

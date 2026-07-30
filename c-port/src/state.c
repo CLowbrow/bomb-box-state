@@ -442,9 +442,9 @@ static void reject_flat_move(game_rules_session* session,
     transaction->event_count = 1U;
 }
 
-void game_rules_c_plan_flat_move(game_rules_session* session,
-                                 uint32_t direction,
-                                 game_rules_c_command_transaction* transaction)
+void game_rules_c_plan_player_move(game_rules_session* session,
+                                   uint32_t direction,
+                                   game_rules_c_command_transaction* transaction)
 {
     const game_rules_entity* player = NULL;
     const game_rules_entity* push_target = NULL;
@@ -459,6 +459,10 @@ void game_rules_c_plan_flat_move(game_rules_session* session,
     game_rules_coordinate destination;
     game_rules_coordinate pushed_destination;
     int32_t destination_support;
+    int32_t push_contact_bottom = 0;
+    int32_t player_new_bottom;
+    int has_push_contact = 0;
+    int lateral_ramp_push;
     uint32_t destination_entity_count = 0U;
     uint32_t index;
     game_rules_event* moved;
@@ -497,11 +501,29 @@ void game_rules_c_plan_flat_move(game_rules_session* session,
     }
     source_cell = find_cell(session, player->coordinate);
     destination_cell = find_cell(session, destination);
-    if (source_cell == NULL || destination_cell == NULL ||
-        source_cell->kind != GAME_RULES_CELL_FLAT ||
-        destination_cell->kind != GAME_RULES_CELL_FLAT) {
+    if (source_cell == NULL || destination_cell == NULL) {
         reject_flat_move(session, transaction, GAME_RULES_MOVE_UNSUPPORTED_GEOMETRY);
         return;
+    }
+
+    lateral_ramp_push = source_cell->kind == GAME_RULES_CELL_RAMP &&
+        destination_cell->kind == GAME_RULES_CELL_RAMP &&
+        player->bottom_half_steps == support_half_steps(source_cell) &&
+        ramps_align_laterally(source_cell, destination_cell, direction);
+    if (source_cell->kind == GAME_RULES_CELL_FLAT &&
+        destination_cell->kind == GAME_RULES_CELL_FLAT) {
+        has_push_contact = 1;
+        push_contact_bottom = player->bottom_half_steps;
+    } else if (source_cell->kind == GAME_RULES_CELL_RAMP &&
+               destination_cell->kind == GAME_RULES_CELL_FLAT &&
+               player->bottom_half_steps == support_half_steps(source_cell) &&
+               (direction == source_cell->low_direction ||
+                direction == opposite(source_cell->low_direction))) {
+        has_push_contact = 1;
+        push_contact_bottom = support_half_steps(destination_cell);
+    } else if (lateral_ramp_push) {
+        has_push_contact = 1;
+        push_contact_bottom = support_half_steps(destination_cell);
     }
 
     destination_fixture = find_fixture(session, destination);
@@ -522,7 +544,7 @@ void game_rules_c_plan_flat_move(game_rules_session* session,
             entity->bottom_half_steps > destination_top->bottom_half_steps) {
             destination_top = entity;
         }
-        if (entity->bottom_half_steps == player->bottom_half_steps &&
+        if (has_push_contact && entity->bottom_half_steps == push_contact_bottom &&
             (entity->kind == GAME_RULES_ENTITY_BOX ||
              entity->kind == GAME_RULES_ENTITY_BARREL)) {
             push_target = entity;
@@ -535,6 +557,12 @@ void game_rules_c_plan_flat_move(game_rules_session* session,
 
     if (push_target != NULL) {
         game_rules_event* pushed;
+        int32_t pushed_new_bottom = push_target->bottom_half_steps;
+        if (destination_cell->kind != GAME_RULES_CELL_FLAT && !lateral_ramp_push) {
+            reject_flat_move(session, transaction,
+                             GAME_RULES_MOVE_UNSUPPORTED_GEOMETRY);
+            return;
+        }
         if (push_target != destination_top) {
             reject_flat_move(session, transaction,
                              GAME_RULES_MOVE_STACKED_PUSH_TARGET);
@@ -553,11 +581,38 @@ void game_rules_c_plan_flat_move(game_rules_session* session,
             return;
         }
         pushed_destination_cell = find_cell(session, pushed_destination);
-        if (pushed_destination_cell == NULL ||
-            pushed_destination_cell->kind != GAME_RULES_CELL_FLAT) {
+        if (pushed_destination_cell == NULL) {
             reject_flat_move(session, transaction,
                              GAME_RULES_MOVE_UNSUPPORTED_GEOMETRY);
             return;
+        }
+        if (lateral_ramp_push &&
+            pushed_destination_cell->kind != GAME_RULES_CELL_RAMP) {
+            reject_flat_move(session, transaction,
+                             GAME_RULES_MOVE_UNSUPPORTED_GEOMETRY);
+            return;
+        }
+        if (pushed_destination_cell->kind == GAME_RULES_CELL_RAMP) {
+            if (lateral_ramp_push) {
+                if (!ramps_align_laterally(destination_cell,
+                                            pushed_destination_cell, direction) ||
+                    push_target->bottom_half_steps !=
+                        support_half_steps(destination_cell)) {
+                    reject_flat_move(session, transaction,
+                                     GAME_RULES_MOVE_UNSUPPORTED_GEOMETRY);
+                    return;
+                }
+            } else {
+                int64_t high_endpoint =
+                    (int64_t)pushed_destination_cell->elevation * 2 + 2;
+                if (direction != pushed_destination_cell->low_direction ||
+                    push_target->bottom_half_steps != high_endpoint) {
+                    reject_flat_move(session, transaction,
+                                     GAME_RULES_MOVE_UNSUPPORTED_GEOMETRY);
+                    return;
+                }
+            }
+            pushed_new_bottom = support_half_steps(pushed_destination_cell);
         }
         pushed_destination_fixture = find_fixture(session, pushed_destination);
         if (pushed_destination_fixture != NULL &&
@@ -573,7 +628,7 @@ void game_rules_c_plan_flat_move(game_rules_session* session,
             return;
         }
         if (!volume_is_clear(&session->current_state, pushed_destination,
-                             push_target->bottom_half_steps)) {
+                             pushed_new_bottom)) {
             reject_flat_move(session, transaction, GAME_RULES_MOVE_OCCUPIED);
             return;
         }
@@ -598,7 +653,9 @@ void game_rules_c_plan_flat_move(game_rules_session* session,
             return;
         }
         next_player->coordinate = destination;
+        next_player->bottom_half_steps = push_contact_bottom;
         next_pushed->coordinate = pushed_destination;
+        next_pushed->bottom_half_steps = pushed_new_bottom;
         qsort(session->scratch_state.entities, session->scratch_state.entity_count,
               sizeof(game_rules_entity), entity_compare);
 
@@ -609,7 +666,7 @@ void game_rules_c_plan_flat_move(game_rules_session* session,
         moved->from = player->coordinate;
         moved->to = destination;
         moved->old_bottom_half_steps = player->bottom_half_steps;
-        moved->new_bottom_half_steps = player->bottom_half_steps;
+        moved->new_bottom_half_steps = push_contact_bottom;
         moved->movement_cause = GAME_RULES_MOVEMENT_PLAYER;
 
         pushed = &session->scratch_events[1];
@@ -619,7 +676,7 @@ void game_rules_c_plan_flat_move(game_rules_session* session,
         pushed->from = push_target->coordinate;
         pushed->to = pushed_destination;
         pushed->old_bottom_half_steps = push_target->bottom_half_steps;
-        pushed->new_bottom_half_steps = push_target->bottom_half_steps;
+        pushed->new_bottom_half_steps = pushed_new_bottom;
         pushed->movement_cause = GAME_RULES_MOVEMENT_PLAYER;
 
         transaction->status = GAME_RULES_MOVE_MOVED;
@@ -631,19 +688,67 @@ void game_rules_c_plan_flat_move(game_rules_session* session,
         return;
     }
 
-    if (destination_fixture != NULL &&
-        destination_fixture->kind == GAME_RULES_FIXTURE_EXIT) {
-        if (destination_entity_count != 0U ||
-            player->bottom_half_steps != support_half_steps(destination_cell)) {
+    player_new_bottom = player->bottom_half_steps;
+    if (source_cell->kind == GAME_RULES_CELL_FLAT &&
+        destination_cell->kind == GAME_RULES_CELL_FLAT) {
+        if (destination_fixture != NULL &&
+            destination_fixture->kind == GAME_RULES_FIXTURE_EXIT &&
+            (destination_entity_count != 0U ||
+             player->bottom_half_steps != support_half_steps(destination_cell))) {
             reject_flat_move(session, transaction,
                              GAME_RULES_MOVE_TELEPORTER_RESTRICTION);
             return;
         }
-    }
-    if (destination_support != player->bottom_half_steps) {
+        if (destination_support != player->bottom_half_steps) {
+            reject_flat_move(session, transaction,
+                             destination_entity_count != 0U
+                                 ? GAME_RULES_MOVE_OCCUPIED : GAME_RULES_MOVE_LEDGE);
+            return;
+        }
+    } else if (source_cell->kind == GAME_RULES_CELL_FLAT &&
+               destination_cell->kind == GAME_RULES_CELL_RAMP) {
+        if (destination_entity_count != 0U ||
+            player->bottom_half_steps != support_half_steps(source_cell) ||
+            (direction != destination_cell->low_direction &&
+             direction != opposite(destination_cell->low_direction))) {
+            reject_flat_move(session, transaction,
+                             GAME_RULES_MOVE_UNSUPPORTED_GEOMETRY);
+            return;
+        }
+        player_new_bottom = support_half_steps(destination_cell);
+    } else if (source_cell->kind == GAME_RULES_CELL_RAMP &&
+               destination_cell->kind == GAME_RULES_CELL_FLAT) {
+        if (destination_entity_count != 0U ||
+            player->bottom_half_steps != support_half_steps(source_cell) ||
+            (direction != source_cell->low_direction &&
+             direction != opposite(source_cell->low_direction))) {
+            reject_flat_move(session, transaction,
+                             GAME_RULES_MOVE_UNSUPPORTED_GEOMETRY);
+            return;
+        }
+        player_new_bottom = support_half_steps(destination_cell);
+    } else if (source_cell->kind == GAME_RULES_CELL_RAMP &&
+               destination_cell->kind == GAME_RULES_CELL_RAMP) {
+        if (destination_entity_count != 0U ||
+            player->bottom_half_steps != support_half_steps(source_cell) ||
+            (!ramps_connect(source_cell, destination_cell, direction) &&
+             !ramps_align_laterally(source_cell, destination_cell, direction))) {
+            reject_flat_move(session, transaction,
+                             GAME_RULES_MOVE_UNSUPPORTED_GEOMETRY);
+            return;
+        }
+        player_new_bottom = support_half_steps(destination_cell);
+    } else {
         reject_flat_move(session, transaction,
-                         destination_entity_count != 0U
-                             ? GAME_RULES_MOVE_OCCUPIED : GAME_RULES_MOVE_LEDGE);
+                         GAME_RULES_MOVE_UNSUPPORTED_GEOMETRY);
+        return;
+    }
+    if (destination_fixture != NULL &&
+        destination_fixture->kind == GAME_RULES_FIXTURE_EXIT &&
+        (destination_entity_count != 0U ||
+         player_new_bottom != support_half_steps(destination_cell))) {
+        reject_flat_move(session, transaction,
+                         GAME_RULES_MOVE_TELEPORTER_RESTRICTION);
         return;
     }
     if (!state_copy(&session->scratch_state, &session->current_state)) {
@@ -661,6 +766,7 @@ void game_rules_c_plan_flat_move(game_rules_session* session,
         return;
     }
     next_player->coordinate = destination;
+    next_player->bottom_half_steps = player_new_bottom;
     qsort(session->scratch_state.entities, session->scratch_state.entity_count,
           sizeof(game_rules_entity), entity_compare);
 
@@ -671,7 +777,7 @@ void game_rules_c_plan_flat_move(game_rules_session* session,
     moved->from = player->coordinate;
     moved->to = destination;
     moved->old_bottom_half_steps = player->bottom_half_steps;
-    moved->new_bottom_half_steps = player->bottom_half_steps;
+    moved->new_bottom_half_steps = player_new_bottom;
     moved->movement_cause = GAME_RULES_MOVEMENT_PLAYER;
 
     transaction->status = GAME_RULES_MOVE_MOVED;
@@ -1345,16 +1451,6 @@ static void destroy_command_plan(game_rules_c_command_plan* plan)
     game_rules_c_deallocate_owned(plan);
 }
 
-static void reject_resolved_command(game_rules_session* session,
-                                    uint32_t direction,
-                                    game_rules_c_command_transaction* transaction)
-{
-    memset(transaction, 0, sizeof(*transaction));
-    transaction->direction = direction;
-    transaction->has_direction = 1U;
-    reject_flat_move(session, transaction, GAME_RULES_MOVE_UNSUPPORTED_GEOMETRY);
-}
-
 uint32_t game_rules_c_plan_resolved_command(
     game_rules_session* session,
     const game_rules_c_allocator* allocator,
@@ -1367,7 +1463,7 @@ uint32_t game_rules_c_plan_resolved_command(
     game_rules_c_command_plan* plan;
     uint32_t event_count;
 
-    game_rules_c_plan_flat_move(session, direction, transaction);
+    game_rules_c_plan_player_move(session, direction, transaction);
     if (!transaction->accepted) return GAME_RULES_CALL_OK;
 
     allocate_state_arrays(&measure, &ignored,
@@ -1424,16 +1520,10 @@ uint32_t game_rules_c_plan_resolved_command(
         int resolved;
         event_count = 0U;
         resolved = game_rules_c_resolve_falling_tick(&plan->working, &event_count);
-        if (resolved == 0) {
+        if (resolved == 0)
             resolved = resolve_sliding(&plan->working, &event_count);
-            if (resolved != 0) {
-                destroy_command_plan(plan);
-                if (resolved < 0) return GAME_RULES_CALL_ALLOCATION_FAILED;
-                reject_resolved_command(session, direction, transaction);
-                return GAME_RULES_CALL_OK;
-            }
+        if (resolved == 0)
             resolved = resolve_explosions(&plan->working, &event_count);
-        }
         if (resolved < 0) {
             destroy_command_plan(plan);
             return GAME_RULES_CALL_ALLOCATION_FAILED;

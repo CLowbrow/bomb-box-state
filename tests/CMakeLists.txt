@@ -195,6 +195,18 @@ set_tests_properties(
     PROPERTIES LABELS "candidate;contract;movement;integration;native"
 )
 
+add_test(
+    NAME game_rules.candidate_runner.stage07_hardening_conflicts_contract
+    COMMAND
+        game_rules_candidate_runner
+        --check-expected
+        "${CMAKE_CURRENT_SOURCE_DIR}/contracts/engine_hardening/v1/conflicts.txt"
+)
+set_tests_properties(
+    game_rules.candidate_runner.stage07_hardening_conflicts_contract
+    PROPERTIES LABELS "candidate;contract;movement;ramps;integration;native"
+)
+
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
 set(GAME_RULES_C_COMPARATOR "${PROJECT_SOURCE_DIR}/tools/c-port/compare_transcript.py")
 
@@ -280,6 +292,20 @@ add_test(
 set_tests_properties(
     game_rules.differential.stage06_gravity_parity
     PROPERTIES LABELS "candidate;differential;movement;gravity;integration;native"
+)
+
+add_test(
+    NAME game_rules.differential.stage07_ramps_parity
+    COMMAND
+        "${Python3_EXECUTABLE}"
+        "${GAME_RULES_C_COMPARATOR}"
+        "$<TARGET_FILE:game_rules_reference_runner>"
+        "$<TARGET_FILE:game_rules_candidate_runner>"
+        "${CMAKE_CURRENT_SOURCE_DIR}/c-port/stage07-ramps-parity.txt"
+)
+set_tests_properties(
+    game_rules.differential.stage07_ramps_parity
+    PROPERTIES LABELS "candidate;differential;movement;ramps;integration;native"
 )
 
 # The stage-05 push now matches operation 3. Real resolved-state history remains a later stage, so

@@ -124,10 +124,11 @@ under `c-port/`.
 
 Player commands use the same ownership model. The initiating movement reads immutable current
 state and writes session scratch, then an isolated command workspace copies that plan into two
-private resolved-state buffers. Derived gravity, explosion, fixture, crushing, and terminal ticks
-alternate between those buffers and retain independently owned immutable snapshots. The typed arena
-or JSON document is completed from the full ordered tick list before the final workspace state is
-copied into session scratch and swapped into current. Allocation or internal resolution failure
+private resolved-state buffers. Derived gravity, ramp-slide, explosion, fixture, crushing, and
+terminal ticks alternate between those buffers and retain independently owned immutable
+snapshots. The typed arena or JSON document is completed from the full ordered tick list before
+the final workspace state is copied into session scratch and swapped into current. Allocation or
+internal resolution failure
 discards the workspace without publishing a partial tick or mutating authoritative state.
 
 Differential execution uses separate reference and candidate runner processes,

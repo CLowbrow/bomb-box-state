@@ -1,13 +1,13 @@
 # C17 rewrite status
 
-## Stage-06 boundary
+## Stage-07 boundary
 
 `c-port/` is the self-contained C17 production candidate. The C++ engine remains the frozen
 behavioral reference, `docs/rules.md` remains normative, and `include/game_rules/c_api.h` remains
 the ABI source of truth.
 
-Stage 06 retains the complete stage-05 walking and pushing boundary and adds atomic post-command
-stabilization on supported flat-terrain movement paths:
+Stage 07 retains the complete stage-06 movement and causal-closure boundary and adds oriented ramp
+traversal, ramp pushing, and automatic whole-stack sliding through both public APIs:
 
 - strict version-1 JSON and typed input decoding from stage 02;
 - all 21 ordered world-schema validation errors;
@@ -21,6 +21,12 @@ stabilization on supported flat-terrain movement paths:
   stack support;
 - one-cell box and barrel pushes at the player's bottom half-step, including pushes over lower
   terrain and onto lower stacks;
+- endpoint, connected-chain, and matching-lane player traversal for every low direction under all
+  declared x/y axis orientations;
+- downhill box and barrel pushes onto ramps, pushes while leaving a ramp endpoint, and lateral
+  pushes across three matching ramp lanes;
+- simultaneous whole-stack slides with canonical source/stack event order, deterministic
+  destination conflict cancellation, and fixture-aware blocked retries;
 - bottom-up gravity compaction with complete half-step fall events, barrel arming, player-fall and
   crushing loss rules, and canonical simultaneous-column ordering;
 - command-time explosion waves needed to close falling-barrel turns, including blast-driven falls,
@@ -30,11 +36,10 @@ stabilization on supported flat-terrain movement paths:
   recursive or overlapping occupancy, non-top push targets, closed doors, ineligible teleporters,
   unsupported geometry, and terminal levels.
 
-Ramp traversal, ramp pushing, command-time ramp sliding, and real rewind behavior remain
-deliberately unimplemented. If an otherwise accepted flat-terrain command would enter the ramp
-slide phase during causal closure, the complete command is rejected as `unsupported_geometry`
-without mutation. The frozen browser vertical-slice move still matches; its rewind remains the
-first pinned difference.
+Real rewind behavior remains deliberately unimplemented. Ramp movement now enters the same atomic
+command workspace as flat movement: fall, otherwise slide, otherwise explosion phases run to
+closure with one immutable snapshot per tick. The frozen browser vertical-slice move still
+matches; its rewind remains the first pinned difference.
 
 ## Internal state and ownership
 
@@ -53,8 +58,9 @@ event/state arena.
 
 Movement planning first copies current state into scratch and describes the initiating tick with an
 explicit transaction view. An accepted plan is then copied into an isolated command workspace with
-two private resolved-state buffers. Gravity, explosions, fixtures, crushing, and terminal effects
-run against those buffers, and every retained command tick owns an immutable event/state arena.
+two private resolved-state buffers. Gravity, ramp slides, explosions, fixtures, crushing, and
+terminal effects run against those buffers, and every retained command tick owns an immutable
+event/state arena.
 JSON or typed result snapshots are fully allocated from this ordered tick list before the final
 workspace state is copied into session scratch and swapped into current. Allocation or internal
 resolution failure frees the workspace and leaves the complete pre-command state unchanged.
@@ -76,7 +82,9 @@ events use numeric `(y, x)` order; entities use `(y, x, bottomHalfSteps, id)`; a
 ascending; colors use palette order; and stack/source/target event orders follow the normative
 rules. A successful walk emits one tick at index zero containing one `EntityMoved` event with cause
 `player`; a successful push emits the player's event first and the pushed box or barrel second,
-both with cause `player` and from the same pre-tick state.
+both with cause `player` and from the same pre-tick state. Successful slide events use source
+coordinate then pre-tick bottom-to-top order, with the exact half-step translation in every event
+and `state_after` snapshot.
 
 JSON object fields and presence/null behavior match the reference API for the completed surface.
 Entity IDs, including `18446744073709551615`, are quoted canonical decimals. Output depends on no
@@ -84,14 +92,14 @@ pointer address, hash order, allocator order, wall clock, platform API, or unspe
 
 ## Public contract inventory
 
-| Surface | Stage-06 status |
+| Surface | Stage-07 status |
 | --- | --- |
 | API versions, create/destroy, null handling | matched |
 | Custom allocator extension | implemented; accepted load, snapshot, and move allocation sites are failure-injected |
 | `game_rules_engine_status` | matched: `schema_ready` |
 | Legacy JSON load/get-state | complete stage-03 behavior matched |
 | Typed load/get-state | complete stage-03 owned graphs matched |
-| Move | flat walking/pushing plus gravity, explosion closure, fixture effects, crushing, win, and loss matched; ramp movement/sliding pending |
+| Move | flat and ramp walking/pushing plus whole-stack slides, gravity, explosion closure, fixture effects, crushing, win, and loss matched |
 | Rewind | empty-history scaffolding only; resolved history not started |
 
 The frozen candidate header and pinned private yyjson 0.12.0 source, header, and license remain
@@ -123,8 +131,14 @@ Current proofs:
   terrain, landing on stacks, top-of-stack removal, tall drops, gravity-triggered fixtures, barrel
   arming and explosion closure, chain loss, repeated terminal commands, simultaneous post-blast
   falls, teleporter win and terminal gating, maximum entity IDs, and reordered cells and entities.
+- `game_rules.differential.stage07_ramps_parity`: all 52 load/move operations match for every low
+  direction and coordinate orientation, endpoint and chain traversal, lateral lanes, downhill and
+  ramp-exit pushes, stack heights, blocked retries, doors, exits, conflicts, ledges,
+  fall-then-slide, slide-then-fall, maximum/reassigned IDs, and reordered input arrays.
 - `game_rules.candidate_runner.stage05_browser_push_contract`: the candidate matches the existing
   authored load and move golden outputs without modifying them.
+- `game_rules.candidate_runner.stage07_hardening_conflicts_contract`: canonical and reordered
+  whole-stack slide conflicts match the existing authored golden output without modification.
 - `game_rules.differential.gameplay_expected_incomplete`: the first browser difference is now
   operation 4 at `$.status` (`rewound` versus candidate `history_empty`) because resolved-state
   history remains later-stage work.
@@ -134,16 +148,20 @@ outcome fields as well as result ownership and pointer/count invariants. The fal
 initial multi-column compaction, ramp-center landing before the deferred slide phase, direct crush
 planning, box stacks, tall drops, barrel chains, and terminal repetition. Allocation injection
 walks every allocation in multi-tick JSON and typed falling-barrel commands; every failure checks
-the complete pre-command entity and armed-barrel state before a successful retry.
+the complete pre-command entity and armed-barrel state before a successful retry. The dedicated
+ramp matrix covers all sixteen low-direction/coordinate-orientation combinations, exact half-step
+endpoint events and snapshots, connected chains, and whole-stack retries. Ramp allocation
+injection walks every JSON and typed allocation in a three-tick push/slide/slide command.
 
-## Stage-06 verification
+## Stage-07 verification
 
-- Standalone strict C17 native build with warnings as errors: 7/7 tests passed.
-- Parent native debug suite: 132/132 tests passed.
-- The complete stage-06 differential corpus passed 100 consecutive executions.
-- Emscripten 6.0.3 plus Node 26.5.0: standalone 7/7 and parent 8/8 tests passed.
+- Standalone strict C17 native build with warnings as errors: 8/8 tests passed.
+- Parent native debug suite: 135/135 tests passed.
+- The complete stage-07 ramp differential corpus passed 100 consecutive executions.
+- Emscripten 6.0.3 plus Node 26.5.0: standalone 8/8 and parent 9/9 tests passed.
   The WebAssembly smoke executable now performs a three-tick barrel push/fall/explosion command,
-  and the suite includes multi-tick allocation failure plus the dedicated falling matrix.
+  and the suite includes multi-tick allocation failure plus the dedicated falling and ramp
+  matrices.
 - Parent and standalone ASan/UBSan configurations build successfully.
 - Per repository policy, sanitizer tests are not executed on this Apple Silicon/macOS host because
   the Apple sanitizer runtime stalls during test discovery. Runtime sanitizer execution remains an
@@ -154,10 +172,10 @@ scenario; that conflict was resolved explicitly in favor of complete command-tim
 No remaining normative-rule, architecture, public-ABI, reference-implementation, or golden-output
 conflict was found. Those frozen files and outputs were not changed.
 
-## Stage-07 starting point
+## Stage-08 starting point
 
-Stage 07 should add real resolved-state history and rewind without reopening the completed
-stage-03 through stage-06 behavior:
+Stage 08 should add real resolved-state history and rewind without reopening the completed
+stage-03 through stage-07 behavior:
 
 1. Replace the one-byte history scaffold with owned canonical resolved-state entries.
 2. Reserve the next history entry before planning a command, commit it only with the completed
@@ -166,8 +184,8 @@ stage-03 through stage-06 behavior:
    after rewind, terminal rewind, and replacement-level isolation through both public boundaries.
 4. Port the rewind-dependent suffixes of the falling corpus and the existing browser and hardening
    contract sequences without changing their expected outputs.
-5. Keep ramp traversal, ramp pushing, and ramp sliding rejected until their dedicated movement
-   stage; a derived slide discovered by the command workspace must continue to reject atomically.
+5. Preserve the completed ramp traversal, pushing, whole-stack sliding, and causal-order behavior
+   while history storage is added.
 
-Keep the stage-02 through stage-06 differential corpora intact, keep the C++ engine and public ABI
+Keep the stage-02 through stage-07 differential corpora intact, keep the C++ engine and public ABI
 frozen, and continue to stop on unresolved specification conflicts.

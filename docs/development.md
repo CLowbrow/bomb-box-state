@@ -147,8 +147,8 @@ For Unreal staging and platform-library requirements, see the
 
 ## C17 candidate and differential harness
 
-The stage-06 initialization, snapshot, flat movement, gravity, and causal-closure C candidate can
-be configured without the parent checkout:
+The stage-07 initialization, snapshot, flat/ramp movement, whole-stack sliding, gravity, and
+causal-closure C candidate can be configured without the parent checkout:
 
 ```sh
 cmake -S c-port -B out/c-port-native -G Ninja -DCMAKE_BUILD_TYPE=Debug -DBUILD_TESTING=ON
@@ -165,7 +165,7 @@ cmake --build --preset native-debug
 ctest --preset native-debug -L candidate
 ```
 
-To inspect the intentional first rewind gap directly:
+To inspect the remaining intentional first rewind gap directly:
 
 ```sh
 python3 tools/c-port/compare_transcript.py \

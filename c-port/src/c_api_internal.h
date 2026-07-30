@@ -210,9 +210,9 @@ char* game_rules_c_stage04_move_json(game_rules_engine* engine, uint32_t directi
 uint32_t game_rules_c_stage04_move_data(game_rules_engine* engine,
                                         uint32_t direction,
                                         game_rules_move_result* result);
-void game_rules_c_plan_flat_move(game_rules_session* session,
-                                 uint32_t direction,
-                                 game_rules_c_command_transaction* transaction);
+void game_rules_c_plan_player_move(game_rules_session* session,
+                                   uint32_t direction,
+                                   game_rules_c_command_transaction* transaction);
 uint32_t game_rules_c_plan_resolved_command(
     game_rules_session* session,
     const game_rules_c_allocator* allocator,

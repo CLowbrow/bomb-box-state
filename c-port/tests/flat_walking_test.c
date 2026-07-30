@@ -265,9 +265,20 @@ static void test_fixture_geometry_terminal_and_invalid_rejections(void)
     level.fixture_count = 0U;
     engine = game_rules_engine_create();
     expect_loaded(engine, &level);
-    expect_rejection(engine, GAME_RULES_DIRECTION_EAST,
-                     GAME_RULES_MOVE_UNSUPPORTED_GEOMETRY,
-                     (game_rules_coordinate){0, 0});
+    {
+        game_rules_move_result ramp_move = {0};
+        assert(game_rules_engine_move_data(engine, GAME_RULES_DIRECTION_EAST,
+                                           &ramp_move) == GAME_RULES_CALL_OK);
+        assert(ramp_move.accepted && ramp_move.tick_count == 1U);
+        assert(ramp_move.ticks[0].event_count == 1U);
+        assert(ramp_move.ticks[0].events[0].kind ==
+               GAME_RULES_EVENT_ENTITY_MOVED);
+        assert(ramp_move.ticks[0].events[0].old_bottom_half_steps == 0);
+        assert(ramp_move.ticks[0].events[0].new_bottom_half_steps == 1);
+        assert(ramp_move.ticks[0].events[0].movement_cause ==
+               GAME_RULES_MOVEMENT_PLAYER);
+        game_rules_move_result_dispose(&ramp_move);
+    }
     game_rules_engine_destroy(engine);
 
     cells[1].kind = GAME_RULES_CELL_FLAT;
