@@ -100,11 +100,18 @@ static char* copy_json_for_engine(const game_rules_engine* engine, const char* v
 void game_rules_c_destroy_session(game_rules_session* session)
 {
     uint32_t index;
+    game_rules_c_history_entry* history;
     if (session == NULL) {
         return;
     }
     for (index = 0U; index < session->initialization_tick_count; ++index) {
         game_rules_c_deallocate_owned(session->initialization_ticks[index].owned_storage);
+    }
+    history = session->history_top;
+    while (history != NULL) {
+        game_rules_c_history_entry* const previous = history->previous;
+        game_rules_c_deallocate_owned(history);
+        history = previous;
     }
     game_rules_c_deallocate_owned(session->initialization_ticks);
     game_rules_c_deallocate_owned(session->history_storage);
@@ -265,9 +272,7 @@ char* game_rules_engine_rewind(game_rules_engine* engine)
             NULL,
             "{\"apiVersion\":1,\"operation\":\"rewind\",\"status\":\"invalid_engine\",\"state\":null}");
     }
-    return copy_json_for_engine(
-        engine,
-        "{\"apiVersion\":1,\"operation\":\"rewind\",\"status\":\"history_empty\",\"accepted\":false,\"events\":[],\"state\":null,\"outcome\":null}");
+    return game_rules_c_stage10_rewind_json(engine);
 }
 
 void game_rules_string_free(char* result)
@@ -327,7 +332,6 @@ uint32_t game_rules_engine_move_data(game_rules_engine* engine,
 uint32_t game_rules_engine_rewind_data(game_rules_engine* engine,
                                        game_rules_rewind_result* out_result)
 {
-    void* owner;
     if (out_result == NULL) {
         return GAME_RULES_CALL_INVALID_ARGUMENT;
     }
@@ -335,13 +339,7 @@ uint32_t game_rules_engine_rewind_data(game_rules_engine* engine,
     if (engine == NULL) {
         return GAME_RULES_CALL_INVALID_ENGINE;
     }
-    owner = game_rules_c_engine_allocate_result_storage(engine, 1U);
-    if (owner == NULL) {
-        return GAME_RULES_CALL_ALLOCATION_FAILED;
-    }
-    out_result->status = GAME_RULES_REWIND_HISTORY_EMPTY;
-    out_result->owned_storage = owner;
-    return GAME_RULES_CALL_OK;
+    return game_rules_c_stage10_rewind_data(engine, out_result);
 }
 
 static void dispose_result(void* owned_storage, void* result, size_t result_size)

@@ -159,28 +159,30 @@ set_tests_properties(
     PROPERTIES LABELS "candidate;contract;integration;native"
 )
 
-# This proves the incomplete candidate can consume the exact existing transcript syntax. It does
-# not compare against the authored oracle; the explicit differential test below owns that claim.
 add_test(
-    NAME game_rules.candidate_runner.consumes_browser_contract
+    NAME game_rules.candidate_runner.stage10_browser_contract
     COMMAND
         game_rules_candidate_runner
+        --check-expected
         "${CMAKE_CURRENT_SOURCE_DIR}/contracts/browser_vertical_slice/v1/contract.txt"
 )
 set_tests_properties(
-    game_rules.candidate_runner.consumes_browser_contract
-    PROPERTIES LABELS "candidate;contract;integration;native"
+    game_rules.candidate_runner.stage10_browser_contract
+    PROPERTIES LABELS "candidate;contract;history;integration;native"
 )
 
 add_test(
-    NAME game_rules.candidate_runner.consumes_hardening_lifecycle
+    NAME game_rules.candidate_runner.stage10_hardening_contract
     COMMAND
         game_rules_candidate_runner
+        --check-expected
         "${CMAKE_CURRENT_SOURCE_DIR}/contracts/engine_hardening/v1/lifecycle.txt"
+        "${CMAKE_CURRENT_SOURCE_DIR}/contracts/engine_hardening/v1/conflicts.txt"
+        "${CMAKE_CURRENT_SOURCE_DIR}/contracts/engine_hardening/v1/rewind-stress.txt"
 )
 set_tests_properties(
-    game_rules.candidate_runner.consumes_hardening_lifecycle
-    PROPERTIES LABELS "candidate;contract;integration;native"
+    game_rules.candidate_runner.stage10_hardening_contract
+    PROPERTIES LABELS "candidate;contract;history;lifecycle;terminal;integration;native"
 )
 
 add_test(
@@ -336,23 +338,60 @@ set_tests_properties(
     PROPERTIES LABELS "candidate;differential;movement;gravity;ramps;fixtures;explosions;terminal;integration;native"
 )
 
-# The stage-05 push now matches operation 3. Real resolved-state history remains a later stage, so
-# this pins the next reviewed difference at the browser contract's rewind.
 add_test(
-    NAME game_rules.differential.gameplay_expected_incomplete
+    NAME game_rules.differential.stage10_browser_history_parity
     COMMAND
         "${Python3_EXECUTABLE}"
         "${GAME_RULES_C_COMPARATOR}"
-        --expect-difference
-        --expected-operation 4
-        --expected-path "$.status"
         "$<TARGET_FILE:game_rules_reference_runner>"
         "$<TARGET_FILE:game_rules_candidate_runner>"
         "${CMAKE_CURRENT_SOURCE_DIR}/contracts/browser_vertical_slice/v1/contract.txt"
 )
 set_tests_properties(
-    game_rules.differential.gameplay_expected_incomplete
-    PROPERTIES LABELS "candidate;differential;expected-incomplete;integration;native"
+    game_rules.differential.stage10_browser_history_parity
+    PROPERTIES LABELS "candidate;differential;history;integration;native"
+)
+
+add_test(
+    NAME game_rules.differential.stage10_hardening_lifecycle_parity
+    COMMAND
+        "${Python3_EXECUTABLE}"
+        "${GAME_RULES_C_COMPARATOR}"
+        "$<TARGET_FILE:game_rules_reference_runner>"
+        "$<TARGET_FILE:game_rules_candidate_runner>"
+        "${CMAKE_CURRENT_SOURCE_DIR}/contracts/engine_hardening/v1/lifecycle.txt"
+)
+set_tests_properties(
+    game_rules.differential.stage10_hardening_lifecycle_parity
+    PROPERTIES LABELS "candidate;differential;history;lifecycle;terminal;integration;native"
+)
+
+add_test(
+    NAME game_rules.differential.stage10_rewind_stress_parity
+    COMMAND
+        "${Python3_EXECUTABLE}"
+        "${GAME_RULES_C_COMPARATOR}"
+        "$<TARGET_FILE:game_rules_reference_runner>"
+        "$<TARGET_FILE:game_rules_candidate_runner>"
+        "${CMAKE_CURRENT_SOURCE_DIR}/contracts/engine_hardening/v1/rewind-stress.txt"
+)
+set_tests_properties(
+    game_rules.differential.stage10_rewind_stress_parity
+    PROPERTIES LABELS "candidate;differential;history;stress;terminal;integration;native"
+)
+
+add_test(
+    NAME game_rules.differential.stage10_seeded_history_lifecycle
+    COMMAND
+        "${Python3_EXECUTABLE}"
+        "${CMAKE_CURRENT_SOURCE_DIR}/c-port/history_differential_test.py"
+        "$<TARGET_FILE:game_rules_reference_runner>"
+        "$<TARGET_FILE:game_rules_candidate_runner>"
+        "${GAME_RULES_C_COMPARATOR}"
+)
+set_tests_properties(
+    game_rules.differential.stage10_seeded_history_lifecycle
+    PROPERTIES LABELS "candidate;differential;history;lifecycle;replacement;stress;terminal;integration;native"
 )
 
 # This small consumer stays framework-free and is compiled with the same

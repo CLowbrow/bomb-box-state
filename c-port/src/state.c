@@ -336,6 +336,35 @@ static int state_snapshot_layout(state_layout* layout,
     return !layout->failed;
 }
 
+static game_rules_c_history_entry* create_history_entry(
+    const game_rules_c_allocator* allocator,
+    const game_rules_c_state* state)
+{
+    state_layout measure = {0};
+    state_layout arena = {0};
+    game_rules_c_state ignored;
+    game_rules_c_history_entry* entry;
+    void* owner;
+
+    take(&measure, 1U, sizeof(game_rules_c_history_entry),
+         _Alignof(game_rules_c_history_entry));
+    if (!state_snapshot_layout(&measure, state, &ignored) || measure.failed) return NULL;
+    owner = game_rules_c_allocate_owned(allocator, measure.offset);
+    if (owner == NULL) return NULL;
+    memset(owner, 0, measure.offset);
+    arena.base = (unsigned char*)owner;
+    arena.capacity = measure.offset;
+    entry = (game_rules_c_history_entry*)take(
+        &arena, 1U, sizeof(game_rules_c_history_entry),
+        _Alignof(game_rules_c_history_entry));
+    if (entry == NULL ||
+        !state_snapshot_layout(&arena, state, &entry->state) || arena.failed) {
+        game_rules_c_deallocate_owned(owner);
+        return NULL;
+    }
+    return entry;
+}
+
 static int reserve_ticks(game_rules_session* session,
                          const game_rules_c_allocator* allocator,
                          uint32_t needed)
@@ -1465,6 +1494,13 @@ uint32_t game_rules_c_plan_resolved_command(
 
     game_rules_c_plan_player_move(session, direction, transaction);
     if (!transaction->accepted) return GAME_RULES_CALL_OK;
+    if (session->history_count == UINT32_MAX) return GAME_RULES_CALL_ALLOCATION_FAILED;
+
+    transaction->prepared_history = create_history_entry(allocator,
+                                                          &session->current_state);
+    if (transaction->prepared_history == NULL) {
+        return GAME_RULES_CALL_ALLOCATION_FAILED;
+    }
 
     allocate_state_arrays(&measure, &ignored,
                           session->current_state.entity_capacity,
@@ -1548,15 +1584,37 @@ uint32_t game_rules_c_plan_resolved_command(
     return GAME_RULES_CALL_OK;
 }
 
-void game_rules_c_commit_command(game_rules_session* session,
-                                 const game_rules_c_command_transaction* transaction)
+int game_rules_c_commit_command(game_rules_session* session,
+                                game_rules_c_command_transaction* transaction)
 {
     if (session != NULL && transaction != NULL && transaction->accepted &&
         transaction->initial_state == &session->current_state &&
         transaction->final_state != NULL &&
+        transaction->prepared_history != NULL &&
+        session->history_count != UINT32_MAX &&
         state_copy(&session->scratch_state, transaction->final_state)) {
+        transaction->prepared_history->previous = session->history_top;
+        session->history_top = transaction->prepared_history;
+        transaction->prepared_history = NULL;
+        ++session->history_count;
         swap_current_and_scratch(session);
+        return 1;
     }
+    return 0;
+}
+
+int game_rules_c_commit_rewind(game_rules_session* session)
+{
+    game_rules_c_history_entry* restored;
+    if (session == NULL || session->history_top == NULL ||
+        session->history_count == 0U) return 0;
+    restored = session->history_top;
+    if (!state_copy(&session->scratch_state, &restored->state)) return 0;
+    swap_current_and_scratch(session);
+    session->history_top = restored->previous;
+    --session->history_count;
+    game_rules_c_deallocate_owned(restored);
+    return 1;
 }
 
 void game_rules_c_command_transaction_destroy(
@@ -1564,6 +1622,7 @@ void game_rules_c_command_transaction_destroy(
 {
     if (transaction == NULL) return;
     destroy_command_plan((game_rules_c_command_plan*)transaction->owned_plan);
+    game_rules_c_deallocate_owned(transaction->prepared_history);
     memset(transaction, 0, sizeof(*transaction));
 }
 
@@ -1610,11 +1669,6 @@ game_rules_session* game_rules_c_build_resolved_session(
     session->marker = 1U;
     session->level_storage = game_rules_c_allocate_owned(allocator, measure.offset);
     if (session->level_storage == NULL) {
-        game_rules_c_destroy_session(session);
-        return NULL;
-    }
-    session->history_storage = game_rules_c_allocate_owned(allocator, 1U);
-    if (session->history_storage == NULL) {
         game_rules_c_destroy_session(session);
         return NULL;
     }

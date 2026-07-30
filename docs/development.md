@@ -147,9 +147,9 @@ For Unreal staging and platform-library requirements, see the
 
 ## C17 candidate and differential harness
 
-The stage-09 initialization, snapshot, flat/ramp movement, whole-stack sliding, gravity, fixture,
-explosion-wave, terminal, and causal-closure C candidate can be configured without the parent
-checkout:
+The stage-10 initialization, snapshot, flat/ramp movement, whole-stack sliding, gravity, fixture,
+explosion-wave, terminal, causal-closure, and undo-history C candidate can be configured without
+the parent checkout:
 
 ```sh
 cmake -S c-port -B out/c-port-native -G Ninja -DCMAKE_BUILD_TYPE=Debug -DBUILD_TESTING=ON
@@ -166,7 +166,7 @@ cmake --build --preset native-debug
 ctest --preset native-debug -L candidate
 ```
 
-To inspect the remaining intentional first rewind gap directly:
+To compare the completed browser rewind slice directly:
 
 ```sh
 python3 tools/c-port/compare_transcript.py \
@@ -175,8 +175,6 @@ python3 tools/c-port/compare_transcript.py \
   tests/contracts/browser_vertical_slice/v1/contract.txt
 ```
 
-Normal comparison exits nonzero at the first difference. CTest's
-`game_rules.differential.gameplay_expected_incomplete` uses the comparator's
-explicit expected-difference mode, so the normal suite remains truthful while
-the port is incomplete. See `c-port/README.md` for sanitizer-ready and
-Emscripten commands, and `docs/c-port-status.md` for the feature matrix.
+Normal comparison exits nonzero at the first difference and now reports all five operations as
+matched. See `c-port/README.md` for sanitizer-ready and Emscripten commands, and
+`docs/c-port-status.md` for the feature matrix and stage-11 audit inputs.

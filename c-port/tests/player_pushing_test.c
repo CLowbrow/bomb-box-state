@@ -133,7 +133,8 @@ static void expect_rejection(game_rules_engine* engine,
                              uint32_t direction,
                              uint32_t status,
                              uint64_t player_id,
-                             game_rules_coordinate unchanged)
+                             game_rules_coordinate unchanged,
+                             int has_earlier_history)
 {
     game_rules_move_result moved = {0};
     game_rules_state_result after = {0};
@@ -157,7 +158,10 @@ static void expect_rejection(game_rules_engine* engine,
     assert(entity != NULL && entity->coordinate.x == unchanged.x &&
            entity->coordinate.y == unchanged.y);
     assert(game_rules_engine_rewind_data(engine, &rewind) == GAME_RULES_CALL_OK);
-    assert(rewind.status == GAME_RULES_REWIND_HISTORY_EMPTY && rewind.accepted == 0U);
+    assert(rewind.status == (has_earlier_history
+                                ? GAME_RULES_REWIND_REWOUND
+                                : GAME_RULES_REWIND_HISTORY_EMPTY));
+    assert(rewind.accepted == (has_earlier_history ? 1U : 0U));
     game_rules_rewind_result_dispose(&rewind);
     game_rules_state_result_dispose(&after);
     game_rules_move_result_dispose(&moved);
@@ -223,7 +227,7 @@ static void test_orientations_repetition_and_id_order(void)
                 (game_rules_coordinate){8, -4}, 0);
     expect_rejection(engine, GAME_RULES_DIRECTION_EAST,
                      GAME_RULES_MOVE_WORLD_BOUNDARY, 900U,
-                     (game_rules_coordinate){9, -4});
+                     (game_rules_coordinate){9, -4}, 1);
     game_rules_engine_destroy(engine);
 
     {
@@ -325,7 +329,7 @@ static void test_rejection_matrix(void)
     assert(engine != NULL);
     expect_loaded(engine, &level);
     expect_rejection(engine, GAME_RULES_DIRECTION_EAST, GAME_RULES_MOVE_OCCUPIED,
-                     17U, (game_rules_coordinate){0, 0});
+                     17U, (game_rules_coordinate){0, 0}, 0);
     game_rules_engine_destroy(engine);
 
     level.entity_count = 2U;
@@ -336,7 +340,7 @@ static void test_rejection_matrix(void)
     expect_loaded(engine, &level);
     expect_rejection(engine, GAME_RULES_DIRECTION_EAST,
                      GAME_RULES_MOVE_WORLD_BOUNDARY, 17U,
-                     (game_rules_coordinate){0, 0});
+                     (game_rules_coordinate){0, 0}, 0);
     game_rules_engine_destroy(engine);
 
     level.width = 3U;
@@ -346,7 +350,7 @@ static void test_rejection_matrix(void)
     assert(engine != NULL);
     expect_loaded(engine, &level);
     expect_rejection(engine, GAME_RULES_DIRECTION_EAST, GAME_RULES_MOVE_LEDGE,
-                     17U, (game_rules_coordinate){0, 0});
+                     17U, (game_rules_coordinate){0, 0}, 0);
     game_rules_engine_destroy(engine);
 
     {
@@ -364,7 +368,7 @@ static void test_rejection_matrix(void)
         expect_loaded(engine, &level);
         expect_rejection(engine, GAME_RULES_DIRECTION_EAST,
                          GAME_RULES_MOVE_CLOSED_DOOR, 17U,
-                         (game_rules_coordinate){0, 0});
+                         (game_rules_coordinate){0, 0}, 0);
         game_rules_engine_destroy(engine);
 
         fixture.kind = GAME_RULES_FIXTURE_EXIT;
@@ -373,7 +377,7 @@ static void test_rejection_matrix(void)
         expect_loaded(engine, &level);
         expect_rejection(engine, GAME_RULES_DIRECTION_EAST,
                          GAME_RULES_MOVE_TELEPORTER_RESTRICTION, 17U,
-                         (game_rules_coordinate){0, 0});
+                         (game_rules_coordinate){0, 0}, 0);
         game_rules_engine_destroy(engine);
 
         fixture.kind = GAME_RULES_FIXTURE_SWITCH;
@@ -412,7 +416,7 @@ static void test_rejection_matrix(void)
     expect_loaded(engine, &level);
     expect_rejection(engine, GAME_RULES_DIRECTION_EAST,
                      GAME_RULES_MOVE_UNSUPPORTED_GEOMETRY, 17U,
-                     (game_rules_coordinate){0, 0});
+                     (game_rules_coordinate){0, 0}, 0);
     game_rules_engine_destroy(engine);
 
     {
@@ -430,7 +434,7 @@ static void test_rejection_matrix(void)
         expect_loaded(engine, &stacked_level);
         expect_rejection(engine, GAME_RULES_DIRECTION_EAST,
                          GAME_RULES_MOVE_STACKED_PUSH_TARGET, 17U,
-                         (game_rules_coordinate){0, 0});
+                         (game_rules_coordinate){0, 0}, 0);
         game_rules_engine_destroy(engine);
     }
 }

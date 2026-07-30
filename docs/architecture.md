@@ -131,9 +131,15 @@ the final workspace state is copied into session scratch and swapped into curren
 internal resolution failure
 discards the workspace without publishing a partial tick or mutating authoritative state.
 
+Each accepted C17 command also reserves one independently owned canonical copy of its pre-command
+resolved state. The copy joins the session's LIFO history only in the same no-fail commit that
+swaps the final command state. Rewind builds its independent result from the immutable top entry
+before restoring and freeing that entry. Successful session replacement destroys the entire old
+history; rejected or allocation-failed replacement cannot reach it.
+
 Differential execution uses separate reference and candidate runner processes,
 so their identical public C symbols never collide. Both consume the existing
 adapter-neutral contract transcript syntax and emit one canonical JSON result
 per operation. `docs/c-port-status.md` is the parity inventory and records
-intentional stage gaps; the C++ engine and reviewed contract outputs remain the
+verification limitations; the C++ engine and reviewed contract outputs remain the
 behavioral oracle during the rewrite.

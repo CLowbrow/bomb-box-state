@@ -37,6 +37,12 @@ typedef struct game_rules_c_tick {
     void* owned_storage;
 } game_rules_c_tick;
 
+/* One independently owned, canonical pre-command resolved-state snapshot. */
+typedef struct game_rules_c_history_entry {
+    struct game_rules_c_history_entry* previous;
+    game_rules_c_state state;
+} game_rules_c_history_entry;
+
 /*
  * One command is planned entirely from current_state into scratch_state.  The
  * public result graph is allocated from these immutable views before commit;
@@ -56,6 +62,7 @@ typedef struct game_rules_c_command_transaction {
     const game_rules_c_tick* ticks;
     uint32_t tick_count;
     void* owned_plan;
+    game_rules_c_history_entry* prepared_history;
 } game_rules_c_command_transaction;
 
 typedef struct game_rules_c_slide_candidate {
@@ -81,7 +88,10 @@ typedef struct game_rules_c_blast_target {
 typedef struct game_rules_session {
     uint32_t marker;
     void* level_storage;
+    /* Retained only for the private lifecycle scaffold; production history uses history_top. */
     void* history_storage;
+    game_rules_c_history_entry* history_top;
+    uint32_t history_count;
     uint32_t has_level;
     game_rules_coordinate_system coordinates;
     uint32_t width;
@@ -210,6 +220,9 @@ char* game_rules_c_stage04_move_json(game_rules_engine* engine, uint32_t directi
 uint32_t game_rules_c_stage04_move_data(game_rules_engine* engine,
                                         uint32_t direction,
                                         game_rules_move_result* result);
+char* game_rules_c_stage10_rewind_json(game_rules_engine* engine);
+uint32_t game_rules_c_stage10_rewind_data(game_rules_engine* engine,
+                                          game_rules_rewind_result* result);
 void game_rules_c_plan_player_move(game_rules_session* session,
                                    uint32_t direction,
                                    game_rules_c_command_transaction* transaction);
@@ -218,8 +231,9 @@ uint32_t game_rules_c_plan_resolved_command(
     const game_rules_c_allocator* allocator,
     uint32_t direction,
     game_rules_c_command_transaction* transaction);
-void game_rules_c_commit_command(game_rules_session* session,
-                                 const game_rules_c_command_transaction* transaction);
+int game_rules_c_commit_command(game_rules_session* session,
+                                game_rules_c_command_transaction* transaction);
+int game_rules_c_commit_rewind(game_rules_session* session);
 void game_rules_c_command_transaction_destroy(
     game_rules_c_command_transaction* transaction);
 int game_rules_c_resolve_falling_tick(game_rules_session* session,

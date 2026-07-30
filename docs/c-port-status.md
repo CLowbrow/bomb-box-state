@@ -1,17 +1,13 @@
 # C17 rewrite status
 
-## Stage-09 boundary
+## Stage-10 boundary
 
 `c-port/` is the self-contained C17 production candidate. The C++ engine remains the frozen
 behavioral reference, `docs/rules.md` remains normative, and `include/game_rules/c_api.h` remains
 the ABI source of truth.
 
-Stage 09 retains the complete stage-08 fixture boundary and establishes barrel arming, simultaneous
-explosion waves, deterministic chain reactions, blast movement, and their full causal closure as a
-separately proven production boundary through both public APIs. The explosion algorithms were
-already present incrementally because the gravity, ramp, and fixture stages needed falling-barrel
-turns to close; stage 09 removes that staging drift by exercising the complete explosion contract
-rather than treating incidental earlier coverage as completion:
+Stage 10 retains the complete stage-09 rules boundary and adds the final undo-only resolved-state
+history and lifecycle behavior through both public APIs. It now covers:
 
 - strict version-1 JSON and typed input decoding from stage 02;
 - all 21 ordered world-schema validation errors;
@@ -55,12 +51,16 @@ rather than treating incidental earlier coverage as completion:
   terminal movement rejection; and
 - exact pre-secondary-rule rejections for invalid direction, no level, world boundary, ledges,
   recursive or overlapping occupancy, non-top push targets, closed doors, ineligible teleporters,
-  unsupported geometry, and terminal levels.
-
-Real rewind behavior remains deliberately unimplemented. Ramp movement now enters the same atomic
-command workspace as flat movement: fall, otherwise slide, otherwise explosion phases run to
-closure with one immutable snapshot per tick. The frozen browser vertical-slice move still
-matches; its rewind remains the first pinned difference.
+  unsupported geometry, and terminal levels;
+- exactly one canonical pre-command history snapshot for every accepted movement command and none
+  for rejected commands, independent of the command's tick count;
+- repeated rewind to the initialized boundary, `history_empty` behavior with and without a loaded
+  level, semantic `StateRewound` events, and exact restoration of all dynamic state;
+- one-way branching after rewind, with no redo storage or abandoned-future retention;
+- rewind from movement-produced won and lost states, while initialization-terminal levels retain
+  an empty history root; and
+- valid replacement history discard, invalid or allocation-failed replacement preservation, and
+  independent result/snapshot lifetime across moves, rewinds, replacement, and destruction.
 
 ## Internal state and ownership
 
@@ -76,6 +76,12 @@ row-major arrays. A row-major cell index maps to its optional fixture without po
 dependence. Initialization scratch arrays are bounded by validated cell, fixture, and entity counts.
 The initialization tick list grows with checked arithmetic; every retained tick owns an immutable
 event/state arena.
+
+History is an owned LIFO chain of canonical pre-command state arenas. An accepted command reserves
+and copies its prospective history entry before derived resolution. The entry is linked and the
+new current state is swapped only after the complete JSON or typed result has been allocated.
+Rewind allocates its independent response graph from the immutable top entry before restoring and
+freeing that entry. Thus every allocation failure leaves current state and history unchanged.
 
 Movement planning first copies current state into scratch and describes the initiating tick with an
 explicit transaction view. An accepted plan is then copied into an isolated command workspace with
@@ -113,15 +119,15 @@ pointer address, hash order, allocator order, wall clock, platform API, or unspe
 
 ## Public contract inventory
 
-| Surface | Stage-09 status |
+| Surface | Stage-10 status |
 | --- | --- |
 | API versions, create/destroy, null handling | matched |
-| Custom allocator extension | implemented; accepted load, snapshot, and move allocation sites are failure-injected |
+| Custom allocator extension | implemented; load, snapshot, move, history growth, rewind, and replacement allocation sites are failure-injected |
 | `game_rules_engine_status` | matched: `schema_ready` |
 | Legacy JSON load/get-state | complete stage-03 behavior matched |
 | Typed load/get-state | complete stage-03 owned graphs matched |
 | Move | flat and ramp walking/pushing plus whole-stack slides, gravity, explosion closure, fixture effects, crushing, win, and loss matched |
-| Rewind | empty-history scaffolding only; resolved history not started |
+| Rewind | complete typed and JSON parity, including repeat, branch, terminal, empty, replacement, and ownership behavior |
 
 The frozen candidate header and pinned private yyjson 0.12.0 source, header, and license remain
 byte-for-byte identical to the reference copies. No yyjson symbol or type crosses the public ABI.
@@ -166,14 +172,19 @@ Current proofs:
   and adjacent chains, blast-height stack pops, fixture changes, crushing, ramp connectivity,
   blast-to-fall-to-slide closure, terminal outcomes, eight fixed stress seeds, reassigned IDs,
   reordered arrays, and identical repeated-seed execution.
+- `game_rules.candidate_runner.stage10_browser_contract`: all five browser vertical-slice
+  operations, including rewind and the following state snapshot, match their authored outputs.
+- `game_rules.candidate_runner.stage10_hardening_contract`: lifecycle, conflict, replacement,
+  terminal, and 33-operation rewind-stress scripts match every authored output.
+- `game_rules.differential.stage10_seeded_history_lifecycle`: 2,312 operations across eight fixed
+  seeds mix accepted and blocked moves, invalid directions, repeated rewinds, branches, valid and
+  malformed replacement, snapshots, terminal states, engine destruction, and recreation. Both
+  engines match, and two identical candidate executions are byte-identical.
 - `game_rules.candidate_runner.stage05_browser_push_contract`: the candidate matches the existing
   authored load and move golden outputs without modifying them.
 - `game_rules.candidate_runner.stage09_explosion_conflicts_contract`: canonical and reordered
   explosion conflicts, plus the existing whole-stack slide conflicts, match the authored golden
   outputs without modification.
-- `game_rules.differential.gameplay_expected_incomplete`: the first browser difference is now
-  operation 4 at `$.status` (`rewound` versus candidate `history_empty`) because resolved-state
-  history remains later-stage work.
 
 Candidate C tests verify complete initial, tick, event, final, snapshot, acceptance, status, and
 outcome fields as well as result ownership and pointer/count invariants. The dedicated explosion
@@ -197,44 +208,53 @@ failure, and verifies deterministic successful retry.
 Explosion allocation injection walks every JSON and typed allocation in a six-tick command with
 two explosion waves and blast-driven falls, checks the complete pre-command entity, armed-barrel,
 fixture, and outcome state at every failure, and verifies deterministic successful retry.
+Stage-10 allocation injection additionally walks history-entry growth, JSON and typed rewind result
+construction, and JSON and typed valid replacement while old history is nonempty. Every injected
+failure checks current state, history depth, the live-allocation baseline, safe retry, and
+invalid-free count. Dedicated typed tests retain load, move, state, rewind, replacement, and
+terminal results across later operations and engine destruction.
 
-## Stage-09 verification
+## Stage-10 verification
 
-- Standalone strict C17 native build with warnings as errors: 10/10 tests passed.
-- Parent native debug suite: 139/139 tests passed.
+- Standalone strict C17 native build with warnings as errors: 11/11 tests passed.
+- Parent native debug suite: 143/143 tests passed.
 - The complete 47-operation stage-09 explosion differential corpus passed 100 consecutive
   executions; each execution includes eight fixed seeds, reassigned IDs, reordered arrays, and
   an identical repeated load for every seed.
-- Emscripten 6.0.3 plus Node 26.5.0: standalone 10/10 and parent 11/11 tests passed.
+- The 2,312-operation seeded history/lifecycle differential passed 100 consecutive executions;
+  every execution also performs an internal byte-for-byte candidate repeat.
+- Emscripten 6.0.3 plus Node 26.5.0: standalone 11/11 and parent 12/12 tests passed.
   The WebAssembly smoke executable covers canonical fixture derivation, door traversal, a legal
   exit win, terminal rejection, the existing three-tick barrel push/fall/explosion command, and a
   separate three-tick multi-barrel chain reaction. The suite includes six-tick allocation failure
-  injection plus the dedicated falling, ramp, fixture, and explosion matrices.
+  injection plus the dedicated falling, ramp, fixture, explosion, and history/lifecycle matrices.
 - Parent and standalone ASan/UBSan configurations build successfully.
 - Per repository policy, sanitizer tests are not executed on this Apple Silicon/macOS host because
   the Apple sanitizer runtime stalls during test discovery. Runtime sanitizer execution remains an
   Ubuntu CI or other known-working Linux handoff.
 
 No normative-rule, architecture, public-ABI, reference-implementation, or golden-output conflict
-was found. Stage numbering had drifted by treating explosion closure as incidental coverage in
-earlier gravity, ramp, and fixture stages and naming rewind as stage 09. The explicit stage-09
-explosion boundary is now documented, and rewind moves to the stage-10 handoff. The frozen rules,
-ABI, reference files, and golden outputs were not changed.
+was found. The frozen rules, ABI, reference files, and authored expected outputs were not changed.
+The only incomplete verification item is sanitizer runtime execution: both parent and standalone
+ASan/UBSan configurations build, but repository policy forbids running them on this Apple
+Silicon/macOS host because the Apple runtime stalls during GoogleTest discovery. Stage 11 must run
+those tests in the Ubuntu sanitizer CI job or another known-working Linux environment.
 
-## Stage-10 handoff
+## Stage-11 independent audit input
 
-Stage 10 should add real resolved-state history and rewind without reopening the completed
-stage-03 through stage-09 behavior:
+Audit the uncommitted stage-10 diff without changing the frozen API, rules, C++ reference, or
+authored expected outputs. Re-run the exact commands in `c-port/README.md`, plus:
 
-1. Replace the one-byte history scaffold with owned canonical resolved-state entries.
-2. Reserve the next history entry before planning a command, commit it only with the completed
-   command result, and preserve both state and history at every injected allocation failure.
-3. Implement repeated rewind, beginning-of-history rejection, deterministic replay, branching
-   after rewind, terminal rewind, and replacement-level isolation through both public boundaries.
-4. Port the rewind-dependent suffixes of the falling corpus and the existing browser and hardening
-   contract sequences without changing their expected outputs.
-5. Preserve the completed ramp traversal, pushing, whole-stack sliding, and causal-order behavior
-   while history storage is added.
+```sh
+ctest --preset native-debug -R game_rules.differential.stage10_seeded_history_lifecycle \
+  --repeat until-fail:100 --output-on-failure
+python3 tests/c-port/history_differential_test.py \
+  out/build/native-debug/tests/game_rules_reference_runner \
+  out/build/native-debug/tests/game_rules_candidate_runner \
+  tools/c-port/compare_transcript.py
+```
 
-Keep the stage-02 through stage-09 differential corpora intact, keep the C++ engine and public ABI
-frozen, and continue to stop on unresolved specification conflicts.
+The fixed seeds are `0x10A11CE`, `0x10B4A2C`, `0x10C0FFEE`, `0x10D37E2`,
+`0x10E501D`, `0x10F17E5`, `0x1012345`, and `0x1065432`, with 256 randomized
+operations per seed after the deterministic lifecycle/history prefix. On Linux, also execute both
+sanitizer test trees rather than only building them.

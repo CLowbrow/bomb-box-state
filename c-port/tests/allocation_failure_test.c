@@ -371,11 +371,13 @@ static void expect_stage04_move_failures(allocation_tracker* tracker,
         tracker_begin_failure(tracker, failure);
         assert(game_rules_engine_move(engine, GAME_RULES_DIRECTION_EAST) == NULL);
         assert(engine->session->current_state.entities[0].coordinate.x == 1);
+        assert(engine->session->history_count == 0U);
         assert(tracker->live_count == baseline);
         tracker_begin_success(tracker);
         json = game_rules_engine_move(engine, GAME_RULES_DIRECTION_EAST);
         assert(json != NULL);
         assert(strstr(json, "\"from\":{\"x\":1,\"y\":0}") != NULL);
+        assert(engine->session->history_count == 1U);
         game_rules_string_free(json);
         game_rules_engine_destroy(engine);
         assert(tracker->invalid_free_count == 0U);
@@ -395,6 +397,7 @@ static void expect_stage04_move_failures(allocation_tracker* tracker,
                GAME_RULES_CALL_ALLOCATION_FAILED);
         assert(bytes_are_zero(&move, sizeof(move)));
         assert(engine->session->current_state.entities[0].coordinate.x == 1);
+        assert(engine->session->history_count == 0U);
         assert(tracker->live_count == baseline);
         tracker_begin_success(tracker);
         assert(game_rules_engine_move_data(engine, GAME_RULES_DIRECTION_EAST, &move) ==
@@ -402,6 +405,7 @@ static void expect_stage04_move_failures(allocation_tracker* tracker,
         assert(move.accepted == 1U);
         assert(move.initial_state.entities[0].coordinate.x == 1);
         assert(move.final_state.entities[0].coordinate.x == 2);
+        assert(engine->session->history_count == 1U);
         game_rules_move_result_dispose(&move);
     }
     game_rules_engine_destroy(engine);
@@ -497,21 +501,25 @@ static void expect_stage05_push_failures(allocation_tracker* tracker,
         game_rules_move_result_dispose(&move);
 
         memset(&move, 0xA5, sizeof(move));
-        tracker_begin_failure(tracker, 0U);
-        assert(game_rules_engine_move_data(engine, GAME_RULES_DIRECTION_EAST, &move) ==
-               GAME_RULES_CALL_ALLOCATION_FAILED);
-        assert(bytes_are_zero(&move, sizeof(move)));
-        assert(engine->session->current_state.entities[0].coordinate.x == 1);
-        assert(engine->session->current_state.entities[1].coordinate.x == 2);
-        assert(tracker->live_count == baseline);
-        tracker_begin_success(tracker);
-        assert(game_rules_engine_move_data(engine, GAME_RULES_DIRECTION_EAST, &move) ==
-               GAME_RULES_CALL_OK);
-        assert(move.accepted == 1U && move.ticks[0].event_count == 2U);
-        assert(move.initial_state.entities[0].coordinate.x == 1);
-        assert(move.final_state.entities[0].coordinate.x == 2);
-        assert(move.final_state.entities[1].coordinate.x == 3);
-        game_rules_move_result_dispose(&move);
+        /* The successful first move retained exactly one pre-command history entry. */
+        {
+            const size_t history_baseline = tracker->live_count;
+            tracker_begin_failure(tracker, 0U);
+            assert(game_rules_engine_move_data(engine, GAME_RULES_DIRECTION_EAST, &move) ==
+                   GAME_RULES_CALL_ALLOCATION_FAILED);
+            assert(bytes_are_zero(&move, sizeof(move)));
+            assert(engine->session->current_state.entities[0].coordinate.x == 1);
+            assert(engine->session->current_state.entities[1].coordinate.x == 2);
+            assert(tracker->live_count == history_baseline);
+            tracker_begin_success(tracker);
+            assert(game_rules_engine_move_data(engine, GAME_RULES_DIRECTION_EAST, &move) ==
+                   GAME_RULES_CALL_OK);
+            assert(move.accepted == 1U && move.ticks[0].event_count == 2U);
+            assert(move.initial_state.entities[0].coordinate.x == 1);
+            assert(move.final_state.entities[0].coordinate.x == 2);
+            assert(move.final_state.entities[1].coordinate.x == 3);
+            game_rules_move_result_dispose(&move);
+        }
     }
     game_rules_engine_destroy(engine);
     assert(tracker->invalid_free_count == 0U);
@@ -1006,6 +1014,201 @@ static void expect_stage09_explosion_failures(
     }
 }
 
+static void expect_stage10_history_failures(
+    allocation_tracker* tracker,
+    const game_rules_allocator_v1* allocator)
+{
+    static const game_rules_cell cells[3] = {
+        {{0, 0}, GAME_RULES_CELL_FLAT, 0, 0},
+        {{1, 0}, GAME_RULES_CELL_FLAT, 0, 0},
+        {{2, 0}, GAME_RULES_CELL_FLAT, 0, 0}};
+    static const game_rules_entity player = {
+        1U, GAME_RULES_ENTITY_PLAYER, {0, 0}, 0};
+    static const game_rules_entity replacement_player = {
+        99U, GAME_RULES_ENTITY_PLAYER, {2, 0}, 0};
+    static const game_rules_level_definition level = {
+        {{0, 0}, GAME_RULES_HORIZONTAL_EAST, GAME_RULES_VERTICAL_NORTH},
+        3U, 1U, cells, 3U, NULL, 0U, &player, 1U};
+    static const game_rules_level_definition replacement = {
+        {{0, 0}, GAME_RULES_HORIZONTAL_EAST, GAME_RULES_VERTICAL_NORTH},
+        3U, 1U, cells, 3U, NULL, 0U, &replacement_player, 1U};
+    game_rules_engine* engine;
+    game_rules_load_result load;
+    game_rules_move_result move;
+    game_rules_rewind_result rewind;
+    char* json;
+    size_t attempts;
+    size_t failure;
+
+    /* Legacy rewind allocates its complete response before consuming history. */
+    tracker_begin_success(tracker);
+    engine = game_rules_engine_create_with_allocator_v1(allocator);
+    assert(engine != NULL);
+    memset(&load, 0, sizeof(load));
+    memset(&move, 0, sizeof(move));
+    assert(game_rules_engine_load_level_data(engine, &level, &load) == GAME_RULES_CALL_OK);
+    game_rules_load_result_dispose(&load);
+    assert(game_rules_engine_move_data(engine, GAME_RULES_DIRECTION_EAST, &move) ==
+           GAME_RULES_CALL_OK);
+    game_rules_move_result_dispose(&move);
+    tracker_begin_success(tracker);
+    json = game_rules_engine_rewind(engine);
+    assert(json != NULL && strstr(json, "\"status\":\"rewound\"") != NULL);
+    attempts = tracker->attempt;
+    game_rules_string_free(json);
+    game_rules_engine_destroy(engine);
+
+    for (failure = 0U; failure < attempts; ++failure) {
+        size_t baseline;
+        tracker_begin_success(tracker);
+        engine = game_rules_engine_create_with_allocator_v1(allocator);
+        memset(&load, 0, sizeof(load));
+        memset(&move, 0, sizeof(move));
+        assert(engine != NULL);
+        assert(game_rules_engine_load_level_data(engine, &level, &load) == GAME_RULES_CALL_OK);
+        game_rules_load_result_dispose(&load);
+        assert(game_rules_engine_move_data(engine, GAME_RULES_DIRECTION_EAST, &move) ==
+               GAME_RULES_CALL_OK);
+        game_rules_move_result_dispose(&move);
+        baseline = tracker->live_count;
+        tracker_begin_failure(tracker, failure);
+        assert(game_rules_engine_rewind(engine) == NULL);
+        assert(engine->session->current_state.entities[0].coordinate.x == 1);
+        assert(engine->session->history_count == 1U);
+        assert(tracker->live_count == baseline);
+        game_rules_engine_destroy(engine);
+        assert(tracker->invalid_free_count == 0U);
+    }
+
+    /* The typed rewind arena has the same pre-commit rollback guarantee. */
+    tracker_begin_success(tracker);
+    engine = game_rules_engine_create_with_allocator_v1(allocator);
+    memset(&load, 0, sizeof(load));
+    memset(&move, 0, sizeof(move));
+    memset(&rewind, 0, sizeof(rewind));
+    assert(engine != NULL);
+    assert(game_rules_engine_load_level_data(engine, &level, &load) == GAME_RULES_CALL_OK);
+    game_rules_load_result_dispose(&load);
+    assert(game_rules_engine_move_data(engine, GAME_RULES_DIRECTION_EAST, &move) ==
+           GAME_RULES_CALL_OK);
+    game_rules_move_result_dispose(&move);
+    tracker_begin_success(tracker);
+    assert(game_rules_engine_rewind_data(engine, &rewind) == GAME_RULES_CALL_OK);
+    attempts = tracker->attempt;
+    game_rules_rewind_result_dispose(&rewind);
+    game_rules_engine_destroy(engine);
+
+    for (failure = 0U; failure < attempts; ++failure) {
+        size_t baseline;
+        tracker_begin_success(tracker);
+        engine = game_rules_engine_create_with_allocator_v1(allocator);
+        memset(&load, 0, sizeof(load));
+        memset(&move, 0, sizeof(move));
+        assert(engine != NULL);
+        assert(game_rules_engine_load_level_data(engine, &level, &load) == GAME_RULES_CALL_OK);
+        game_rules_load_result_dispose(&load);
+        assert(game_rules_engine_move_data(engine, GAME_RULES_DIRECTION_EAST, &move) ==
+               GAME_RULES_CALL_OK);
+        game_rules_move_result_dispose(&move);
+        baseline = tracker->live_count;
+        memset(&rewind, 0xA5, sizeof(rewind));
+        tracker_begin_failure(tracker, failure);
+        assert(game_rules_engine_rewind_data(engine, &rewind) ==
+               GAME_RULES_CALL_ALLOCATION_FAILED);
+        assert(bytes_are_zero(&rewind, sizeof(rewind)));
+        assert(engine->session->current_state.entities[0].coordinate.x == 1);
+        assert(engine->session->history_count == 1U);
+        assert(tracker->live_count == baseline);
+        game_rules_engine_destroy(engine);
+        assert(tracker->invalid_free_count == 0U);
+    }
+
+    /* Valid replacement failures preserve both current state and the complete old history. */
+    tracker_begin_success(tracker);
+    engine = game_rules_engine_create_with_allocator_v1(allocator);
+    memset(&load, 0, sizeof(load));
+    memset(&move, 0, sizeof(move));
+    assert(engine != NULL);
+    assert(game_rules_engine_load_level_data(engine, &level, &load) == GAME_RULES_CALL_OK);
+    game_rules_load_result_dispose(&load);
+    assert(game_rules_engine_move_data(engine, GAME_RULES_DIRECTION_EAST, &move) ==
+           GAME_RULES_CALL_OK);
+    game_rules_move_result_dispose(&move);
+    tracker_begin_success(tracker);
+    json = game_rules_engine_load_level(engine, valid_level_json,
+                                        (uint32_t)strlen(valid_level_json));
+    assert(json != NULL && strstr(json, "\"status\":\"loaded\"") != NULL);
+    attempts = tracker->attempt;
+    game_rules_string_free(json);
+    game_rules_engine_destroy(engine);
+
+    for (failure = 0U; failure < attempts; ++failure) {
+        size_t baseline;
+        tracker_begin_success(tracker);
+        engine = game_rules_engine_create_with_allocator_v1(allocator);
+        memset(&load, 0, sizeof(load));
+        memset(&move, 0, sizeof(move));
+        assert(engine != NULL);
+        assert(game_rules_engine_load_level_data(engine, &level, &load) == GAME_RULES_CALL_OK);
+        game_rules_load_result_dispose(&load);
+        assert(game_rules_engine_move_data(engine, GAME_RULES_DIRECTION_EAST, &move) ==
+               GAME_RULES_CALL_OK);
+        game_rules_move_result_dispose(&move);
+        baseline = tracker->live_count;
+        tracker_begin_failure(tracker, failure);
+        assert(game_rules_engine_load_level(engine, valid_level_json,
+                                            (uint32_t)strlen(valid_level_json)) == NULL);
+        assert(engine->session->current_state.entities[0].coordinate.x == 1);
+        assert(engine->session->history_count == 1U);
+        assert(tracker->live_count == baseline);
+        game_rules_engine_destroy(engine);
+        assert(tracker->invalid_free_count == 0U);
+    }
+
+    tracker_begin_success(tracker);
+    engine = game_rules_engine_create_with_allocator_v1(allocator);
+    memset(&load, 0, sizeof(load));
+    memset(&move, 0, sizeof(move));
+    assert(engine != NULL);
+    assert(game_rules_engine_load_level_data(engine, &level, &load) == GAME_RULES_CALL_OK);
+    game_rules_load_result_dispose(&load);
+    assert(game_rules_engine_move_data(engine, GAME_RULES_DIRECTION_EAST, &move) ==
+           GAME_RULES_CALL_OK);
+    game_rules_move_result_dispose(&move);
+    tracker_begin_success(tracker);
+    memset(&load, 0, sizeof(load));
+    assert(game_rules_engine_load_level_data(engine, &replacement, &load) ==
+           GAME_RULES_CALL_OK);
+    attempts = tracker->attempt;
+    game_rules_load_result_dispose(&load);
+    game_rules_engine_destroy(engine);
+
+    for (failure = 0U; failure < attempts; ++failure) {
+        size_t baseline;
+        tracker_begin_success(tracker);
+        engine = game_rules_engine_create_with_allocator_v1(allocator);
+        memset(&load, 0, sizeof(load));
+        memset(&move, 0, sizeof(move));
+        assert(engine != NULL);
+        assert(game_rules_engine_load_level_data(engine, &level, &load) == GAME_RULES_CALL_OK);
+        game_rules_load_result_dispose(&load);
+        assert(game_rules_engine_move_data(engine, GAME_RULES_DIRECTION_EAST, &move) ==
+               GAME_RULES_CALL_OK);
+        game_rules_move_result_dispose(&move);
+        baseline = tracker->live_count;
+        memset(&load, 0xA5, sizeof(load));
+        tracker_begin_failure(tracker, failure);
+        assert(game_rules_engine_load_level_data(engine, &replacement, &load) ==
+               GAME_RULES_CALL_ALLOCATION_FAILED);
+        assert(bytes_are_zero(&load, sizeof(load)));
+        assert(engine->session->current_state.entities[0].coordinate.x == 1);
+        assert(engine->session->history_count == 1U);
+        assert(tracker->live_count == baseline);
+        game_rules_engine_destroy(engine);
+        assert(tracker->invalid_free_count == 0U);
+    }
+}
+
 int main(void)
 {
     static allocation_tracker tracker;
@@ -1065,6 +1268,7 @@ int main(void)
     expect_stage07_ramp_failures(&tracker, &allocator);
     expect_stage08_fixture_failures(&tracker, &allocator);
     expect_stage09_explosion_failures(&tracker, &allocator);
+    expect_stage10_history_failures(&tracker, &allocator);
 
     tracker_begin_success(&tracker);
     engine = game_rules_engine_create_with_allocator_v1(&allocator);

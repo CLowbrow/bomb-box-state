@@ -1,10 +1,9 @@
 # C17 candidate engine
 
-This directory is the self-contained production candidate for the C17 rewrite. Stage 09 preserves
-the frozen public ABI and complete stage-08 fixture boundary, then proves barrel arming,
-simultaneous explosion waves, deterministic chain reactions, blast movement, and full causal
-closure across gravity, ramps, fixtures, crushing, wins, losses, snapshots, failure atomicity, and
-WebAssembly. Rewind history remains stage 10.
+This directory is the self-contained production candidate for the C17 rewrite. Stage 10 preserves
+the frozen public ABI and complete stage-09 rules boundary, then completes undo-only resolved-state
+history, repeated and terminal rewind, branching, replacement isolation, independent result
+lifetimes, and allocation-failure rollback across native and WebAssembly builds.
 
 The frozen creation API uses the C runtime allocator. The additive, versioned
 `game_rules/c_allocator_api.h` extension permits an embedding host or deterministic test to supply
@@ -23,6 +22,12 @@ Accepted commands resolve inside private working state buffers and retain immuta
 snapshots before either serializer allocates its result. Only a complete result commits the final
 state to the session. No renderer, filesystem, environment, clock, thread, randomness, or platform
 API is used.
+
+Every accepted move owns one canonical pre-command history arena regardless of tick count. A
+rejected move owns none. Move history and complete results are allocated before current state is
+committed; rewind results are allocated before the top entry is restored and consumed. Valid
+replacement destroys the old chain only after the new session and response are complete, while an
+invalid or allocation-failed replacement retains the old level, current state, and chain.
 
 Standalone native verification:
 

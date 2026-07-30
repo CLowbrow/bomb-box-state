@@ -364,6 +364,9 @@ static void event_json(builder* output, const game_rules_event* event)
         text(output, move_status_name(event->move_status));
         text(output, "\"}");
         break;
+    case GAME_RULES_EVENT_STATE_REWOUND:
+        text(output, "{\"type\":\"stateRewound\"}");
+        break;
     case GAME_RULES_EVENT_ENTITY_MOVED:
         text(output, "{\"type\":\"entityMoved\",\"entityId\":\"");
         number_u64(output, event->entity_id);
@@ -643,10 +646,55 @@ char* game_rules_c_stage04_move_json(game_rules_engine* engine, uint32_t directi
     }
     text(&output, "}");
     response = finish(&output);
-    if (response != NULL && transaction.accepted) {
-        game_rules_c_commit_command(engine->session, &transaction);
+    if (response != NULL && transaction.accepted &&
+        !game_rules_c_commit_command(engine->session, &transaction)) {
+        game_rules_c_deallocate_owned(response);
+        response = NULL;
     }
     game_rules_c_command_transaction_destroy(&transaction);
+    return response;
+}
+
+char* game_rules_c_stage10_rewind_json(game_rules_engine* engine)
+{
+    game_rules_session* const session = engine->session;
+    const game_rules_c_history_entry* const history =
+        session == NULL ? NULL : session->history_top;
+    const game_rules_c_state* const restored = history != NULL
+        ? &history->state
+        : (session != NULL && session->has_level ? &session->current_state : NULL);
+    game_rules_event event = {0};
+    builder output = {0};
+    char* response;
+
+    event.kind = GAME_RULES_EVENT_STATE_REWOUND;
+    output.allocator = engine->allocator;
+    text(&output, "{\"apiVersion\":1,\"operation\":\"rewind\",\"status\":\"");
+    text(&output, history != NULL ? "rewound" : "history_empty");
+    text(&output, "\",\"accepted\":");
+    text(&output, history != NULL ? "true" : "false");
+    text(&output, ",\"events\":");
+    event_array_json(&output, history != NULL ? &event : NULL,
+                     history != NULL ? 1U : 0U);
+    text(&output, ",\"state\":");
+    if (restored != NULL) {
+        state_json_with_resolved(&output, session, restored);
+    } else {
+        text(&output, "null");
+    }
+    text(&output, ",\"outcome\":");
+    if (restored != NULL) {
+        string_value(&output, outcome_name(restored->outcome),
+                     strlen(outcome_name(restored->outcome)));
+    } else {
+        text(&output, "null");
+    }
+    text(&output, "}");
+    response = finish(&output);
+    if (response != NULL && history != NULL && !game_rules_c_commit_rewind(session)) {
+        game_rules_c_deallocate_owned(response);
+        return NULL;
+    }
     return response;
 }
 
@@ -1037,9 +1085,74 @@ uint32_t game_rules_c_stage04_move_data(game_rules_engine* engine,
         return GAME_RULES_CALL_ALLOCATION_FAILED;
     }
     result->owned_storage = owner;
-    if (transaction.accepted) {
-        game_rules_c_commit_command(engine->session, &transaction);
+    if (transaction.accepted &&
+        !game_rules_c_commit_command(engine->session, &transaction)) {
+        game_rules_c_deallocate_owned(owner);
+        memset(result, 0, sizeof(*result));
+        game_rules_c_command_transaction_destroy(&transaction);
+        return GAME_RULES_CALL_ALLOCATION_FAILED;
     }
     game_rules_c_command_transaction_destroy(&transaction);
+    return GAME_RULES_CALL_OK;
+}
+
+static void rewind_graph(layout* arena,
+                         const game_rules_session* session,
+                         const game_rules_c_history_entry* history,
+                         game_rules_rewind_result* output)
+{
+    const game_rules_c_state* const restored = history != NULL
+        ? &history->state
+        : (session != NULL && session->has_level ? &session->current_state : NULL);
+    game_rules_event event = {0};
+
+    output->status = history != NULL
+        ? GAME_RULES_REWIND_REWOUND : GAME_RULES_REWIND_HISTORY_EMPTY;
+    output->accepted = history != NULL ? 1U : 0U;
+    event.kind = GAME_RULES_EVENT_STATE_REWOUND;
+    copy_events(arena, history != NULL ? &event : NULL,
+                history != NULL ? 1U : 0U, &output->events);
+    output->event_count = history != NULL ? 1U : 0U;
+    if (history != NULL) {
+        output->has_restored_state = 1U;
+        copy_resolved(arena, restored, &output->restored_state);
+    }
+    if (restored != NULL) {
+        output->has_state = 1U;
+        copy_snapshot_resolved(arena, session, restored, &output->state);
+        output->has_outcome = 1U;
+        output->outcome = restored->outcome;
+    }
+}
+
+uint32_t game_rules_c_stage10_rewind_data(game_rules_engine* engine,
+                                          game_rules_rewind_result* result)
+{
+    game_rules_session* const session = engine->session;
+    game_rules_c_history_entry* const history =
+        session == NULL ? NULL : session->history_top;
+    game_rules_rewind_result ignored = {0};
+    layout measure = {0};
+    layout arena = {0};
+    void* owner;
+
+    rewind_graph(&measure, session, history, &ignored);
+    if (measure.failed) return GAME_RULES_CALL_ALLOCATION_FAILED;
+    owner = game_rules_c_allocate_owned(&engine->allocator, measure.offset);
+    if (owner == NULL) return GAME_RULES_CALL_ALLOCATION_FAILED;
+    arena.base = (unsigned char*)owner;
+    arena.capacity = measure.offset;
+    rewind_graph(&arena, session, history, result);
+    if (arena.failed) {
+        game_rules_c_deallocate_owned(owner);
+        memset(result, 0, sizeof(*result));
+        return GAME_RULES_CALL_ALLOCATION_FAILED;
+    }
+    result->owned_storage = owner;
+    if (history != NULL && !game_rules_c_commit_rewind(session)) {
+        game_rules_c_deallocate_owned(owner);
+        memset(result, 0, sizeof(*result));
+        return GAME_RULES_CALL_ALLOCATION_FAILED;
+    }
     return GAME_RULES_CALL_OK;
 }
