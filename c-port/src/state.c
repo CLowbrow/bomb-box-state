@@ -422,6 +422,173 @@ static int contains_door(const game_rules_c_state* state, game_rules_coordinate 
     return 0;
 }
 
+static void reject_flat_move(game_rules_session* session,
+                             game_rules_c_command_transaction* transaction,
+                             uint32_t status)
+{
+    game_rules_event* event = &session->scratch_events[0];
+    memset(event, 0, sizeof(*event));
+    event->kind = GAME_RULES_EVENT_MOVE_BLOCKED;
+    event->direction = transaction->direction;
+    event->move_status = status;
+    transaction->status = status;
+    transaction->final_state = &session->current_state;
+    transaction->events = event;
+    transaction->event_count = 1U;
+}
+
+void game_rules_c_plan_flat_move(game_rules_session* session,
+                                 uint32_t direction,
+                                 game_rules_c_command_transaction* transaction)
+{
+    const game_rules_entity* player = NULL;
+    game_rules_entity* next_player = NULL;
+    const game_rules_cell* source_cell;
+    const game_rules_cell* destination_cell;
+    const game_rules_fixture* source_fixture;
+    const game_rules_fixture* destination_fixture;
+    game_rules_coordinate destination;
+    int32_t destination_support;
+    uint32_t destination_entity_count = 0U;
+    uint32_t index;
+    game_rules_event* moved;
+
+    memset(transaction, 0, sizeof(*transaction));
+    transaction->direction = direction;
+    if (session != NULL && session->has_level) {
+        transaction->final_state = &session->current_state;
+    }
+    if (direction > GAME_RULES_DIRECTION_WEST) {
+        transaction->status = GAME_RULES_MOVE_INVALID_DIRECTION;
+        return;
+    }
+    transaction->has_direction = 1U;
+    if (session == NULL || !session->has_level) {
+        transaction->status = GAME_RULES_MOVE_NO_LEVEL;
+        return;
+    }
+    if (session->current_state.outcome != GAME_RULES_OUTCOME_ONGOING) {
+        reject_flat_move(session, transaction, GAME_RULES_MOVE_LEVEL_TERMINAL);
+        return;
+    }
+    for (index = 0U; index < session->current_state.entity_count; ++index) {
+        if (session->current_state.entities[index].kind == GAME_RULES_ENTITY_PLAYER) {
+            player = &session->current_state.entities[index];
+            break;
+        }
+    }
+    if (player == NULL) {
+        reject_flat_move(session, transaction, GAME_RULES_MOVE_NO_LEVEL);
+        return;
+    }
+    if (!step(session, player->coordinate, direction, &destination)) {
+        reject_flat_move(session, transaction, GAME_RULES_MOVE_WORLD_BOUNDARY);
+        return;
+    }
+    source_cell = find_cell(session, player->coordinate);
+    destination_cell = find_cell(session, destination);
+    if (source_cell == NULL || destination_cell == NULL ||
+        source_cell->kind != GAME_RULES_CELL_FLAT ||
+        destination_cell->kind != GAME_RULES_CELL_FLAT) {
+        reject_flat_move(session, transaction, GAME_RULES_MOVE_UNSUPPORTED_GEOMETRY);
+        return;
+    }
+
+    source_fixture = find_fixture(session, player->coordinate);
+    destination_fixture = find_fixture(session, destination);
+    if (destination_fixture != NULL &&
+        destination_fixture->kind == GAME_RULES_FIXTURE_DOOR &&
+        !contains_door(&session->current_state, destination)) {
+        reject_flat_move(session, transaction, GAME_RULES_MOVE_CLOSED_DOOR);
+        return;
+    }
+
+    destination_support = support_half_steps(destination_cell);
+    for (index = 0U; index < session->current_state.entity_count; ++index) {
+        const game_rules_entity* entity = &session->current_state.entities[index];
+        int64_t top;
+        if (!same_coordinate(entity->coordinate, destination)) continue;
+        ++destination_entity_count;
+        top = (int64_t)entity->bottom_half_steps + 2;
+        if (top > destination_support && top <= INT32_MAX) {
+            destination_support = (int32_t)top;
+        }
+    }
+
+    if (destination_fixture != NULL &&
+        destination_fixture->kind == GAME_RULES_FIXTURE_EXIT) {
+        if (destination_entity_count != 0U ||
+            player->bottom_half_steps != support_half_steps(destination_cell)) {
+            reject_flat_move(session, transaction,
+                             GAME_RULES_MOVE_TELEPORTER_RESTRICTION);
+        } else {
+            /* Winning is a later fixture-effect stage, so do not commit a partial turn. */
+            reject_flat_move(session, transaction,
+                             GAME_RULES_MOVE_UNSUPPORTED_GEOMETRY);
+        }
+        return;
+    }
+    if ((source_fixture != NULL && source_fixture->kind == GAME_RULES_FIXTURE_SWITCH) ||
+        (destination_fixture != NULL &&
+         destination_fixture->kind == GAME_RULES_FIXTURE_SWITCH) ||
+        (source_fixture != NULL && source_fixture->kind == GAME_RULES_FIXTURE_DOOR &&
+         !contains_color(&session->current_state, source_fixture->color))) {
+        /* A switch transition or held-open door close belongs to fixture effects. */
+        reject_flat_move(session, transaction, GAME_RULES_MOVE_UNSUPPORTED_GEOMETRY);
+        return;
+    }
+    if (destination_support != player->bottom_half_steps) {
+        reject_flat_move(session, transaction,
+                         destination_entity_count != 0U
+                             ? GAME_RULES_MOVE_OCCUPIED : GAME_RULES_MOVE_LEDGE);
+        return;
+    }
+    if (!state_copy(&session->scratch_state, &session->current_state)) {
+        reject_flat_move(session, transaction, GAME_RULES_MOVE_UNSUPPORTED_GEOMETRY);
+        return;
+    }
+    for (index = 0U; index < session->scratch_state.entity_count; ++index) {
+        if (session->scratch_state.entities[index].id == player->id) {
+            next_player = &session->scratch_state.entities[index];
+            break;
+        }
+    }
+    if (next_player == NULL) {
+        reject_flat_move(session, transaction, GAME_RULES_MOVE_UNSUPPORTED_GEOMETRY);
+        return;
+    }
+    next_player->coordinate = destination;
+    qsort(session->scratch_state.entities, session->scratch_state.entity_count,
+          sizeof(game_rules_entity), entity_compare);
+
+    moved = &session->scratch_events[0];
+    memset(moved, 0, sizeof(*moved));
+    moved->kind = GAME_RULES_EVENT_ENTITY_MOVED;
+    moved->entity_id = player->id;
+    moved->from = player->coordinate;
+    moved->to = destination;
+    moved->old_bottom_half_steps = player->bottom_half_steps;
+    moved->new_bottom_half_steps = player->bottom_half_steps;
+    moved->movement_cause = GAME_RULES_MOVEMENT_PLAYER;
+
+    transaction->status = GAME_RULES_MOVE_MOVED;
+    transaction->accepted = 1U;
+    transaction->initial_state = &session->current_state;
+    transaction->final_state = &session->scratch_state;
+    transaction->tick_events = moved;
+    transaction->tick_event_count = 1U;
+}
+
+void game_rules_c_commit_command(game_rules_session* session,
+                                 const game_rules_c_command_transaction* transaction)
+{
+    if (session != NULL && transaction != NULL && transaction->accepted &&
+        transaction->initial_state == &session->current_state &&
+        transaction->final_state == &session->scratch_state) {
+        swap_current_and_scratch(session);
+    }
+}
+
 static int switch_pressed(const game_rules_session* session,
                           const game_rules_c_state* state,
                           const game_rules_fixture* fixture)

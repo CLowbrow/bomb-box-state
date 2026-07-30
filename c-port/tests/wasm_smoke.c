@@ -6,6 +6,7 @@ int main(void)
 {
     game_rules_state_result state = {0};
     game_rules_move_result move = {0};
+    game_rules_move_result walk = {0};
     game_rules_rewind_result rewind = {0};
     game_rules_load_result load = {0};
     game_rules_state_result loaded_state = {0};
@@ -76,6 +77,35 @@ int main(void)
             return 7;
         }
     }
+    {
+        static const game_rules_cell cells[2] = {
+            {{0, 0}, GAME_RULES_CELL_FLAT, 0, 0},
+            {{1, 0}, GAME_RULES_CELL_FLAT, 0, 0}};
+        static const game_rules_entity player =
+            {17U, GAME_RULES_ENTITY_PLAYER, {0, 0}, 0};
+        const game_rules_level_definition level = {
+            {{0, 0}, GAME_RULES_HORIZONTAL_EAST, GAME_RULES_VERTICAL_NORTH},
+            2U, 1U, cells, 2U, 0, 0U, &player, 1U};
+        game_rules_load_result replacement = {0};
+        if (game_rules_engine_load_level_data(engine, &level, &replacement) !=
+                GAME_RULES_CALL_OK || !replacement.accepted) {
+            return 10;
+        }
+        game_rules_load_result_dispose(&replacement);
+        json = game_rules_engine_move(engine, GAME_RULES_DIRECTION_EAST);
+        if (json == 0 || strstr(json, "\"status\":\"moved\"") == 0 ||
+            strstr(json, "\"cause\":\"player\"") == 0) {
+            game_rules_string_free(json);
+            return 11;
+        }
+        game_rules_string_free(json);
+        if (game_rules_engine_move_data(engine, GAME_RULES_DIRECTION_WEST, &walk) !=
+                GAME_RULES_CALL_OK || !walk.accepted || walk.tick_count != 1U ||
+            walk.ticks[0].events[0].movement_cause != GAME_RULES_MOVEMENT_PLAYER ||
+            walk.state.resolved.entities[0].coordinate.x != 0) {
+            return 12;
+        }
+    }
     game_rules_engine_destroy(engine);
     if (move.events[0].move_status != GAME_RULES_MOVE_NO_LEVEL) {
         return 8;
@@ -88,6 +118,7 @@ int main(void)
     game_rules_load_result_dispose(&load);
     game_rules_rewind_result_dispose(&rewind);
     game_rules_move_result_dispose(&move);
+    game_rules_move_result_dispose(&walk);
     game_rules_state_result_dispose(&state);
-    return game_rules_api_version() == 1U ? 0 : 10;
+    return game_rules_api_version() == 1U ? 0 : 13;
 }

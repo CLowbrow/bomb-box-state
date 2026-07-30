@@ -37,6 +37,24 @@ typedef struct game_rules_c_tick {
     void* owned_storage;
 } game_rules_c_tick;
 
+/*
+ * One command is planned entirely from current_state into scratch_state.  The
+ * public result graph is allocated from these immutable views before commit;
+ * only a successful result allocation may swap the session buffers.
+ */
+typedef struct game_rules_c_command_transaction {
+    uint32_t status;
+    uint32_t direction;
+    uint32_t has_direction;
+    uint32_t accepted;
+    const game_rules_c_state* initial_state;
+    const game_rules_c_state* final_state;
+    const game_rules_event* events;
+    uint32_t event_count;
+    const game_rules_event* tick_events;
+    uint32_t tick_event_count;
+} game_rules_c_command_transaction;
+
 typedef struct game_rules_c_slide_candidate {
     game_rules_coordinate source;
     game_rules_coordinate destination;
@@ -185,6 +203,15 @@ uint32_t game_rules_c_stage03_get_state_data(const game_rules_engine* engine,
 uint32_t game_rules_c_stage03_load_data(game_rules_engine* engine,
                                         const game_rules_level_definition* level,
                                         game_rules_load_result* result);
+char* game_rules_c_stage04_move_json(game_rules_engine* engine, uint32_t direction);
+uint32_t game_rules_c_stage04_move_data(game_rules_engine* engine,
+                                        uint32_t direction,
+                                        game_rules_move_result* result);
+void game_rules_c_plan_flat_move(game_rules_session* session,
+                                 uint32_t direction,
+                                 game_rules_c_command_transaction* transaction);
+void game_rules_c_commit_command(game_rules_session* session,
+                                 const game_rules_c_command_transaction* transaction);
 void game_rules_c_destroy_session(game_rules_session* session);
 
 /* Private compatibility seams exercised by the candidate lifecycle tests. */

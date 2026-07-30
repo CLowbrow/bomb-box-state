@@ -5,7 +5,6 @@
 
 #include <stddef.h>
 #include <stdint.h>
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -96,17 +95,6 @@ static char* copy_json_for_engine(const game_rules_engine* engine, const char* v
     const game_rules_c_allocator allocator =
         engine == NULL ? system_allocator() : engine->allocator;
     return copy_json_with_allocator(&allocator, value);
-}
-
-static const char* direction_name(uint32_t direction)
-{
-    switch (direction) {
-    case GAME_RULES_DIRECTION_NORTH: return "north";
-    case GAME_RULES_DIRECTION_EAST: return "east";
-    case GAME_RULES_DIRECTION_SOUTH: return "south";
-    case GAME_RULES_DIRECTION_WEST: return "west";
-    default: return NULL;
-    }
 }
 
 void game_rules_c_destroy_session(game_rules_session* session)
@@ -262,29 +250,12 @@ char* game_rules_engine_get_state(game_rules_engine* engine)
 
 char* game_rules_engine_move(game_rules_engine* engine, uint32_t direction)
 {
-    const char* name;
-    char buffer[256];
-    int written;
     if (engine == NULL) {
         return copy_json_for_engine(
             NULL,
             "{\"apiVersion\":1,\"operation\":\"move\",\"status\":\"invalid_engine\",\"state\":null}");
     }
-    name = direction_name(direction);
-    if (name == NULL) {
-        return copy_json_for_engine(
-            engine,
-            "{\"apiVersion\":1,\"operation\":\"move\",\"status\":\"invalid_direction\",\"accepted\":false,\"direction\":null,\"events\":[],\"initialState\":null,\"ticks\":[],\"state\":null,\"outcome\":null}");
-    }
-    written = snprintf(buffer,
-                       sizeof(buffer),
-                       "{\"apiVersion\":1,\"operation\":\"move\",\"status\":\"no_level\",\"accepted\":false,\"direction\":\"%s\",\"events\":[{\"type\":\"moveBlocked\",\"direction\":\"%s\",\"reason\":\"no_level\"}],\"initialState\":null,\"ticks\":[],\"state\":null,\"outcome\":null}",
-                       name,
-                       name);
-    if (written < 0 || (size_t)written >= sizeof(buffer)) {
-        return NULL;
-    }
-    return copy_json_for_engine(engine, buffer);
+    return game_rules_c_stage04_move_json(engine, direction);
 }
 
 char* game_rules_engine_rewind(game_rules_engine* engine)
@@ -343,7 +314,6 @@ uint32_t game_rules_engine_move_data(game_rules_engine* engine,
                                      uint32_t direction,
                                      game_rules_move_result* out_result)
 {
-    void* owner;
     if (out_result == NULL) {
         return GAME_RULES_CALL_INVALID_ARGUMENT;
     }
@@ -351,32 +321,7 @@ uint32_t game_rules_engine_move_data(game_rules_engine* engine,
     if (engine == NULL) {
         return GAME_RULES_CALL_INVALID_ENGINE;
     }
-    if (direction_name(direction) == NULL) {
-        owner = game_rules_c_engine_allocate_result_storage(engine, 1U);
-        if (owner == NULL) {
-            return GAME_RULES_CALL_ALLOCATION_FAILED;
-        }
-        out_result->status = GAME_RULES_MOVE_INVALID_DIRECTION;
-        out_result->owned_storage = owner;
-        return GAME_RULES_CALL_OK;
-    }
-
-    owner = game_rules_c_engine_allocate_result_storage(engine, sizeof(game_rules_event));
-    if (owner == NULL) {
-        return GAME_RULES_CALL_ALLOCATION_FAILED;
-    }
-    memset(owner, 0, sizeof(game_rules_event));
-    ((game_rules_event*)owner)->kind = GAME_RULES_EVENT_MOVE_BLOCKED;
-    ((game_rules_event*)owner)->direction = direction;
-    ((game_rules_event*)owner)->move_status = GAME_RULES_MOVE_NO_LEVEL;
-
-    out_result->status = GAME_RULES_MOVE_NO_LEVEL;
-    out_result->has_direction = 1U;
-    out_result->direction = direction;
-    out_result->events = (const game_rules_event*)owner;
-    out_result->event_count = 1U;
-    out_result->owned_storage = owner;
-    return GAME_RULES_CALL_OK;
+    return game_rules_c_stage04_move_data(engine, direction, out_result);
 }
 
 uint32_t game_rules_engine_rewind_data(game_rules_engine* engine,

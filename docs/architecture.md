@@ -122,6 +122,12 @@ allocate-then-swap commit. The parent checkout checks the candidate yyjson sourc
 license byte-for-byte against the reference pin, while standalone candidate builds use only files
 under `c-port/`.
 
+Player commands use the same ownership model. A command transaction reads immutable current state,
+writes only preallocated scratch state, and exposes initial/final state plus ordered events to both
+serializers. The typed arena or JSON document is completed before current and scratch swap, so an
+allocation failure cannot publish or retain a partial tick. Later command rules must extend this
+transaction rather than mutate authoritative state incrementally.
+
 Differential execution uses separate reference and candidate runner processes,
 so their identical public C symbols never collide. Both consume the existing
 adapter-neutral contract transcript syntax and emit one canonical JSON result

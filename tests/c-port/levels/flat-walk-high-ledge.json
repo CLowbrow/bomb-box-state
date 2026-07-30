@@ -1,0 +1,1 @@
+{"format":"game-rules-level","version":1,"coordinateSystem":{"origin":{"x":0,"y":0},"positiveX":"east","positiveY":"north"},"width":2,"height":1,"cells":[{"coordinate":{"x":0,"y":0},"type":"flat","elevation":0},{"coordinate":{"x":1,"y":0},"type":"flat","elevation":1}],"fixtures":[],"entities":[{"id":"17","type":"player","coordinate":{"x":0,"y":0},"bottomHalfSteps":0}]}
