@@ -1,9 +1,10 @@
 # C17 candidate engine
 
-This directory is the self-contained production candidate for the C17 rewrite. Stage 08 preserves
-the frozen public ABI and complete stage-07 ramp causal closure, then proves the full switch, door,
-exit teleporter, and win contract across movement, pushing, gravity, sliding, explosions, snapshots,
-failure atomicity, and WebAssembly smoke coverage. Rewind history remains a later stage.
+This directory is the self-contained production candidate for the C17 rewrite. Stage 09 preserves
+the frozen public ABI and complete stage-08 fixture boundary, then proves barrel arming,
+simultaneous explosion waves, deterministic chain reactions, blast movement, and full causal
+closure across gravity, ramps, fixtures, crushing, wins, losses, snapshots, failure atomicity, and
+WebAssembly. Rewind history remains stage 10.
 
 The frozen creation API uses the C runtime allocator. The additive, versioned
 `game_rules/c_allocator_api.h` extension permits an embedding host or deterministic test to supply

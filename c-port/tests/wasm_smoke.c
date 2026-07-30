@@ -14,6 +14,7 @@ int main(void)
     game_rules_move_result terminal = {0};
     game_rules_rewind_result rewind = {0};
     game_rules_load_result load = {0};
+    game_rules_load_result chain = {0};
     game_rules_state_result loaded_state = {0};
     char* json;
     game_rules_engine* const engine = game_rules_engine_create();
@@ -174,6 +175,42 @@ int main(void)
         }
     }
     {
+        static const game_rules_cell cells[8] = {
+            {{0, 0}, GAME_RULES_CELL_FLAT, 0, 0},
+            {{1, 0}, GAME_RULES_CELL_FLAT, 0, 0},
+            {{2, 0}, GAME_RULES_CELL_FLAT, 0, 0},
+            {{3, 0}, GAME_RULES_CELL_FLAT, 0, 0},
+            {{0, 1}, GAME_RULES_CELL_FLAT, 0, 0},
+            {{1, 1}, GAME_RULES_CELL_FLAT, 0, 0},
+            {{2, 1}, GAME_RULES_CELL_FLAT, 0, 0},
+            {{3, 1}, GAME_RULES_CELL_FLAT, 0, 0}};
+        static const game_rules_entity entities[3] = {
+            {8U, GAME_RULES_ENTITY_BARREL, {0, 0}, 2},
+            {9U, GAME_RULES_ENTITY_BARREL, {1, 0}, 0},
+            {1U, GAME_RULES_ENTITY_PLAYER, {3, 1}, 0}};
+        const game_rules_level_definition level = {
+            {{0, 0}, GAME_RULES_HORIZONTAL_EAST, GAME_RULES_VERTICAL_NORTH},
+            4U, 2U, cells, 8U, 0, 0U, entities, 3U};
+        if (game_rules_engine_load_level_data(engine, &level, &chain) !=
+                GAME_RULES_CALL_OK || !chain.accepted || chain.tick_count != 3U ||
+            chain.ticks[0].event_count != 2U ||
+            chain.ticks[0].events[1].kind != GAME_RULES_EVENT_BARREL_ARMED ||
+            chain.ticks[1].event_count != 3U ||
+            chain.ticks[1].events[0].kind != GAME_RULES_EVENT_BARREL_EXPLODED ||
+            chain.ticks[1].events[0].entity_id != 8U ||
+            chain.ticks[1].events[1].movement_cause != GAME_RULES_MOVEMENT_BLAST ||
+            chain.ticks[1].events[2].kind != GAME_RULES_EVENT_BARREL_ARMED ||
+            chain.ticks[1].events[2].entity_id != 9U ||
+            chain.ticks[2].event_count != 1U ||
+            chain.ticks[2].events[0].kind != GAME_RULES_EVENT_BARREL_EXPLODED ||
+            chain.ticks[2].events[0].entity_id != 9U ||
+            chain.ticks[2].events[0].coordinate.x != 2 ||
+            chain.final_state.armed_barrel_count != 0U ||
+            chain.final_state.entity_count != 1U) {
+            return 30;
+        }
+    }
+    {
         static const game_rules_cell cells[3] = {
             {{0, 0}, GAME_RULES_CELL_FLAT, 0, 0},
             {{1, 0}, GAME_RULES_CELL_FLAT, 0, 0},
@@ -231,6 +268,7 @@ int main(void)
     }
     game_rules_state_result_dispose(&loaded_state);
     game_rules_load_result_dispose(&load);
+    game_rules_load_result_dispose(&chain);
     game_rules_rewind_result_dispose(&rewind);
     game_rules_move_result_dispose(&move);
     game_rules_move_result_dispose(&walk);

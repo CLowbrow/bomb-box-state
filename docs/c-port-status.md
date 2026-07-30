@@ -1,16 +1,17 @@
 # C17 rewrite status
 
-## Stage-08 boundary
+## Stage-09 boundary
 
 `c-port/` is the self-contained C17 production candidate. The C++ engine remains the frozen
 behavioral reference, `docs/rules.md` remains normative, and `include/game_rules/c_api.h` remains
 the ABI source of truth.
 
-Stage 08 retains the complete stage-07 ramp and causal-closure boundary and establishes switches,
-doors, exit teleporters, and terminal wins as a separately proven production boundary through both
-public APIs. The fixture algorithms were already present in the candidate because earlier movement
-stages needed fixture-aware blocking and stabilization; stage 08 removes the staging drift by
-exercising their complete contract rather than treating that incidental coverage as completion:
+Stage 09 retains the complete stage-08 fixture boundary and establishes barrel arming, simultaneous
+explosion waves, deterministic chain reactions, blast movement, and their full causal closure as a
+separately proven production boundary through both public APIs. The explosion algorithms were
+already present incrementally because the gravity, ramp, and fixture stages needed falling-barrel
+turns to close; stage 09 removes that staging drift by exercising the complete explosion contract
+rather than treating incidental earlier coverage as completion:
 
 - strict version-1 JSON and typed input decoding from stage 02;
 - all 21 ordered world-schema validation errors;
@@ -32,8 +33,17 @@ exercising their complete contract rather than treating that incidental coverage
   destination conflict cancellation, and fixture-aware blocked retries;
 - bottom-up gravity compaction with complete half-step fall events, barrel arming, player-fall and
   crushing loss rules, and canonical simultaneous-column ordering;
-- command-time explosion waves needed to close falling-barrel turns, including blast-driven falls,
-  chain arming, support removal, fixture recomputation, and terminal loss;
+- exact positive-fall and blast-hit arming, with armed barrels settling every triggered fall and
+  available ramp slide before detonation;
+- simultaneous explosion waves planned from one immutable pre-wave state, with spatial source and
+  target event order, same-cell vertical chains, blast-height stack selection, source removal,
+  support removal, and complete authoritative snapshots;
+- deterministic impulse and destination conflict cancellation independent of IDs, input order,
+  allocation order, and container traversal, while preserving independent nonconflicting moves;
+- flat, endpoint, connected-center, and matching-lane ramp blast geometry, including blast-driven
+  falls, whole-stack settling, slides, secondary arming, and later explosion waves;
+- explosion-time switch and door recomputation, crushing and direct blast deaths, win precedence,
+  terminal cancellation, and exact fixture/terminal event ordering;
 - palette-ordered active switch derivation with AND behavior across multiple same-color switches;
 - row-major effectively open doors, including active colors, occupied-door holding, closing after
   the final occupant leaves, and deterministic open/close changes around simultaneous effects;
@@ -103,7 +113,7 @@ pointer address, hash order, allocator order, wall clock, platform API, or unspe
 
 ## Public contract inventory
 
-| Surface | Stage-08 status |
+| Surface | Stage-09 status |
 | --- | --- |
 | API versions, create/destroy, null handling | matched |
 | Custom allocator extension | implemented; accepted load, snapshot, and move allocation sites are failure-injected |
@@ -151,20 +161,29 @@ Current proofs:
   canonical palette and door-coordinate order, held doors, multi-tick push/fall activation,
   explosion-driven fixture changes, fixture-aware walking/pushing/sliding, exit restrictions,
   immediate and movement-triggered wins, terminal commands, and reordered fixture/entity input.
+- `game_rules.differential.stage09_explosions_parity`: all 47 generated load/move operations match
+  for every authored explosion behavior, simultaneous source and destination conflicts, same-cell
+  and adjacent chains, blast-height stack pops, fixture changes, crushing, ramp connectivity,
+  blast-to-fall-to-slide closure, terminal outcomes, eight fixed stress seeds, reassigned IDs,
+  reordered arrays, and identical repeated-seed execution.
 - `game_rules.candidate_runner.stage05_browser_push_contract`: the candidate matches the existing
   authored load and move golden outputs without modifying them.
-- `game_rules.candidate_runner.stage07_hardening_conflicts_contract`: canonical and reordered
-  whole-stack slide conflicts match the existing authored golden output without modification.
+- `game_rules.candidate_runner.stage09_explosion_conflicts_contract`: canonical and reordered
+  explosion conflicts, plus the existing whole-stack slide conflicts, match the authored golden
+  outputs without modification.
 - `game_rules.differential.gameplay_expected_incomplete`: the first browser difference is now
   operation 4 at `$.status` (`rewound` versus candidate `history_empty`) because resolved-state
   history remains later-stage work.
 
 Candidate C tests verify complete initial, tick, event, final, snapshot, acceptance, status, and
-outcome fields as well as result ownership and pointer/count invariants. The dedicated fixture
-suite covers all palette colors, multiple same-color switches and doors, canonical fixture and
-event order, independent immutable typed views, simultaneous switch/door changes, AND behavior,
-held-door falls and closing, multi-tick gravity activation, loss ordering, exit-height rejection,
-wins, and terminal commands. The falling corpus covers
+outcome fields as well as result ownership and pointer/count invariants. The dedicated explosion
+suite covers six-tick blast/fall chains, exact arming and wave timing, complete per-tick snapshots,
+simultaneous conflict cancellation, reordered input, reassigned IDs, vertical chains, fixtures,
+loss ordering, matching-ramp geometry, blast-to-fall-to-slide closure, and terminal state. The
+dedicated fixture suite covers all palette colors, multiple same-color switches and doors,
+canonical fixture and event order, independent immutable typed views, simultaneous switch/door
+changes, AND behavior, held-door falls and closing, multi-tick gravity activation, loss ordering,
+exit-height rejection, wins, and terminal commands. The falling corpus covers
 initial multi-column compaction, ramp-center landing before the deferred slide phase, direct crush
 planning, box stacks, tall drops, barrel chains, and terminal repetition. Allocation injection
 walks every allocation in multi-tick JSON and typed falling-barrel commands; every failure checks
@@ -175,32 +194,37 @@ injection walks every JSON and typed allocation in a three-tick push/slide/slide
 Fixture allocation injection walks every JSON and typed allocation in a two-tick
 push/fall/switch/door command, checks the complete pre-command entity and fixture state at every
 failure, and verifies deterministic successful retry.
+Explosion allocation injection walks every JSON and typed allocation in a six-tick command with
+two explosion waves and blast-driven falls, checks the complete pre-command entity, armed-barrel,
+fixture, and outcome state at every failure, and verifies deterministic successful retry.
 
-## Stage-08 verification
+## Stage-09 verification
 
-- Standalone strict C17 native build with warnings as errors: 9/9 tests passed.
-- Parent native debug suite: 137/137 tests passed.
-- The complete 43-operation stage-08 fixture differential corpus passed 100 consecutive
-  executions.
-- Emscripten 6.0.3 plus Node 26.5.0: standalone 9/9 and parent 10/10 tests passed.
+- Standalone strict C17 native build with warnings as errors: 10/10 tests passed.
+- Parent native debug suite: 139/139 tests passed.
+- The complete 47-operation stage-09 explosion differential corpus passed 100 consecutive
+  executions; each execution includes eight fixed seeds, reassigned IDs, reordered arrays, and
+  an identical repeated load for every seed.
+- Emscripten 6.0.3 plus Node 26.5.0: standalone 10/10 and parent 11/11 tests passed.
   The WebAssembly smoke executable covers canonical fixture derivation, door traversal, a legal
-  exit win, and terminal rejection in addition to the existing three-tick barrel
-  push/fall/explosion command. The suite includes multi-tick allocation failure plus the dedicated
-  falling, ramp, and fixture matrices.
+  exit win, terminal rejection, the existing three-tick barrel push/fall/explosion command, and a
+  separate three-tick multi-barrel chain reaction. The suite includes six-tick allocation failure
+  injection plus the dedicated falling, ramp, fixture, and explosion matrices.
 - Parent and standalone ASan/UBSan configurations build successfully.
 - Per repository policy, sanitizer tests are not executed on this Apple Silicon/macOS host because
   the Apple sanitizer runtime stalls during test discovery. Runtime sanitizer execution remains an
   Ubuntu CI or other known-working Linux handoff.
 
 No normative-rule, architecture, public-ABI, reference-implementation, or golden-output conflict
-was found. Stage numbering in this document had drifted by prematurely grouping fixture behavior
-into stage 07 and naming rewind as stage 08; the explicit stage-08 fixture command is now the
-documented boundary. The frozen rules, ABI, reference files, and golden outputs were not changed.
+was found. Stage numbering had drifted by treating explosion closure as incidental coverage in
+earlier gravity, ramp, and fixture stages and naming rewind as stage 09. The explicit stage-09
+explosion boundary is now documented, and rewind moves to the stage-10 handoff. The frozen rules,
+ABI, reference files, and golden outputs were not changed.
 
-## Stage-09 starting point
+## Stage-10 handoff
 
-Stage 09 should add real resolved-state history and rewind without reopening the completed
-stage-03 through stage-08 behavior:
+Stage 10 should add real resolved-state history and rewind without reopening the completed
+stage-03 through stage-09 behavior:
 
 1. Replace the one-byte history scaffold with owned canonical resolved-state entries.
 2. Reserve the next history entry before planning a command, commit it only with the completed
@@ -212,5 +236,5 @@ stage-03 through stage-08 behavior:
 5. Preserve the completed ramp traversal, pushing, whole-stack sliding, and causal-order behavior
    while history storage is added.
 
-Keep the stage-02 through stage-08 differential corpora intact, keep the C++ engine and public ABI
+Keep the stage-02 through stage-09 differential corpora intact, keep the C++ engine and public ABI
 frozen, and continue to stop on unresolved specification conflicts.

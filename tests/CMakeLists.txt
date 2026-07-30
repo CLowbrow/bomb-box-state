@@ -196,15 +196,15 @@ set_tests_properties(
 )
 
 add_test(
-    NAME game_rules.candidate_runner.stage07_hardening_conflicts_contract
+    NAME game_rules.candidate_runner.stage09_explosion_conflicts_contract
     COMMAND
         game_rules_candidate_runner
         --check-expected
         "${CMAKE_CURRENT_SOURCE_DIR}/contracts/engine_hardening/v1/conflicts.txt"
 )
 set_tests_properties(
-    game_rules.candidate_runner.stage07_hardening_conflicts_contract
-    PROPERTIES LABELS "candidate;contract;movement;ramps;integration;native"
+    game_rules.candidate_runner.stage09_explosion_conflicts_contract
+    PROPERTIES LABELS "candidate;contract;movement;ramps;explosions;integration;native"
 )
 
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
@@ -320,6 +320,20 @@ add_test(
 set_tests_properties(
     game_rules.differential.stage08_fixtures_parity
     PROPERTIES LABELS "candidate;differential;movement;gravity;ramps;fixtures;terminal;integration;native"
+)
+
+add_test(
+    NAME game_rules.differential.stage09_explosions_parity
+    COMMAND
+        "${Python3_EXECUTABLE}"
+        "${CMAKE_CURRENT_SOURCE_DIR}/c-port/explosion_differential_test.py"
+        "$<TARGET_FILE:game_rules_reference_runner>"
+        "$<TARGET_FILE:game_rules_candidate_runner>"
+        "${GAME_RULES_C_COMPARATOR}"
+)
+set_tests_properties(
+    game_rules.differential.stage09_explosions_parity
+    PROPERTIES LABELS "candidate;differential;movement;gravity;ramps;fixtures;explosions;terminal;integration;native"
 )
 
 # The stage-05 push now matches operation 3. Real resolved-state history remains a later stage, so

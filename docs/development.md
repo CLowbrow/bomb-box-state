@@ -147,8 +147,9 @@ For Unreal staging and platform-library requirements, see the
 
 ## C17 candidate and differential harness
 
-The stage-08 initialization, snapshot, flat/ramp movement, whole-stack sliding, gravity, fixture,
-win, and causal-closure C candidate can be configured without the parent checkout:
+The stage-09 initialization, snapshot, flat/ramp movement, whole-stack sliding, gravity, fixture,
+explosion-wave, terminal, and causal-closure C candidate can be configured without the parent
+checkout:
 
 ```sh
 cmake -S c-port -B out/c-port-native -G Ninja -DCMAKE_BUILD_TYPE=Debug -DBUILD_TESTING=ON
