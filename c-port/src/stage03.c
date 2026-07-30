@@ -557,12 +557,14 @@ char* game_rules_c_stage03_load_json(game_rules_engine* engine,
     return response;
 }
 
-static void plan_command(game_rules_engine* engine,
-                         uint32_t direction,
-                         game_rules_c_command_transaction* transaction,
-                         game_rules_event* no_level_event)
+static uint32_t plan_command(game_rules_engine* engine,
+                             uint32_t direction,
+                             game_rules_c_command_transaction* transaction,
+                             game_rules_event* no_level_event)
 {
-    game_rules_c_plan_flat_move(engine->session, direction, transaction);
+    uint32_t call = game_rules_c_plan_resolved_command(
+        engine->session, &engine->allocator, direction, transaction);
+    if (call != GAME_RULES_CALL_OK) return call;
     if (transaction->status == GAME_RULES_MOVE_NO_LEVEL &&
         transaction->has_direction && transaction->event_count == 0U) {
         memset(no_level_event, 0, sizeof(*no_level_event));
@@ -572,6 +574,7 @@ static void plan_command(game_rules_engine* engine,
         transaction->events = no_level_event;
         transaction->event_count = 1U;
     }
+    return GAME_RULES_CALL_OK;
 }
 
 char* game_rules_c_stage04_move_json(game_rules_engine* engine, uint32_t direction)
@@ -581,7 +584,11 @@ char* game_rules_c_stage04_move_json(game_rules_engine* engine, uint32_t directi
     const game_rules_c_state* response_state;
     builder output = {0};
     char* response;
-    plan_command(engine, direction, &transaction, &no_level_event);
+    if (plan_command(engine, direction, &transaction, &no_level_event) !=
+        GAME_RULES_CALL_OK) {
+        game_rules_c_command_transaction_destroy(&transaction);
+        return NULL;
+    }
     response_state = transaction.accepted
         ? transaction.final_state
         : (engine->session && engine->session->has_level
@@ -608,12 +615,18 @@ char* game_rules_c_stage04_move_json(game_rules_engine* engine, uint32_t directi
     }
     text(&output, ",\"ticks\":[");
     if (transaction.accepted) {
-        text(&output, "{\"index\":0,\"events\":");
-        event_array_json(&output, transaction.tick_events,
-                         transaction.tick_event_count);
-        text(&output, ",\"stateAfter\":");
-        resolved_json(&output, transaction.final_state);
-        text(&output, "}");
+        uint32_t tick_index;
+        for (tick_index = 0U; tick_index < transaction.tick_count; ++tick_index) {
+            const game_rules_c_tick* tick = &transaction.ticks[tick_index];
+            if (tick_index) text(&output, ",");
+            text(&output, "{\"index\":");
+            number_u64(&output, tick->index);
+            text(&output, ",\"events\":");
+            event_array_json(&output, tick->events, tick->event_count);
+            text(&output, ",\"stateAfter\":");
+            resolved_json(&output, &tick->state_after);
+            text(&output, "}");
+        }
     }
     text(&output, "],\"state\":");
     if (response_state != NULL) {
@@ -633,6 +646,7 @@ char* game_rules_c_stage04_move_json(game_rules_engine* engine, uint32_t directi
     if (response != NULL && transaction.accepted) {
         game_rules_c_commit_command(engine->session, &transaction);
     }
+    game_rules_c_command_transaction_destroy(&transaction);
     return response;
 }
 
@@ -956,18 +970,23 @@ static void move_graph(layout* arena,
         copy_resolved(arena, transaction->initial_state, &output->initial_state);
     }
     if (transaction->accepted) {
-        game_rules_tick measured;
         game_rules_tick* ticks = (game_rules_tick*)take(
-            arena, 1U, sizeof(game_rules_tick), _Alignof(game_rules_tick));
-        game_rules_tick* tick = arena->base != NULL ? ticks : &measured;
-        memset(tick, 0, sizeof(*tick));
+            arena, transaction->tick_count, sizeof(game_rules_tick),
+            _Alignof(game_rules_tick));
+        uint32_t tick_index;
         output->ticks = ticks;
-        output->tick_count = 1U;
-        tick->index = 0U;
-        copy_events(arena, transaction->tick_events,
-                    transaction->tick_event_count, &tick->events);
-        tick->event_count = transaction->tick_event_count;
-        copy_resolved(arena, transaction->final_state, &tick->state_after);
+        output->tick_count = transaction->tick_count;
+        for (tick_index = 0U; tick_index < transaction->tick_count; ++tick_index) {
+            const game_rules_c_tick* source = &transaction->ticks[tick_index];
+            game_rules_tick measured;
+            game_rules_tick* tick = arena->base != NULL
+                ? &ticks[tick_index] : &measured;
+            memset(tick, 0, sizeof(*tick));
+            tick->index = source->index;
+            copy_events(arena, source->events, source->event_count, &tick->events);
+            tick->event_count = source->event_count;
+            copy_resolved(arena, &source->state_after, &tick->state_after);
+        }
     }
     if (transaction->final_state != NULL) {
         output->has_final_state = 1U;
@@ -991,22 +1010,36 @@ uint32_t game_rules_c_stage04_move_data(game_rules_engine* engine,
     layout measure = {0};
     layout arena = {0};
     void* owner;
-    plan_command(engine, direction, &transaction, &no_level_event);
+    {
+        uint32_t call = plan_command(engine, direction, &transaction, &no_level_event);
+        if (call != GAME_RULES_CALL_OK) {
+            game_rules_c_command_transaction_destroy(&transaction);
+            return call;
+        }
+    }
     move_graph(&measure, engine->session, &transaction, &ignored);
-    if (measure.failed) return GAME_RULES_CALL_ALLOCATION_FAILED;
+    if (measure.failed) {
+        game_rules_c_command_transaction_destroy(&transaction);
+        return GAME_RULES_CALL_ALLOCATION_FAILED;
+    }
     owner = game_rules_c_allocate_owned(&engine->allocator, measure.offset);
-    if (owner == NULL) return GAME_RULES_CALL_ALLOCATION_FAILED;
+    if (owner == NULL) {
+        game_rules_c_command_transaction_destroy(&transaction);
+        return GAME_RULES_CALL_ALLOCATION_FAILED;
+    }
     arena.base = (unsigned char*)owner;
     arena.capacity = measure.offset;
     move_graph(&arena, engine->session, &transaction, result);
     if (arena.failed) {
         game_rules_c_deallocate_owned(owner);
         memset(result, 0, sizeof(*result));
+        game_rules_c_command_transaction_destroy(&transaction);
         return GAME_RULES_CALL_ALLOCATION_FAILED;
     }
     result->owned_storage = owner;
     if (transaction.accepted) {
         game_rules_c_commit_command(engine->session, &transaction);
     }
+    game_rules_c_command_transaction_destroy(&transaction);
     return GAME_RULES_CALL_OK;
 }

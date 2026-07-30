@@ -53,6 +53,9 @@ typedef struct game_rules_c_command_transaction {
     uint32_t event_count;
     const game_rules_event* tick_events;
     uint32_t tick_event_count;
+    const game_rules_c_tick* ticks;
+    uint32_t tick_count;
+    void* owned_plan;
 } game_rules_c_command_transaction;
 
 typedef struct game_rules_c_slide_candidate {
@@ -210,8 +213,17 @@ uint32_t game_rules_c_stage04_move_data(game_rules_engine* engine,
 void game_rules_c_plan_flat_move(game_rules_session* session,
                                  uint32_t direction,
                                  game_rules_c_command_transaction* transaction);
+uint32_t game_rules_c_plan_resolved_command(
+    game_rules_session* session,
+    const game_rules_c_allocator* allocator,
+    uint32_t direction,
+    game_rules_c_command_transaction* transaction);
 void game_rules_c_commit_command(game_rules_session* session,
                                  const game_rules_c_command_transaction* transaction);
+void game_rules_c_command_transaction_destroy(
+    game_rules_c_command_transaction* transaction);
+int game_rules_c_resolve_falling_tick(game_rules_session* session,
+                                      uint32_t* event_count);
 void game_rules_c_destroy_session(game_rules_session* session);
 
 /* Private compatibility seams exercised by the candidate lifecycle tests. */

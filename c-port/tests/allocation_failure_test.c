@@ -504,6 +504,110 @@ static void expect_stage05_push_failures(allocation_tracker* tracker,
     assert(tracker->invalid_free_count == 0U);
 }
 
+static void expect_stage06_fall_failures(allocation_tracker* tracker,
+                                         const game_rules_allocator_v1* allocator)
+{
+    const game_rules_cell cells[3] = {
+        {{0, 0}, GAME_RULES_CELL_FLAT, 2, 0},
+        {{1, 0}, GAME_RULES_CELL_FLAT, 2, 0},
+        {{2, 0}, GAME_RULES_CELL_FLAT, 0, 0}};
+    const game_rules_entity entities[2] = {
+        {1U, GAME_RULES_ENTITY_PLAYER, {0, 0}, 4},
+        {8U, GAME_RULES_ENTITY_BARREL, {1, 0}, 4}};
+    const game_rules_level_definition level = {
+        {{0, 0}, GAME_RULES_HORIZONTAL_EAST, GAME_RULES_VERTICAL_NORTH},
+        3U, 1U, cells, 3U, NULL, 0U, entities, 2U};
+    game_rules_engine* engine;
+    game_rules_load_result load = {0};
+    game_rules_move_result move;
+    char* json;
+    size_t attempts;
+    size_t failure;
+
+    tracker_begin_success(tracker);
+    engine = game_rules_engine_create_with_allocator_v1(allocator);
+    assert(engine != NULL);
+    assert(game_rules_engine_load_level_data(engine, &level, &load) ==
+           GAME_RULES_CALL_OK);
+    game_rules_load_result_dispose(&load);
+    tracker_begin_success(tracker);
+    json = game_rules_engine_move(engine, GAME_RULES_DIRECTION_EAST);
+    assert(json != NULL);
+    assert(strstr(json, "\"index\":2") != NULL);
+    assert(strstr(json, "\"type\":\"barrelExploded\"") != NULL);
+    attempts = tracker->attempt;
+    game_rules_string_free(json);
+    game_rules_engine_destroy(engine);
+
+    for (failure = 0U; failure < attempts; ++failure) {
+        size_t baseline;
+        tracker_begin_success(tracker);
+        engine = game_rules_engine_create_with_allocator_v1(allocator);
+        assert(engine != NULL);
+        assert(game_rules_engine_load_level_data(engine, &level, &load) ==
+               GAME_RULES_CALL_OK);
+        game_rules_load_result_dispose(&load);
+        baseline = tracker->live_count;
+        tracker_begin_failure(tracker, failure);
+        assert(game_rules_engine_move(engine, GAME_RULES_DIRECTION_EAST) == NULL);
+        assert(engine->session->current_state.entity_count == 2U);
+        assert(engine->session->current_state.entities[0].id == 1U);
+        assert(engine->session->current_state.entities[0].coordinate.x == 0);
+        assert(engine->session->current_state.entities[1].id == 8U);
+        assert(engine->session->current_state.entities[1].coordinate.x == 1);
+        assert(engine->session->current_state.armed_barrel_count == 0U);
+        assert(tracker->live_count == baseline);
+        tracker_begin_success(tracker);
+        json = game_rules_engine_move(engine, GAME_RULES_DIRECTION_EAST);
+        assert(json != NULL && strstr(json, "\"index\":2") != NULL);
+        game_rules_string_free(json);
+        game_rules_engine_destroy(engine);
+        assert(tracker->invalid_free_count == 0U);
+    }
+
+    tracker_begin_success(tracker);
+    engine = game_rules_engine_create_with_allocator_v1(allocator);
+    assert(engine != NULL);
+    assert(game_rules_engine_load_level_data(engine, &level, &load) ==
+           GAME_RULES_CALL_OK);
+    game_rules_load_result_dispose(&load);
+    tracker_begin_success(tracker);
+    memset(&move, 0, sizeof(move));
+    assert(game_rules_engine_move_data(engine, GAME_RULES_DIRECTION_EAST, &move) ==
+           GAME_RULES_CALL_OK);
+    assert(move.accepted && move.tick_count == 3U);
+    attempts = tracker->attempt;
+    game_rules_move_result_dispose(&move);
+    game_rules_engine_destroy(engine);
+
+    for (failure = 0U; failure < attempts; ++failure) {
+        size_t baseline;
+        tracker_begin_success(tracker);
+        engine = game_rules_engine_create_with_allocator_v1(allocator);
+        assert(engine != NULL);
+        assert(game_rules_engine_load_level_data(engine, &level, &load) ==
+               GAME_RULES_CALL_OK);
+        game_rules_load_result_dispose(&load);
+        baseline = tracker->live_count;
+        memset(&move, 0xA5, sizeof(move));
+        tracker_begin_failure(tracker, failure);
+        assert(game_rules_engine_move_data(engine, GAME_RULES_DIRECTION_EAST, &move) ==
+               GAME_RULES_CALL_ALLOCATION_FAILED);
+        assert(bytes_are_zero(&move, sizeof(move)));
+        assert(engine->session->current_state.entities[0].coordinate.x == 0);
+        assert(engine->session->current_state.entities[1].coordinate.x == 1);
+        assert(engine->session->current_state.armed_barrel_count == 0U);
+        assert(tracker->live_count == baseline);
+        tracker_begin_success(tracker);
+        assert(game_rules_engine_move_data(engine, GAME_RULES_DIRECTION_EAST, &move) ==
+               GAME_RULES_CALL_OK);
+        assert(move.accepted && move.tick_count == 3U);
+        game_rules_move_result_dispose(&move);
+        game_rules_engine_destroy(engine);
+        assert(tracker->invalid_free_count == 0U);
+    }
+}
+
 int main(void)
 {
     static allocation_tracker tracker;
@@ -559,6 +663,7 @@ int main(void)
     expect_stage03_load_failures(&tracker, &allocator);
     expect_stage04_move_failures(&tracker, &allocator);
     expect_stage05_push_failures(&tracker, &allocator);
+    expect_stage06_fall_failures(&tracker, &allocator);
 
     tracker_begin_success(&tracker);
     engine = game_rules_engine_create_with_allocator_v1(&allocator);

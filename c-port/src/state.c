@@ -14,6 +14,11 @@ typedef struct state_layout {
     uint32_t failed;
 } state_layout;
 
+typedef struct game_rules_c_command_plan {
+    game_rules_session working;
+    void* state_storage;
+} game_rules_c_command_plan;
+
 static int add_size(size_t left, size_t right, size_t* result)
 {
     if (left > SIZE_MAX - right) return 0;
@@ -449,13 +454,11 @@ void game_rules_c_plan_flat_move(game_rules_session* session,
     const game_rules_cell* source_cell;
     const game_rules_cell* destination_cell;
     const game_rules_cell* pushed_destination_cell;
-    const game_rules_fixture* source_fixture;
     const game_rules_fixture* destination_fixture;
     const game_rules_fixture* pushed_destination_fixture;
     game_rules_coordinate destination;
     game_rules_coordinate pushed_destination;
     int32_t destination_support;
-    int32_t pushed_destination_support;
     uint32_t destination_entity_count = 0U;
     uint32_t index;
     game_rules_event* moved;
@@ -501,7 +504,6 @@ void game_rules_c_plan_flat_move(game_rules_session* session,
         return;
     }
 
-    source_fixture = find_fixture(session, player->coordinate);
     destination_fixture = find_fixture(session, destination);
     if (destination_fixture != NULL &&
         destination_fixture->kind == GAME_RULES_FIXTURE_DOOR &&
@@ -575,39 +577,9 @@ void game_rules_c_plan_flat_move(game_rules_session* session,
             reject_flat_move(session, transaction, GAME_RULES_MOVE_OCCUPIED);
             return;
         }
-        pushed_destination_support = support_half_steps(pushed_destination_cell);
-        if (pushed_destination_support > push_target->bottom_half_steps) {
+        if (support_half_steps(pushed_destination_cell) >
+            push_target->bottom_half_steps) {
             reject_flat_move(session, transaction, GAME_RULES_MOVE_LEDGE);
-            return;
-        }
-        for (index = 0U; index < session->current_state.entity_count; ++index) {
-            const game_rules_entity* entity = &session->current_state.entities[index];
-            int64_t top;
-            if (!same_coordinate(entity->coordinate, pushed_destination)) continue;
-            top = (int64_t)entity->bottom_half_steps + 2;
-            if (top <= push_target->bottom_half_steps &&
-                top > pushed_destination_support) {
-                pushed_destination_support = (int32_t)top;
-            }
-        }
-        if (pushed_destination_support != push_target->bottom_half_steps) {
-            /* The horizontal tick is legal, but gravity belongs to a later stage. */
-            reject_flat_move(session, transaction,
-                             GAME_RULES_MOVE_UNSUPPORTED_GEOMETRY);
-            return;
-        }
-        if ((source_fixture != NULL &&
-             source_fixture->kind == GAME_RULES_FIXTURE_SWITCH) ||
-            (destination_fixture != NULL &&
-             destination_fixture->kind == GAME_RULES_FIXTURE_SWITCH) ||
-            (pushed_destination_fixture != NULL &&
-             pushed_destination_fixture->kind == GAME_RULES_FIXTURE_SWITCH) ||
-            (source_fixture != NULL &&
-             source_fixture->kind == GAME_RULES_FIXTURE_DOOR &&
-             !contains_color(&session->current_state, source_fixture->color))) {
-            /* Movement-triggered fixture derivation belongs to a later stage. */
-            reject_flat_move(session, transaction,
-                             GAME_RULES_MOVE_UNSUPPORTED_GEOMETRY);
             return;
         }
         if (!state_copy(&session->scratch_state, &session->current_state)) {
@@ -665,21 +637,8 @@ void game_rules_c_plan_flat_move(game_rules_session* session,
             player->bottom_half_steps != support_half_steps(destination_cell)) {
             reject_flat_move(session, transaction,
                              GAME_RULES_MOVE_TELEPORTER_RESTRICTION);
-        } else {
-            /* Winning is a later fixture-effect stage, so do not commit a partial turn. */
-            reject_flat_move(session, transaction,
-                             GAME_RULES_MOVE_UNSUPPORTED_GEOMETRY);
+            return;
         }
-        return;
-    }
-    if ((source_fixture != NULL && source_fixture->kind == GAME_RULES_FIXTURE_SWITCH) ||
-        (destination_fixture != NULL &&
-         destination_fixture->kind == GAME_RULES_FIXTURE_SWITCH) ||
-        (source_fixture != NULL && source_fixture->kind == GAME_RULES_FIXTURE_DOOR &&
-         !contains_color(&session->current_state, source_fixture->color))) {
-        /* A switch transition or held-open door close belongs to fixture effects. */
-        reject_flat_move(session, transaction, GAME_RULES_MOVE_UNSUPPORTED_GEOMETRY);
-        return;
     }
     if (destination_support != player->bottom_half_steps) {
         reject_flat_move(session, transaction,
@@ -721,16 +680,6 @@ void game_rules_c_plan_flat_move(game_rules_session* session,
     transaction->final_state = &session->scratch_state;
     transaction->tick_events = moved;
     transaction->tick_event_count = 1U;
-}
-
-void game_rules_c_commit_command(game_rules_session* session,
-                                 const game_rules_c_command_transaction* transaction)
-{
-    if (session != NULL && transaction != NULL && transaction->accepted &&
-        transaction->initial_state == &session->current_state &&
-        transaction->final_state == &session->scratch_state) {
-        swap_current_and_scratch(session);
-    }
 }
 
 static int switch_pressed(const game_rules_session* session,
@@ -893,7 +842,8 @@ static int resolve_initial_fixture_tick(game_rules_session* session,
     return 1;
 }
 
-static int resolve_falling(game_rules_session* session, uint32_t* event_count)
+int game_rules_c_resolve_falling_tick(game_rules_session* session,
+                                      uint32_t* event_count)
 {
     const game_rules_c_state* current = &session->current_state;
     game_rules_c_state* next = &session->scratch_state;
@@ -1344,7 +1294,7 @@ static int resolve_initialization(game_rules_session* session,
     /* This is the frozen reference order: fall, otherwise slide, otherwise explode. */
     while (session->current_state.outcome == GAME_RULES_OUTCOME_ONGOING) {
         uint32_t event_count = 0U;
-        int resolved = resolve_falling(session, &event_count);
+        int resolved = game_rules_c_resolve_falling_tick(session, &event_count);
         if (resolved == 0) resolved = resolve_sliding(session, &event_count);
         if (resolved == 0) resolved = resolve_explosions(session, &event_count);
         if (resolved < 0) return 0;
@@ -1380,6 +1330,151 @@ static int allocate_state_arrays(state_layout* storage,
     }
     state->outcome = GAME_RULES_OUTCOME_ONGOING;
     return !storage->failed;
+}
+
+static void destroy_command_plan(game_rules_c_command_plan* plan)
+{
+    uint32_t index;
+    if (plan == NULL) return;
+    for (index = 0U; index < plan->working.initialization_tick_count; ++index) {
+        game_rules_c_deallocate_owned(
+            plan->working.initialization_ticks[index].owned_storage);
+    }
+    game_rules_c_deallocate_owned(plan->working.initialization_ticks);
+    game_rules_c_deallocate_owned(plan->state_storage);
+    game_rules_c_deallocate_owned(plan);
+}
+
+static void reject_resolved_command(game_rules_session* session,
+                                    uint32_t direction,
+                                    game_rules_c_command_transaction* transaction)
+{
+    memset(transaction, 0, sizeof(*transaction));
+    transaction->direction = direction;
+    transaction->has_direction = 1U;
+    reject_flat_move(session, transaction, GAME_RULES_MOVE_UNSUPPORTED_GEOMETRY);
+}
+
+uint32_t game_rules_c_plan_resolved_command(
+    game_rules_session* session,
+    const game_rules_c_allocator* allocator,
+    uint32_t direction,
+    game_rules_c_command_transaction* transaction)
+{
+    state_layout measure = {0};
+    state_layout storage = {0};
+    game_rules_c_state ignored;
+    game_rules_c_command_plan* plan;
+    uint32_t event_count;
+
+    game_rules_c_plan_flat_move(session, direction, transaction);
+    if (!transaction->accepted) return GAME_RULES_CALL_OK;
+
+    allocate_state_arrays(&measure, &ignored,
+                          session->current_state.entity_capacity,
+                          session->fixture_count, 1);
+    allocate_state_arrays(&measure, &ignored,
+                          session->current_state.entity_capacity,
+                          session->fixture_count, 1);
+    if (measure.failed) return GAME_RULES_CALL_ALLOCATION_FAILED;
+
+    plan = (game_rules_c_command_plan*)game_rules_c_allocate_owned(
+        allocator, sizeof(*plan));
+    if (plan == NULL) return GAME_RULES_CALL_ALLOCATION_FAILED;
+    memset(plan, 0, sizeof(*plan));
+    plan->state_storage = game_rules_c_allocate_owned(allocator, measure.offset);
+    if (plan->state_storage == NULL) {
+        destroy_command_plan(plan);
+        return GAME_RULES_CALL_ALLOCATION_FAILED;
+    }
+
+    plan->working = *session;
+    memset(&plan->working.current_state, 0, sizeof(plan->working.current_state));
+    memset(&plan->working.scratch_state, 0, sizeof(plan->working.scratch_state));
+    plan->working.initialization_ticks = NULL;
+    plan->working.initialization_tick_count = 0U;
+    plan->working.initialization_tick_capacity = 0U;
+    storage.base = (unsigned char*)plan->state_storage;
+    storage.capacity = measure.offset;
+    allocate_state_arrays(&storage, &plan->working.current_state,
+                          session->current_state.entity_capacity,
+                          session->fixture_count, 1);
+    allocate_state_arrays(&storage, &plan->working.scratch_state,
+                          session->current_state.entity_capacity,
+                          session->fixture_count, 1);
+    if (storage.failed ||
+        !state_copy(&plan->working.current_state, &session->current_state) ||
+        !state_copy(&plan->working.scratch_state, &session->scratch_state)) {
+        destroy_command_plan(plan);
+        return GAME_RULES_CALL_ALLOCATION_FAILED;
+    }
+
+    event_count = transaction->tick_event_count;
+    if (!resolve_fixtures_after_physical(
+            &plan->working, &plan->working.current_state,
+            &plan->working.scratch_state, &event_count) ||
+        !append_tick(&plan->working, allocator, event_count,
+                     &plan->working.scratch_state)) {
+        destroy_command_plan(plan);
+        return GAME_RULES_CALL_ALLOCATION_FAILED;
+    }
+    swap_current_and_scratch(&plan->working);
+
+    while (plan->working.current_state.outcome == GAME_RULES_OUTCOME_ONGOING) {
+        int resolved;
+        event_count = 0U;
+        resolved = game_rules_c_resolve_falling_tick(&plan->working, &event_count);
+        if (resolved == 0) {
+            resolved = resolve_sliding(&plan->working, &event_count);
+            if (resolved != 0) {
+                destroy_command_plan(plan);
+                if (resolved < 0) return GAME_RULES_CALL_ALLOCATION_FAILED;
+                reject_resolved_command(session, direction, transaction);
+                return GAME_RULES_CALL_OK;
+            }
+            resolved = resolve_explosions(&plan->working, &event_count);
+        }
+        if (resolved < 0) {
+            destroy_command_plan(plan);
+            return GAME_RULES_CALL_ALLOCATION_FAILED;
+        }
+        if (resolved == 0) break;
+        if (!resolve_fixtures_after_physical(
+                &plan->working, &plan->working.current_state,
+                &plan->working.scratch_state, &event_count) ||
+            !append_tick(&plan->working, allocator, event_count,
+                         &plan->working.scratch_state)) {
+            destroy_command_plan(plan);
+            return GAME_RULES_CALL_ALLOCATION_FAILED;
+        }
+        swap_current_and_scratch(&plan->working);
+    }
+
+    transaction->initial_state = &session->current_state;
+    transaction->final_state = &plan->working.current_state;
+    transaction->ticks = plan->working.initialization_ticks;
+    transaction->tick_count = plan->working.initialization_tick_count;
+    transaction->owned_plan = plan;
+    return GAME_RULES_CALL_OK;
+}
+
+void game_rules_c_commit_command(game_rules_session* session,
+                                 const game_rules_c_command_transaction* transaction)
+{
+    if (session != NULL && transaction != NULL && transaction->accepted &&
+        transaction->initial_state == &session->current_state &&
+        transaction->final_state != NULL &&
+        state_copy(&session->scratch_state, transaction->final_state)) {
+        swap_current_and_scratch(session);
+    }
+}
+
+void game_rules_c_command_transaction_destroy(
+    game_rules_c_command_transaction* transaction)
+{
+    if (transaction == NULL) return;
+    destroy_command_plan((game_rules_c_command_plan*)transaction->owned_plan);
+    memset(transaction, 0, sizeof(*transaction));
 }
 
 game_rules_session* game_rules_c_build_resolved_session(

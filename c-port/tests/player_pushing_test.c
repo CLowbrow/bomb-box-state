@@ -349,19 +349,6 @@ static void test_rejection_matrix(void)
                      17U, (game_rules_coordinate){0, 0});
     game_rules_engine_destroy(engine);
 
-    cells[0].elevation = 2;
-    cells[1].elevation = 2;
-    cells[2].elevation = 0;
-    entities[0].bottom_half_steps = 4;
-    entities[1].bottom_half_steps = 4;
-    engine = game_rules_engine_create();
-    assert(engine != NULL);
-    expect_loaded(engine, &level);
-    expect_rejection(engine, GAME_RULES_DIRECTION_EAST,
-                     GAME_RULES_MOVE_UNSUPPORTED_GEOMETRY, 17U,
-                     (game_rules_coordinate){0, 0});
-    game_rules_engine_destroy(engine);
-
     {
         game_rules_fixture fixture = {{2, 0}, GAME_RULES_FIXTURE_DOOR,
                                       GAME_RULES_COLOR_GREEN};
@@ -393,9 +380,23 @@ static void test_rejection_matrix(void)
         engine = game_rules_engine_create();
         assert(engine != NULL);
         expect_loaded(engine, &level);
-        expect_rejection(engine, GAME_RULES_DIRECTION_EAST,
-                         GAME_RULES_MOVE_UNSUPPORTED_GEOMETRY, 17U,
-                         (game_rules_coordinate){0, 0});
+        {
+            game_rules_move_result moved = {0};
+            assert(game_rules_engine_move_data(engine, GAME_RULES_DIRECTION_EAST,
+                                               &moved) == GAME_RULES_CALL_OK);
+            assert(moved.accepted && moved.tick_count == 1U);
+            assert(moved.ticks[0].event_count == 3U);
+            assert(moved.ticks[0].events[0].kind ==
+                   GAME_RULES_EVENT_ENTITY_MOVED);
+            assert(moved.ticks[0].events[1].kind ==
+                   GAME_RULES_EVENT_ENTITY_MOVED);
+            assert(moved.ticks[0].events[2].kind ==
+                   GAME_RULES_EVENT_SWITCH_CHANGED);
+            assert(moved.ticks[0].events[2].color == GAME_RULES_COLOR_GREEN);
+            assert(moved.ticks[0].events[2].active == 1U);
+            assert(moved.final_state.active_switch_color_count == 1U);
+            game_rules_move_result_dispose(&moved);
+        }
         game_rules_engine_destroy(engine);
     }
 

@@ -1,9 +1,9 @@
 # C17 candidate engine
 
-This directory is the self-contained production candidate for the C17 rewrite. Stage 05 preserves
-the frozen public ABI and complete stage-04 load/state/walk behavior, then adds typed and JSON
-atomic one-piece pushes on already-supported flat terrain. Ramp traversal, movement-triggered
-fixture effects, derived command physics, and rewind history are later stages.
+This directory is the self-contained production candidate for the C17 rewrite. Stage 06 preserves
+the frozen public ABI and complete stage-05 walking/pushing behavior, then adds atomic multi-tick
+gravity, falling, landing, crushing, explosion closure, fixture effects, and terminal outcomes for
+flat-terrain commands. Ramp traversal/sliding and rewind history remain later stages.
 
 The frozen creation API uses the C runtime allocator. The additive, versioned
 `game_rules/c_allocator_api.h` extension permits an embedding host or deterministic test to supply
@@ -18,7 +18,10 @@ that arena rather than introduce separately freed child allocations. Each
 allocation remembers its deallocator, so
 destroying or replacing an engine never invalidates an already returned result. A custom allocator
 context must remain usable until both the engine and all outstanding results have been released.
-No renderer, filesystem, environment, clock, thread, randomness, or platform API is used.
+Accepted commands resolve inside private working state buffers and retain immutable per-tick
+snapshots before either serializer allocates its result. Only a complete result commits the final
+state to the session. No renderer, filesystem, environment, clock, thread, randomness, or platform
+API is used.
 
 Standalone native verification:
 
